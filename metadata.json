@@ -1,0 +1,6 @@
+{
+  "name": "Aura - Life, Goals & Budget",
+  "description": "Gen-Z life organizer combining smart tasks, budget tracking, calendar time-blocking, and vision goal management.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
