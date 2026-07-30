@@ -84,9 +84,8 @@ fun FocusTimerModal(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "🔥 Lo-Fi Focus Timer",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
+                        text = "Focus Timer",
+                        style = MaterialTheme.typography.titleLarge,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     IconButton(onClick = onDismiss, modifier = Modifier.testTag("close_focus_modal")) {
@@ -121,7 +120,7 @@ fun FocusTimerModal(
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = if (isRunning) "In Flow State 🌊" else "Ready to Grind?",
+                            text = if (isRunning) "In focus" else "Ready when you are",
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -201,7 +200,7 @@ fun FocusTimerModal(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 Text(
-                    text = "🎁 Complete a session to claim +50 XP!",
+                    text = "Finish a session to earn +50 XP",
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

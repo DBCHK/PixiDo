@@ -1,15 +1,18 @@
 package com.example.data
 
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.first
-import java.util.Calendar
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class AuraRepository(private val dao: AuraDao) {
 
-    val allTasks: Flow<List<TaskEntity>> = dao.getAllTasks()
-    val allBudgetItems: Flow<List<BudgetItemEntity>> = dao.getAllBudgetItems()
-    val allCalendarEvents: Flow<List<CalendarEventEntity>> = dao.getAllCalendarEvents()
-    val allGoals: Flow<List<GoalEntity>> = dao.getAllGoals()
+    val allTasks = dao.getAllTasks()
+    val allBudgetItems = dao.getAllBudgetItems()
+    val allCalendarEvents = dao.getAllCalendarEvents()
+    val allGoals = dao.getAllGoals()
+    val allAccounts = dao.getAllAccounts()
+    val allDailyActivity = dao.getAllDailyActivity()
+    val allNotes = dao.getAllNotes()
 
     suspend fun addTask(task: TaskEntity) = dao.insertTask(task)
     suspend fun updateTask(task: TaskEntity) = dao.updateTask(task)
@@ -26,165 +29,41 @@ class AuraRepository(private val dao: AuraDao) {
     suspend fun updateGoal(goal: GoalEntity) = dao.updateGoal(goal)
     suspend fun deleteGoal(goalId: Int) = dao.deleteGoalById(goalId)
 
+    suspend fun addAccount(account: AccountEntity) = dao.insertAccount(account)
+    suspend fun updateAccount(account: AccountEntity) = dao.updateAccount(account)
+    suspend fun deleteAccount(accountId: Int) = dao.deleteAccountById(accountId)
+
+    suspend fun addNote(note: NoteEntity) = dao.insertNote(note)
+    suspend fun updateNote(note: NoteEntity) = dao.updateNote(note)
+    suspend fun deleteNote(noteId: Int) = dao.deleteNoteById(noteId)
+
     /**
-     * Pre-populates sample data if database is fresh on first launch.
+     * Record a completed task toward the GitHub-style contribution heatmap.
      */
-    suspend fun prepopulateIfEmpty() {
-        val currentTasks = dao.getAllTasks().first()
-        if (currentTasks.isEmpty()) {
-            val now = System.currentTimeMillis()
-
-            // Pre-populate Goals first so tasks/budget can link
-            val goalTokyoId = dao.insertGoal(
-                GoalEntity(
-                    title = "Tokyo Summer Trip ✈️",
-                    category = "Travel ✈️",
-                    targetAmount = 2500.0,
-                    currentAmount = 1450.0,
-                    unit = "$",
-                    deadlineStr = "Aug 2027",
-                    colorHex = "#38BDF8"
-                )
-            ).toInt()
-
-            val goalEmergencyId = dao.insertGoal(
-                GoalEntity(
-                    title = "Emergency Vibe Savings 💰",
-                    category = "Savings 💰",
-                    targetAmount = 1000.0,
-                    currentAmount = 650.0,
-                    unit = "$",
-                    deadlineStr = "Dec 2026",
-                    colorHex = "#10B981"
-                )
-            ).toInt()
-
-            dao.insertGoal(
-                GoalEntity(
-                    title = "Read 12 Mindset Books 📚",
-                    category = "Mindset 🧠",
-                    targetAmount = 12.0,
-                    currentAmount = 5.0,
-                    unit = "books",
-                    deadlineStr = "End of Year",
-                    colorHex = "#A78BFA"
+    suspend fun recordTaskCompletion(xpEarned: Int, timestamp: Long = System.currentTimeMillis()) {
+        val dateKey = dayKey(timestamp)
+        val existing = dao.getActivityForDay(dateKey)
+        if (existing == null) {
+            dao.upsertDailyActivity(
+                DailyActivityEntity(
+                    dateKey = dateKey,
+                    completedCount = 1,
+                    xpEarned = xpEarned
                 )
             )
-
-            // Pre-populate Tasks
-            dao.insertTask(
-                TaskEntity(
-                    title = "Finish Figma App Design System 🎨",
-                    category = "Side Hustle",
-                    priority = "HIGH_FIRE",
-                    dueTimeStr = "5:00 PM",
-                    subtasks = "Create color tokens; Design card components; Export icons",
-                    completedSubtasks = "Create color tokens",
-                    linkedGoalId = goalTokyoId,
-                    xpReward = 50
+        } else {
+            dao.upsertDailyActivity(
+                existing.copy(
+                    completedCount = existing.completedCount + 1,
+                    xpEarned = existing.xpEarned + xpEarned
                 )
             )
+        }
+    }
 
-            dao.insertTask(
-                TaskEntity(
-                    title = "Pilates & Core Strength Workout 🧘",
-                    category = "Health",
-                    priority = "QUICK_WIN",
-                    dueTimeStr = "7:00 PM",
-                    streakCount = 4,
-                    xpReward = 25
-                )
-            )
-
-            dao.insertTask(
-                TaskEntity(
-                    title = "Weekly Grocery Prep & Smoothies 🫐",
-                    category = "Life",
-                    priority = "CORE_GOAL",
-                    dueTimeStr = "Tomorrow",
-                    xpReward = 20
-                )
-            )
-
-            dao.insertTask(
-                TaskEntity(
-                    title = "Brainstorm TikTok Content Calendar 🚀",
-                    category = "Side Hustle",
-                    priority = "BRAINSTORM",
-                    dueTimeStr = "This Week",
-                    xpReward = 30
-                )
-            )
-
-            // Pre-populate Budget Items
-            dao.insertBudgetItem(
-                BudgetItemEntity(
-                    title = "UI Design Freelance Client Payment",
-                    amount = 650.0,
-                    isExpense = false,
-                    category = "Hustle Income 💸",
-                    note = "Milestone 1 payout"
-                )
-            )
-
-            dao.insertBudgetItem(
-                BudgetItemEntity(
-                    title = "Matcha Oat Latte & Croissant 🍵",
-                    amount = 8.50,
-                    isExpense = true,
-                    category = "Food & Coffee ☕"
-                )
-            )
-
-            dao.insertBudgetItem(
-                BudgetItemEntity(
-                    title = "Spotify Student Premium 🎵",
-                    amount = 5.99,
-                    isExpense = true,
-                    category = "Subscriptions 🎵"
-                )
-            )
-
-            dao.insertBudgetItem(
-                BudgetItemEntity(
-                    title = "Tokyo Flight Savings Transfer ✈️",
-                    amount = 200.0,
-                    isExpense = true,
-                    category = "Savings & Wealth 💰",
-                    note = "Pushed to Tokyo Goal"
-                )
-            )
-
-            // Pre-populate Calendar Events
-            val cal = Calendar.getInstance()
-            
-            dao.insertCalendarEvent(
-                CalendarEventEntity(
-                    title = "Deep Focus: Figma Prototyping",
-                    category = "Deep Work",
-                    dateMillis = cal.timeInMillis,
-                    timeSlot = "10:00 AM - 12:00 PM"
-                )
-            )
-
-            dao.insertCalendarEvent(
-                CalendarEventEntity(
-                    title = "Coffee Catch-up with Maya ☕",
-                    category = "Social & Hangouts",
-                    dateMillis = cal.timeInMillis,
-                    timeSlot = "3:30 PM - 4:30 PM"
-                )
-            )
-
-            cal.add(Calendar.DAY_OF_YEAR, 1)
-            dao.insertCalendarEvent(
-                CalendarEventEntity(
-                    title = "Pilates & Stretch Class",
-                    category = "Fitness & Wellness",
-                    dateMillis = cal.timeInMillis,
-                    timeSlot = "8:00 AM - 9:00 AM"
-                )
-            )
+    companion object {
+        fun dayKey(millis: Long = System.currentTimeMillis()): String {
+            return SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(millis))
         }
     }
 }

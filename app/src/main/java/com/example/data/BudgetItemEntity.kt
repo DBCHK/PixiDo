@@ -8,8 +8,9 @@ data class BudgetItemEntity(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val title: String,
     val amount: Double,
-    val isExpense: Boolean, // true = expense, false = income
-    val category: String, // "Food & Coffee ☕", "Subscriptions 🎵", "Vibes & Fun 🎉", "Savings & Wealth 💰", "Shopping 🛍️", "Hustle Income 💸"
+    val isExpense: Boolean,
+    val category: String,
     val timestamp: Long = System.currentTimeMillis(),
-    val note: String = ""
+    val note: String = "",
+    val accountId: Int? = null
 )

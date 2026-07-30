@@ -1,6 +1,6 @@
 {
-  "name": "Aura - Life, Goals & Budget",
-  "description": "Gen-Z life organizer combining smart tasks, budget tracking, calendar time-blocking, and vision goal management.",
+  "name": "PixiDo",
+  "description": "PixiDo is a modern life organizer for tasks, multi-account budgeting, calendar planning, and goals — with Material You themes, a GitHub-style activity heatmap, and a personal profile.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -85,14 +85,14 @@ fun GoalsScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Vision Board & Goals 🚀",
-                                fontSize = 20.sp,
-                                fontWeight = FontWeight.ExtraBold,
+                                text = "Goals",
+                                style = MaterialTheme.typography.headlineMedium,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "$completedCount of $totalCount Life Goals Manifested",
+                                text = if (totalCount == 0) "Start with your first milestone"
+                                else "$completedCount of $totalCount completed",
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -120,9 +120,8 @@ fun GoalsScreen(
 
             item {
                 Text(
-                    text = "🎯 Active Milestones",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
+                    text = "Milestones",
+                    style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.padding(bottom = 10.dp)
                 )
@@ -212,7 +211,7 @@ fun GoalCardItem(
                                 .padding(horizontal = 10.dp, vertical = 4.dp)
                         ) {
                             Text(
-                                text = "SLAYED! 🎉",
+                                text = "Done",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = Color(0xFF10B981)
@@ -326,13 +325,13 @@ fun EmptyGoalsState() {
         Text(text = "🌟", fontSize = 40.sp)
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "No Vision Goals Created Yet",
+            text = "No goals yet",
             fontSize = 16.sp,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface
         )
         Text(
-            text = "Tap '+' to set your next major life goal!",
+            text = "Tap + to set your first milestone",
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )

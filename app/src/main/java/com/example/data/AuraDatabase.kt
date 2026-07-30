@@ -10,9 +10,12 @@ import androidx.room.RoomDatabase
         TaskEntity::class,
         BudgetItemEntity::class,
         CalendarEventEntity::class,
-        GoalEntity::class
+        GoalEntity::class,
+        AccountEntity::class,
+        DailyActivityEntity::class,
+        NoteEntity::class
     ],
-    version = 1,
+    version = 3,
     exportSchema = false
 )
 abstract class AuraDatabase : RoomDatabase() {
@@ -27,8 +30,10 @@ abstract class AuraDatabase : RoomDatabase() {
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     AuraDatabase::class.java,
-                    "aura_life_organizer.db"
-                ).build()
+                    "pixido_organizer.db"
+                )
+                    .fallbackToDestructiveMigration(dropAllTables = true)
+                    .build()
                 INSTANCE = instance
                 instance
             }

@@ -48,10 +48,10 @@ fun AddEventDialog(
 ) {
     var title by remember { mutableStateOf("") }
     var category by remember { mutableStateOf("Deep Work") }
-    var timeSlot by remember { mutableStateOf("2:00 PM - 3:30 PM") }
+    var timeSlot by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
 
-    val categories = listOf("Deep Work", "Social & Hangouts", "Fitness & Wellness", "Bill Payment", "Personal Growth")
+    val categories = listOf("Deep Work", "Meeting", "Social", "Fitness", "Bills", "Personal")
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -73,9 +73,8 @@ fun AddEventDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "📅 Add Calendar Event",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
+                        text = "New Event",
+                        style = MaterialTheme.typography.titleLarge,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     IconButton(onClick = onDismiss) {
@@ -159,7 +158,7 @@ fun AddEventDialog(
                     shape = CircleShape,
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
-                    Text("Schedule Event 📅", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Text("Add Event", fontWeight = FontWeight.Bold, fontSize = 15.sp)
                 }
             }
         }

@@ -4,11 +4,24 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -16,6 +29,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.audio.LocalSoundEngine
+import com.example.audio.ProvideSoundEngine
+import com.example.audio.Sfx
 import com.example.ui.AuraViewModel
 import com.example.ui.components.AddBudgetDialog
 import com.example.ui.components.AddEventDialog
@@ -26,48 +42,94 @@ import com.example.ui.components.FocusTimerModal
 import com.example.ui.screens.BudgetScreen
 import com.example.ui.screens.CalendarScreen
 import com.example.ui.screens.GoalsScreen
+import com.example.ui.screens.ProfileDialog
 import com.example.ui.screens.TasksScreen
-import com.example.ui.theme.AuraTheme
+import com.example.ui.theme.PixiDoTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            AuraTheme {
-                AuraApp()
+            val viewModel: AuraViewModel = viewModel()
+            val profile by viewModel.userProfile.collectAsStateWithLifecycle()
+            PixiDoTheme(themeOption = profile.themeOption) {
+                ProvideSoundEngine(
+                    enabled = profile.soundEnabled,
+                    hapticsEnabled = profile.hapticsEnabled
+                ) {
+                    PixiDoApp(viewModel = viewModel)
+                }
             }
         }
     }
 }
 
 @Composable
-fun AuraApp(viewModel: AuraViewModel = viewModel()) {
+fun PixiDoApp(viewModel: AuraViewModel = viewModel()) {
+    val sound = LocalSoundEngine.current
+
     val tasks by viewModel.tasks.collectAsStateWithLifecycle()
     val budgetItems by viewModel.budgetItems.collectAsStateWithLifecycle()
     val calendarEvents by viewModel.calendarEvents.collectAsStateWithLifecycle()
     val goals by viewModel.goals.collectAsStateWithLifecycle()
+    val accounts by viewModel.accounts.collectAsStateWithLifecycle()
+    val dailyActivity by viewModel.dailyActivity.collectAsStateWithLifecycle()
+    val notes by viewModel.notes.collectAsStateWithLifecycle()
+    val profile by viewModel.userProfile.collectAsStateWithLifecycle()
 
     val selectedTab by viewModel.selectedTab.collectAsStateWithLifecycle()
     val selectedCalendarDate by viewModel.selectedCalendarDate.collectAsStateWithLifecycle()
-    val userXp by viewModel.userXp.collectAsStateWithLifecycle()
-    val monthlyAllowance by viewModel.monthlyBudgetAllowance.collectAsStateWithLifecycle()
 
     val showFocusModal by viewModel.showFocusModal.collectAsStateWithLifecycle()
     val focusSecondsLeft by viewModel.focusSecondsLeft.collectAsStateWithLifecycle()
     val isFocusTimerRunning by viewModel.isFocusTimerRunning.collectAsStateWithLifecycle()
+    val showProfile by viewModel.showProfile.collectAsStateWithLifecycle()
+    val snackbarMessage by viewModel.snackbarMessage.collectAsStateWithLifecycle()
 
     var showAddTaskDialog by remember { mutableStateOf(false) }
     var showAddBudgetDialog by remember { mutableStateOf(false) }
     var showAddEventDialog by remember { mutableStateOf(false) }
     var showAddGoalDialog by remember { mutableStateOf(false) }
 
+    val snackbarHostState = remember { SnackbarHostState() }
+    val reduceMotion = profile.reduceMotion
+
+    LaunchedEffect(snackbarMessage) {
+        val msg = snackbarMessage ?: return@LaunchedEffect
+        if (msg.contains("Focus complete", ignoreCase = true)) {
+            sound.play(Sfx.FOCUS_COMPLETE)
+        }
+        val result = snackbarHostState.showSnackbar(
+            message = msg,
+            actionLabel = if (msg.contains("undo", ignoreCase = true)) "Undo" else null,
+            duration = SnackbarDuration.Short
+        )
+        if (result == SnackbarResult.ActionPerformed) {
+            sound.play(Sfx.SUCCESS)
+            viewModel.undoDeleteTask()
+        }
+        viewModel.clearSnackbar()
+    }
+
     Scaffold(
         modifier = Modifier.fillMaxSize(),
+        snackbarHost = {
+            SnackbarHost(hostState = snackbarHostState) { data ->
+                Snackbar(snackbarData = data)
+            }
+        },
         bottomBar = {
             AuraBottomNavigation(
                 selectedTab = selectedTab,
-                onTabSelected = { viewModel.selectTab(it) }
+                onTabSelected = { index ->
+                    if (index != selectedTab) {
+                        sound.playTab(index)
+                        viewModel.selectTab(index)
+                    } else {
+                        sound.play(Sfx.TAP_SOFT)
+                    }
+                }
             )
         }
     ) { innerPadding ->
@@ -76,52 +138,129 @@ fun AuraApp(viewModel: AuraViewModel = viewModel()) {
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            when (selectedTab) {
-                0 -> TasksScreen(
-                    tasks = tasks,
-                    goals = goals,
-                    userXp = userXp,
-                    onToggleTask = { viewModel.toggleTaskCompletion(it) },
-                    onToggleSubtask = { task, subtask -> viewModel.toggleSubtask(task, subtask) },
-                    onDeleteTask = { viewModel.deleteTask(it) },
-                    onOpenAddTask = { showAddTaskDialog = true },
-                    onOpenFocusMode = { viewModel.openFocusModal() }
-                )
+            AnimatedContent(
+                targetState = selectedTab,
+                transitionSpec = {
+                    if (reduceMotion) {
+                        fadeIn(tween(120)) togetherWith fadeOut(tween(120))
+                    } else {
+                        val dir = if (targetState > initialState) 1 else -1
+                        (slideInHorizontally(tween(240)) { it / 5 * dir } + fadeIn(tween(200)))
+                            .togetherWith(
+                                slideOutHorizontally(tween(200)) { -it / 6 * dir } + fadeOut(tween(160))
+                            )
+                    }
+                },
+                label = "tabContent"
+            ) { tab ->
+                when (tab) {
+                    0 -> TasksScreen(
+                        tasks = tasks,
+                        goals = goals,
+                        notes = notes,
+                        userXp = profile.userXp,
+                        profile = profile,
+                        activity = dailyActivity,
+                        onToggleTask = { viewModel.toggleTaskCompletion(it) },
+                        onToggleSubtask = { task, subtask -> viewModel.toggleSubtask(task, subtask) },
+                        onDeleteTask = { viewModel.deleteTask(it) },
+                        onOpenAddTask = {
+                            sound.play(Sfx.DIALOG_OPEN)
+                            showAddTaskDialog = true
+                        },
+                        onOpenFocusMode = { viewModel.openFocusModal() },
+                        onOpenProfile = { viewModel.openProfile() },
+                        onAddNote = { content, color -> viewModel.addNote(content, color) },
+                        onToggleNotePin = { viewModel.toggleNotePin(it) },
+                        onDeleteNote = { viewModel.deleteNote(it) }
+                    )
 
-                1 -> BudgetScreen(
-                    budgetItems = budgetItems,
-                    monthlyAllowance = monthlyAllowance,
-                    onAddQuickExpense = { name, amount, cat ->
-                        viewModel.addBudgetItem(name, amount, true, cat, "Quick log")
-                    },
-                    onDeleteBudgetItem = { viewModel.deleteBudgetItem(it) },
-                    onOpenAddBudget = { showAddBudgetDialog = true }
-                )
+                    1 -> BudgetScreen(
+                        budgetItems = budgetItems,
+                        accounts = accounts,
+                        currencyCode = profile.currencyCode,
+                        monthlyAllowance = profile.monthlyBudgetLimit,
+                        onDeleteBudgetItem = {
+                            sound.play(Sfx.DELETE)
+                            viewModel.deleteBudgetItem(it)
+                        },
+                        onOpenAddBudget = {
+                            sound.play(Sfx.FAB)
+                            sound.play(Sfx.DIALOG_OPEN)
+                            showAddBudgetDialog = true
+                        },
+                        onAddAccount = { name, type, balance, limit, color ->
+                            sound.play(Sfx.ADD_ACCOUNT)
+                            viewModel.addAccount(name, type, balance, limit, color)
+                        },
+                        onDeleteAccount = {
+                            sound.play(Sfx.DELETE)
+                            viewModel.deleteAccount(it)
+                        },
+                        onSetCurrency = {
+                            sound.play(Sfx.SETTINGS_CHANGE)
+                            viewModel.setCurrency(it)
+                        },
+                        onSetMonthlyLimit = {
+                            sound.play(Sfx.SETTINGS_CHANGE)
+                            viewModel.setMonthlyBudgetLimit(it)
+                        }
+                    )
 
-                2 -> CalendarScreen(
-                    events = calendarEvents,
-                    selectedDateMillis = selectedCalendarDate,
-                    onSelectDate = { viewModel.setSelectedCalendarDate(it) },
-                    onToggleEvent = { viewModel.toggleCalendarEventCompleted(it) },
-                    onDeleteEvent = { viewModel.deleteCalendarEvent(it) },
-                    onOpenAddEvent = { showAddEventDialog = true }
-                )
+                    2 -> CalendarScreen(
+                        events = calendarEvents,
+                        selectedDateMillis = selectedCalendarDate,
+                        onSelectDate = {
+                            sound.play(Sfx.DAY_SELECT)
+                            viewModel.setSelectedCalendarDate(it)
+                        },
+                        onToggleEvent = {
+                            sound.play(Sfx.EVENT_TOGGLE)
+                            viewModel.toggleCalendarEventCompleted(it)
+                        },
+                        onDeleteEvent = {
+                            sound.play(Sfx.DELETE)
+                            viewModel.deleteCalendarEvent(it)
+                        },
+                        onOpenAddEvent = {
+                            sound.play(Sfx.FAB)
+                            sound.play(Sfx.DIALOG_OPEN)
+                            showAddEventDialog = true
+                        }
+                    )
 
-                3 -> GoalsScreen(
-                    goals = goals,
-                    onUpdateGoalProgress = { goal, delta -> viewModel.updateGoalProgress(goal, delta) },
-                    onDeleteGoal = { viewModel.deleteGoal(it) },
-                    onOpenAddGoal = { showAddGoalDialog = true }
-                )
+                    3 -> GoalsScreen(
+                        goals = goals,
+                        onUpdateGoalProgress = { goal, delta ->
+                            val willComplete =
+                                delta > 0 && goal.currentAmount + delta >= goal.targetAmount
+                            if (willComplete) sound.play(Sfx.GOAL_COMPLETE)
+                            else sound.play(Sfx.GOAL_PROGRESS)
+                            viewModel.updateGoalProgress(goal, delta)
+                        },
+                        onDeleteGoal = {
+                            sound.play(Sfx.DELETE)
+                            viewModel.deleteGoal(it)
+                        },
+                        onOpenAddGoal = {
+                            sound.play(Sfx.FAB)
+                            sound.play(Sfx.DIALOG_OPEN)
+                            showAddGoalDialog = true
+                        }
+                    )
+                }
             }
         }
     }
 
-    // Modal Dialog Overlays
     if (showAddTaskDialog) {
         AddTaskDialog(
-            onDismiss = { showAddTaskDialog = false },
+            onDismiss = {
+                sound.play(Sfx.DIALOG_CLOSE)
+                showAddTaskDialog = false
+            },
             onAddTask = { title, category, priority, dueTimeStr, subtasks, linkedGoalId ->
+                sound.play(Sfx.ADD_TASK)
                 viewModel.addTask(title, category, priority, dueTimeStr, subtasks, linkedGoalId)
             }
         )
@@ -129,9 +268,15 @@ fun AuraApp(viewModel: AuraViewModel = viewModel()) {
 
     if (showAddBudgetDialog) {
         AddBudgetDialog(
-            onDismiss = { showAddBudgetDialog = false },
-            onAddBudgetItem = { title, amount, isExpense, category, note ->
-                viewModel.addBudgetItem(title, amount, isExpense, category, note)
+            currencyCode = profile.currencyCode,
+            accounts = accounts,
+            onDismiss = {
+                sound.play(Sfx.DIALOG_CLOSE)
+                showAddBudgetDialog = false
+            },
+            onAddBudgetItem = { title, amount, isExpense, category, note, accountId ->
+                sound.play(Sfx.ADD_BUDGET)
+                viewModel.addBudgetItem(title, amount, isExpense, category, note, accountId)
             }
         )
     }
@@ -139,8 +284,12 @@ fun AuraApp(viewModel: AuraViewModel = viewModel()) {
     if (showAddEventDialog) {
         AddEventDialog(
             selectedDateMillis = selectedCalendarDate,
-            onDismiss = { showAddEventDialog = false },
+            onDismiss = {
+                sound.play(Sfx.DIALOG_CLOSE)
+                showAddEventDialog = false
+            },
             onAddEvent = { title, category, dateMillis, timeSlot, description ->
+                sound.play(Sfx.ADD_EVENT)
                 viewModel.addCalendarEvent(title, category, dateMillis, timeSlot, description)
             }
         )
@@ -148,8 +297,12 @@ fun AuraApp(viewModel: AuraViewModel = viewModel()) {
 
     if (showAddGoalDialog) {
         AddGoalDialog(
-            onDismiss = { showAddGoalDialog = false },
+            onDismiss = {
+                sound.play(Sfx.DIALOG_CLOSE)
+                showAddGoalDialog = false
+            },
             onAddGoal = { title, category, targetAmount, unit, deadlineStr, colorHex ->
+                sound.play(Sfx.ADD_GOAL)
                 viewModel.addGoal(title, category, targetAmount, unit, deadlineStr, colorHex)
             }
         )
@@ -159,10 +312,58 @@ fun AuraApp(viewModel: AuraViewModel = viewModel()) {
         FocusTimerModal(
             secondsLeft = focusSecondsLeft,
             isRunning = isFocusTimerRunning,
-            onStart = { minutes -> viewModel.startFocusTimer(minutes) },
-            onPause = { viewModel.pauseFocusTimer() },
-            onReset = { viewModel.resetFocusTimer() },
-            onDismiss = { viewModel.closeFocusModal() }
+            onStart = { minutes ->
+                sound.play(Sfx.FOCUS_START)
+                viewModel.startFocusTimer(minutes)
+            },
+            onPause = {
+                sound.play(Sfx.FOCUS_PAUSE)
+                viewModel.pauseFocusTimer()
+            },
+            onReset = {
+                sound.play(Sfx.FOCUS_RESET)
+                viewModel.resetFocusTimer()
+            },
+            onDismiss = {
+                sound.play(Sfx.DIALOG_CLOSE)
+                viewModel.closeFocusModal()
+            }
         )
     }
+
+    if (showProfile) {
+        ProfileDialog(
+            profile = profile,
+            onDismiss = {
+                sound.play(Sfx.DIALOG_CLOSE)
+                viewModel.closeProfile()
+            },
+            onSaveProfile = { name, bio, email, location ->
+                viewModel.updateProfile(name, bio, email, location)
+            },
+            onAvatarPicked = { uri ->
+                sound.play(Sfx.TAP_CONFIRM)
+                viewModel.setAvatarUri(uri)
+            },
+            onThemeSelected = { viewModel.setTheme(it) },
+            onSoundToggle = {
+                sound.play(Sfx.SETTINGS_CHANGE)
+                viewModel.setSoundEnabled(it)
+            },
+            onHapticsToggle = {
+                sound.play(Sfx.SETTINGS_CHANGE)
+                viewModel.setHapticsEnabled(it)
+            },
+            onReduceMotionToggle = {
+                sound.play(Sfx.SETTINGS_CHANGE)
+                viewModel.setReduceMotion(it)
+            }
+        )
+    }
+}
+
+/** Backward-compatible alias. */
+@Composable
+fun AuraApp(viewModel: AuraViewModel = viewModel()) {
+    PixiDoApp(viewModel)
 }

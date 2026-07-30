@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -39,37 +38,54 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.example.data.AccountEntity
+import com.example.data.Currencies
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AddBudgetDialog(
+    currencyCode: String = "USD",
+    accounts: List<AccountEntity> = emptyList(),
     onDismiss: () -> Unit,
     onAddBudgetItem: (
         title: String,
         amount: Double,
         isExpense: Boolean,
         category: String,
-        note: String
+        note: String,
+        accountId: Int?
     ) -> Unit
 ) {
     var title by remember { mutableStateOf("") }
     var amountStr by remember { mutableStateOf("") }
     var isExpense by remember { mutableStateOf(true) }
-    var category by remember { mutableStateOf("Food & Coffee ☕") }
+    var category by remember { mutableStateOf("Food & Drink") }
     var note by remember { mutableStateOf("") }
+    var selectedAccountId by remember {
+        mutableStateOf(accounts.firstOrNull { it.isPrimary }?.id ?: accounts.firstOrNull()?.id)
+    }
+
+    val symbol = Currencies.symbolOf(currencyCode)
 
     val expenseCategories = listOf(
-        "Food & Coffee ☕",
-        "Subscriptions 🎵",
-        "Vibes & Fun 🎉",
-        "Savings & Wealth 💰",
-        "Shopping 🛍️"
+        "Food & Drink",
+        "Subscriptions",
+        "Transport",
+        "Shopping",
+        "Bills",
+        "Health",
+        "Entertainment",
+        "Savings",
+        "Other"
     )
 
     val incomeCategories = listOf(
-        "Hustle Income 💸",
-        "Salary / Stipend 💼",
-        "Gifts & Perks 🎁"
+        "Salary",
+        "Freelance",
+        "Gifts",
+        "Investments",
+        "Refund",
+        "Other"
     )
 
     Dialog(onDismissRequest = onDismiss) {
@@ -92,9 +108,8 @@ fun AddBudgetDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = if (isExpense) "💸 Log Expense" else "💰 Log Income",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
+                        text = if (isExpense) "Log Expense" else "Log Income",
+                        style = MaterialTheme.typography.titleLarge,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     IconButton(onClick = onDismiss, modifier = Modifier.testTag("close_add_budget")) {
@@ -104,7 +119,6 @@ fun AddBudgetDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Toggle Expense vs Income
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -116,7 +130,10 @@ fun AddBudgetDialog(
                         modifier = Modifier
                             .weight(1f)
                             .clip(CircleShape)
-                            .background(if (isExpense) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
+                            .background(
+                                if (isExpense) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.surfaceVariant
+                            )
                             .clickable {
                                 isExpense = true
                                 category = expenseCategories[0]
@@ -125,9 +142,10 @@ fun AddBudgetDialog(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "Expense 💸",
+                            text = "Expense",
                             fontWeight = FontWeight.Bold,
-                            color = if (isExpense) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                            color = if (isExpense) MaterialTheme.colorScheme.onPrimary
+                            else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
 
@@ -135,7 +153,10 @@ fun AddBudgetDialog(
                         modifier = Modifier
                             .weight(1f)
                             .clip(CircleShape)
-                            .background(if (!isExpense) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
+                            .background(
+                                if (!isExpense) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.surfaceVariant
+                            )
                             .clickable {
                                 isExpense = false
                                 category = incomeCategories[0]
@@ -144,9 +165,10 @@ fun AddBudgetDialog(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "Income 💰",
+                            text = "Income",
                             fontWeight = FontWeight.Bold,
-                            color = if (!isExpense) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                            color = if (!isExpense) MaterialTheme.colorScheme.onPrimary
+                            else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -156,8 +178,8 @@ fun AddBudgetDialog(
                 OutlinedTextField(
                     value = amountStr,
                     onValueChange = { amountStr = it },
-                    label = { Text("Amount ($)") },
-                    placeholder = { Text("12.50") },
+                    label = { Text("Amount ($symbol)") },
+                    placeholder = { Text("0.00") },
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("input_budget_amount"),
@@ -170,14 +192,50 @@ fun AddBudgetDialog(
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
-                    label = { Text("Title / Merchant") },
-                    placeholder = { Text("e.g. Oat Milk Latte, Spotify, Client Pay") },
+                    label = { Text("Title / merchant") },
+                    placeholder = { Text("What was this for?") },
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("input_budget_title"),
                     singleLine = true,
                     shape = RoundedCornerShape(12.dp)
                 )
+
+                if (accounts.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Account",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        accounts.forEach { acc ->
+                            val isSel = acc.id == selectedAccountId
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(
+                                        if (isSel) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.surfaceVariant
+                                    )
+                                    .clickable { selectedAccountId = acc.id }
+                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = acc.name,
+                                    fontSize = 12.sp,
+                                    color = if (isSel) MaterialTheme.colorScheme.onPrimary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(12.dp))
 
@@ -199,14 +257,18 @@ fun AddBudgetDialog(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(12.dp))
-                                .background(if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
+                                .background(
+                                    if (isSel) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.surfaceVariant
+                                )
                                 .clickable { category = cat }
                                 .padding(horizontal = 12.dp, vertical = 6.dp)
                         ) {
                             Text(
                                 text = cat,
                                 fontSize = 12.sp,
-                                color = if (isSel) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                                color = if (isSel) MaterialTheme.colorScheme.onPrimary
+                                else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -218,7 +280,14 @@ fun AddBudgetDialog(
                     onClick = {
                         val parsedAmount = amountStr.toDoubleOrNull() ?: 0.0
                         if (parsedAmount > 0) {
-                            onAddBudgetItem(title, parsedAmount, isExpense, category, note)
+                            onAddBudgetItem(
+                                title,
+                                parsedAmount,
+                                isExpense,
+                                category,
+                                note,
+                                selectedAccountId
+                            )
                             onDismiss()
                         }
                     },
@@ -229,7 +298,7 @@ fun AddBudgetDialog(
                     shape = CircleShape,
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
-                    Text("Save to Vibe Wallet 💳", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Text("Save Transaction", fontWeight = FontWeight.Bold, fontSize = 15.sp)
                 }
             }
         }

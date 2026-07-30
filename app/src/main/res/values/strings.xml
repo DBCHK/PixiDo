@@ -1,3 +1,4 @@
 <resources>
-    <string name="app_name">Aura</string>
+    <string name="app_name">PixiDo</string>
+    <string name="app_tagline">Plan. Track. Achieve.</string>
 </resources>

@@ -46,12 +46,12 @@ fun AddGoalDialog(
     onAddGoal: (title: String, category: String, targetAmount: Double, unit: String, deadlineStr: String, colorHex: String) -> Unit
 ) {
     var title by remember { mutableStateOf("") }
-    var category by remember { mutableStateOf("Travel ✈️") }
+    var category by remember { mutableStateOf("Career") }
     var targetAmountStr by remember { mutableStateOf("") }
     var unit by remember { mutableStateOf("$") }
-    var deadlineStr by remember { mutableStateOf("Dec 2027") }
+    var deadlineStr by remember { mutableStateOf("") }
 
-    val categories = listOf("Travel ✈️", "Savings 💰", "Fitness 💪", "Career 🚀", "Mindset 🧠")
+    val categories = listOf("Travel", "Savings", "Fitness", "Career", "Learning", "Personal")
     val units = listOf("$", "tasks", "books", "kms", "%")
 
     Dialog(onDismissRequest = onDismiss) {
@@ -74,9 +74,8 @@ fun AddGoalDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "🌟 New Vision Goal",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
+                        text = "New Goal",
+                        style = MaterialTheme.typography.titleLarge,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     IconButton(onClick = onDismiss) {
@@ -177,7 +176,7 @@ fun AddGoalDialog(
                     shape = CircleShape,
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
-                    Text("Manifest Vision Goal ✨", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Text("Create Goal", fontWeight = FontWeight.Bold, fontSize = 15.sp)
                 }
             }
         }

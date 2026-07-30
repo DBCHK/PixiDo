@@ -54,17 +54,17 @@ fun AddTaskDialog(
     ) -> Unit
 ) {
     var title by remember { mutableStateOf("") }
-    var selectedCategory by remember { mutableStateOf("Side Hustle") }
+    var selectedCategory by remember { mutableStateOf("Work") }
     var selectedPriority by remember { mutableStateOf("HIGH_FIRE") }
-    var dueTimeStr by remember { mutableStateOf("Today, 5:00 PM") }
+    var dueTimeStr by remember { mutableStateOf("") }
     var subtasks by remember { mutableStateOf("") }
 
-    val categories = listOf("Side Hustle", "Work", "Health", "Life", "Social")
+    val categories = listOf("Work", "Personal", "Health", "Learning", "Social", "Other")
     val priorities = listOf(
-        "HIGH_FIRE" to "🔥 High Fire",
-        "QUICK_WIN" to "⚡ Quick Win",
-        "CORE_GOAL" to "🎯 Core Goal",
-        "BRAINSTORM" to "💡 Brainstorm"
+        "HIGH_FIRE" to "High",
+        "QUICK_WIN" to "Quick",
+        "CORE_GOAL" to "Core",
+        "BRAINSTORM" to "Idea"
     )
 
     Dialog(onDismissRequest = onDismiss) {
@@ -87,9 +87,8 @@ fun AddTaskDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "✨ Add New Task",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
+                        text = "New Task",
+                        style = MaterialTheme.typography.titleLarge,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     IconButton(onClick = onDismiss, modifier = Modifier.testTag("close_add_task")) {
@@ -213,7 +212,7 @@ fun AddTaskDialog(
                     shape = CircleShape,
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
-                    Text("Add Task & Claim XP 🔥", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Text("Add Task", fontWeight = FontWeight.Bold, fontSize = 15.sp)
                 }
             }
         }

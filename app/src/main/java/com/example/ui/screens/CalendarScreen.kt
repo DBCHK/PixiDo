@@ -98,7 +98,7 @@ fun CalendarScreen(
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "Time-Block Planner & Schedule ⏳",
+                            text = "Time-block planner",
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -169,9 +169,8 @@ fun CalendarScreen(
             // Schedule Timeline
             item {
                 Text(
-                    text = "⏰ Time-Blocked Events",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
+                    text = "Events",
+                    style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.padding(bottom = 10.dp)
                 )
@@ -320,13 +319,13 @@ fun EmptyCalendarState() {
         Text(text = "📅", fontSize = 40.sp)
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "No Events Scheduled Today",
+            text = "No events yet",
             fontSize = 16.sp,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface
         )
         Text(
-            text = "Tap '+' to block time for deep work or fun!",
+            text = "Tap + to schedule something new",
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
