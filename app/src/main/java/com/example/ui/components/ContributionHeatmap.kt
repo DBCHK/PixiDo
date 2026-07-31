@@ -14,8 +14,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -45,7 +43,7 @@ import java.util.Locale
 
 /**
  * GitHub-style contribution grid tracking daily task completions.
- * Shows ~17 weeks (about 4 months) ending today.
+ * Soft lilac scale matching the Soft Lilac design system.
  */
 @Composable
 fun ContributionHeatmap(
@@ -69,14 +67,10 @@ fun ContributionHeatmap(
     val activeDays = activity.count { it.completedCount > 0 }
     val bestDay = activity.maxOfOrNull { it.completedCount } ?: 0
 
-    Card(
+    PixiCard(
         modifier = modifier
             .fillMaxWidth()
-            .testTag("contribution_heatmap"),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            .testTag("contribution_heatmap")
     ) {
         Column(
             modifier = Modifier
@@ -95,25 +89,13 @@ fun ContributionHeatmap(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "$totalCompletions tasks completed · $activeDays active days",
+                        text = "$totalCompletions tasks · $activeDays active days",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 if (bestDay > 0) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(MaterialTheme.colorScheme.primaryContainer)
-                            .padding(horizontal = 10.dp, vertical = 4.dp)
-                    ) {
-                        Text(
-                            text = "Best $bestDay/day",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
+                    PixiBadge(text = "Best $bestDay/day")
                 }
             }
 
@@ -173,21 +155,13 @@ fun ContributionHeatmap(
     }
 }
 
-/**
- * Builds columns of weeks, each with 7 days (Sun–Sat style).
- * Ends with today in the last column.
- */
 private fun buildContributionGrid(weeks: Int): List<List<String>> {
     val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
     val today = Calendar.getInstance()
-    // Align to end of current week (Saturday-like: day of week)
-    val dayOfWeek = today.get(Calendar.DAY_OF_WEEK) // 1=Sun … 7=Sat
     val totalDays = weeks * 7
-    // Start date = today - (totalDays - 1) adjusted so columns are full weeks
     val start = Calendar.getInstance().apply {
         timeInMillis = today.timeInMillis
         add(Calendar.DAY_OF_YEAR, -(totalDays - 1))
-        // Align start to Sunday
         val startDow = get(Calendar.DAY_OF_WEEK)
         add(Calendar.DAY_OF_YEAR, -(startDow - Calendar.SUNDAY))
     }
@@ -196,7 +170,6 @@ private fun buildContributionGrid(weeks: Int): List<List<String>> {
     val cursor = start.clone() as Calendar
     val endBoundary = Calendar.getInstance().apply {
         timeInMillis = today.timeInMillis
-        // include rest of week
         val endDow = get(Calendar.DAY_OF_WEEK)
         add(Calendar.DAY_OF_YEAR, Calendar.SATURDAY - endDow)
     }
@@ -209,7 +182,6 @@ private fun buildContributionGrid(weeks: Int): List<List<String>> {
         }
         columns.add(week)
     }
-    // Cap to last N weeks
     return if (columns.size > weeks) columns.takeLast(weeks) else columns
 }
 

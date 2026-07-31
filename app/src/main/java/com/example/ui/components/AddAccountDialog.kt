@@ -1,6 +1,7 @@
 package com.example.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,18 +13,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -53,22 +49,27 @@ fun AddAccountDialog(
     var balanceStr by remember { mutableStateOf("") }
     var limitStr by remember { mutableStateOf("") }
 
-    val colors = listOf("#7C3AED", "#06B6D4", "#10B981", "#F59E0B", "#F43F5E", "#EC4899", "#3B82F6")
+    val colors = listOf("#C4A8F5", "#67D4E8", "#34D399", "#FBBF24", "#FF6BA8", "#FFE566", "#9B7AE8")
     var selectedColor by remember { mutableStateOf(colors[0]) }
     val symbol = Currencies.symbolOf(currencyCode)
 
+    val fieldColors = OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = MaterialTheme.colorScheme.primary,
+        unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+    )
+
     Dialog(onDismissRequest = onDismiss) {
-        Card(
+        PixiCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .testTag("add_account_dialog"),
-            shape = RoundedCornerShape(28.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                .testTag("add_account_dialog")
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
                     .padding(24.dp)
             ) {
                 Row(
@@ -78,15 +79,13 @@ fun AddAccountDialog(
                 ) {
                     Text(
                         text = "Add Account",
-                        style = MaterialTheme.typography.titleLarge,
+                        style = MaterialTheme.typography.headlineSmall,
                         color = MaterialTheme.colorScheme.onSurface
                     )
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.Filled.Close, contentDescription = "Close")
-                    }
+                    PixiCloseButton(onClick = onDismiss)
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
                 OutlinedTextField(
                     value = name,
@@ -97,10 +96,11 @@ fun AddAccountDialog(
                         .fillMaxWidth()
                         .testTag("input_account_name"),
                     singleLine = true,
-                    shape = RoundedCornerShape(12.dp)
+                    shape = PixiFieldShape,
+                    colors = fieldColors
                 )
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
                 Text(
                     text = "Type",
@@ -108,7 +108,7 @@ fun AddAccountDialog(
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(8.dp))
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -116,24 +116,11 @@ fun AddAccountDialog(
                     AccountType.entries.forEach { t ->
                         val label = t.name.replace('_', ' ').lowercase()
                             .replaceFirstChar { it.uppercase() }
-                        val isSel = t == type
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(
-                                    if (isSel) MaterialTheme.colorScheme.primary
-                                    else MaterialTheme.colorScheme.surfaceVariant
-                                )
-                                .clickable { type = t }
-                                .padding(horizontal = 12.dp, vertical = 6.dp)
-                        ) {
-                            Text(
-                                text = label,
-                                fontSize = 12.sp,
-                                color = if (isSel) MaterialTheme.colorScheme.onPrimary
-                                else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                        PixiChip(
+                            label = label,
+                            selected = t == type,
+                            onClick = { type = t }
+                        )
                     }
                 }
 
@@ -148,7 +135,8 @@ fun AddAccountDialog(
                         .fillMaxWidth()
                         .testTag("input_account_balance"),
                     singleLine = true,
-                    shape = RoundedCornerShape(12.dp)
+                    shape = PixiFieldShape,
+                    colors = fieldColors
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -156,16 +144,17 @@ fun AddAccountDialog(
                 OutlinedTextField(
                     value = limitStr,
                     onValueChange = { limitStr = it },
-                    label = { Text("Limit / credit cap ($symbol, optional)") },
+                    label = { Text("Limit / credit cap (optional)") },
                     placeholder = { Text("e.g. 2000 for credit card") },
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("input_account_limit"),
                     singleLine = true,
-                    shape = RoundedCornerShape(12.dp)
+                    shape = PixiFieldShape,
+                    colors = fieldColors
                 )
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
                 Text(
                     text = "Color",
@@ -173,9 +162,9 @@ fun AddAccountDialog(
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(8.dp))
                 FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     colors.forEach { hex ->
@@ -185,17 +174,23 @@ fun AddAccountDialog(
                         val isSel = selectedColor == hex
                         Box(
                             modifier = Modifier
+                                .size(if (isSel) 32.dp else 28.dp)
                                 .clip(CircleShape)
                                 .background(c)
+                                .border(
+                                    width = if (isSel) 2.5.dp else 0.dp,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    shape = CircleShape
+                                )
                                 .clickable { selectedColor = hex }
-                                .padding(if (isSel) 14.dp else 12.dp)
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(22.dp))
 
-                Button(
+                PixiPrimaryButton(
+                    text = "Create Account",
                     onClick = {
                         onAdd(
                             name.ifBlank { type.name.replace('_', ' ') },
@@ -205,17 +200,8 @@ fun AddAccountDialog(
                             selectedColor
                         )
                     },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(50.dp)
-                        .testTag("submit_add_account_btn"),
-                    shape = CircleShape,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary
-                    )
-                ) {
-                    Text("Create Account", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                }
+                    modifier = Modifier.testTag("submit_add_account_btn")
+                )
             }
         }
     }
@@ -234,18 +220,23 @@ fun BudgetSettingsDialog(
         mutableStateOf(if (monthlyLimit > 0) monthlyLimit.toString() else "")
     }
 
+    val fieldColors = OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = MaterialTheme.colorScheme.primary,
+        unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+    )
+
     Dialog(onDismissRequest = onDismiss) {
-        Card(
+        PixiCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .testTag("budget_settings_dialog"),
-            shape = RoundedCornerShape(28.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                .testTag("budget_settings_dialog")
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
                     .padding(24.dp)
             ) {
                 Row(
@@ -255,15 +246,13 @@ fun BudgetSettingsDialog(
                 ) {
                     Text(
                         text = "Budget Settings",
-                        style = MaterialTheme.typography.titleLarge,
+                        style = MaterialTheme.typography.headlineSmall,
                         color = MaterialTheme.colorScheme.onSurface
                     )
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.Filled.Close, contentDescription = "Close")
-                    }
+                    PixiCloseButton(onClick = onDismiss)
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
                 Text(
                     text = "Currency",
@@ -271,31 +260,17 @@ fun BudgetSettingsDialog(
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(8.dp))
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Currencies.all.forEach { info ->
-                        val isSel = info.code == selectedCurrency
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(
-                                    if (isSel) MaterialTheme.colorScheme.primary
-                                    else MaterialTheme.colorScheme.surfaceVariant
-                                )
-                                .clickable { selectedCurrency = info.code }
-                                .padding(horizontal = 10.dp, vertical = 6.dp)
-                        ) {
-                            Text(
-                                text = "${info.symbol} ${info.code}",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (isSel) MaterialTheme.colorScheme.onPrimary
-                                else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                        PixiChip(
+                            label = "${info.symbol} ${info.code}",
+                            selected = info.code == selectedCurrency,
+                            onClick = { selectedCurrency = info.code }
+                        )
                     }
                 }
 
@@ -304,32 +279,25 @@ fun BudgetSettingsDialog(
                 OutlinedTextField(
                     value = limitStr,
                     onValueChange = { limitStr = it },
-                    label = { Text("Monthly budget limit (leave empty for none)") },
+                    label = { Text("Monthly budget limit (empty = none)") },
                     placeholder = { Text("0") },
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("input_monthly_limit"),
                     singleLine = true,
-                    shape = RoundedCornerShape(12.dp)
+                    shape = PixiFieldShape,
+                    colors = fieldColors
                 )
 
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(22.dp))
 
-                Button(
+                PixiPrimaryButton(
+                    text = "Save Settings",
                     onClick = {
                         onSave(selectedCurrency, limitStr.toDoubleOrNull() ?: 0.0)
                     },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(50.dp)
-                        .testTag("save_budget_settings_btn"),
-                    shape = CircleShape,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary
-                    )
-                ) {
-                    Text("Save Settings", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                }
+                    modifier = Modifier.testTag("save_budget_settings_btn")
+                )
             }
         }
     }

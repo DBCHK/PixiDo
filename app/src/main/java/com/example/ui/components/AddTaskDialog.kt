@@ -1,9 +1,7 @@
 package com.example.ui.components
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -12,19 +10,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -33,12 +23,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.example.R
+import com.example.notify.ReminderScheduler
+import java.util.Calendar
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -49,6 +43,7 @@ fun AddTaskDialog(
         category: String,
         priority: String,
         dueTimeStr: String,
+        dueDateMillis: Long,
         subtasks: String,
         linkedGoalId: Int?
     ) -> Unit
@@ -56,7 +51,8 @@ fun AddTaskDialog(
     var title by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf("Work") }
     var selectedPriority by remember { mutableStateOf("HIGH_FIRE") }
-    var dueTimeStr by remember { mutableStateOf("") }
+    var selectedTime by remember { mutableStateOf("09:00") }
+    var dayOffset by remember { mutableStateOf(0) } // 0 = today, 1 = tomorrow, …
     var subtasks by remember { mutableStateOf("") }
 
     val categories = listOf("Work", "Personal", "Health", "Learning", "Social", "Other")
@@ -66,19 +62,33 @@ fun AddTaskDialog(
         "CORE_GOAL" to "Core",
         "BRAINSTORM" to "Idea"
     )
+    val timePresets = listOf(
+        "09:00", "10:00", "12:00", "14:00", "15:00", "17:00", "18:00", "20:00"
+    )
+    val dayPresets = listOf(
+        0 to "Today",
+        1 to "Tomorrow",
+        2 to "In 2 days",
+        7 to "In a week"
+    )
+
+    val fieldColors = OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = MaterialTheme.colorScheme.primary,
+        unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+    )
 
     Dialog(onDismissRequest = onDismiss) {
-        Card(
+        PixiCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .testTag("add_task_dialog"),
-            shape = RoundedCornerShape(28.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                .testTag("add_task_dialog")
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
                     .padding(24.dp)
             ) {
                 Row(
@@ -88,15 +98,25 @@ fun AddTaskDialog(
                 ) {
                     Text(
                         text = "New Task",
-                        style = MaterialTheme.typography.titleLarge,
+                        style = MaterialTheme.typography.headlineSmall,
                         color = MaterialTheme.colorScheme.onSurface
                     )
-                    IconButton(onClick = onDismiss, modifier = Modifier.testTag("close_add_task")) {
-                        Icon(imageVector = Icons.Filled.Close, contentDescription = "Close")
-                    }
+                    PixiCloseButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.testTag("close_add_task")
+                    )
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Image(
+                    painter = painterResource(id = R.drawable.doodle_add_task),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(110.dp)
+                        .padding(vertical = 8.dp)
+                        .align(Alignment.CenterHorizontally),
+                    contentScale = ContentScale.Fit
+                )
 
                 OutlinedTextField(
                     value = title,
@@ -107,10 +127,69 @@ fun AddTaskDialog(
                         .fillMaxWidth()
                         .testTag("input_task_title"),
                     singleLine = true,
-                    shape = RoundedCornerShape(12.dp)
+                    shape = PixiFieldShape,
+                    colors = fieldColors
                 )
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(14.dp))
+
+                Text(
+                    text = "Due day",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    dayPresets.forEach { (offset, label) ->
+                        PixiChip(
+                            label = label,
+                            selected = dayOffset == offset,
+                            onClick = { dayOffset = offset }
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                Text(
+                    text = "Due time (you’ll get a notification)",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    timePresets.forEach { t ->
+                        PixiChip(
+                            label = t,
+                            selected = selectedTime == t,
+                            onClick = { selectedTime = t }
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = selectedTime,
+                    onValueChange = { selectedTime = it },
+                    label = { Text("Custom time (HH:mm or h:mm AM)") },
+                    placeholder = { Text("14:30") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("input_task_due"),
+                    singleLine = true,
+                    shape = PixiFieldShape,
+                    colors = fieldColors
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
 
                 Text(
                     text = "Category",
@@ -118,30 +197,21 @@ fun AddTaskDialog(
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(8.dp))
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     categories.forEach { cat ->
-                        val isSel = cat == selectedCategory
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
-                                .clickable { selectedCategory = cat }
-                                .padding(horizontal = 12.dp, vertical = 6.dp)
-                        ) {
-                            Text(
-                                text = cat,
-                                fontSize = 12.sp,
-                                color = if (isSel) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                        PixiChip(
+                            label = cat,
+                            selected = cat == selectedCategory,
+                            onClick = { selectedCategory = cat }
+                        )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
                 Text(
                     text = "Priority Level",
@@ -149,71 +219,67 @@ fun AddTaskDialog(
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(8.dp))
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     priorities.forEach { (key, label) ->
-                        val isSel = key == selectedPriority
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
-                                .clickable { selectedPriority = key }
-                                .padding(horizontal = 12.dp, vertical = 6.dp)
-                        ) {
-                            Text(
-                                text = label,
-                                fontSize = 12.sp,
-                                color = if (isSel) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                        PixiChip(
+                            label = label,
+                            selected = key == selectedPriority,
+                            onClick = { selectedPriority = key }
+                        )
                     }
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
 
                 OutlinedTextField(
-                    value = dueTimeStr,
-                    onValueChange = { dueTimeStr = it },
-                    label = { Text("Due Date / Time") },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("input_task_due"),
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp)
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                OutlinedTextField(
                     value = subtasks,
                     onValueChange = { subtasks = it },
-                    label = { Text("Subtasks (separate with semicolon ';')") },
+                    label = { Text("Subtasks (separate with ';')") },
                     placeholder = { Text("Research; Draft; Export") },
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = PixiFieldShape,
+                    colors = fieldColors
                 )
 
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(22.dp))
 
-                Button(
+                PixiPrimaryButton(
+                    text = "Add Task",
                     onClick = {
                         if (title.isNotBlank()) {
-                            onAddTask(title, selectedCategory, selectedPriority, dueTimeStr, subtasks, null)
+                            val dayStart = Calendar.getInstance().apply {
+                                set(Calendar.HOUR_OF_DAY, 0)
+                                set(Calendar.MINUTE, 0)
+                                set(Calendar.SECOND, 0)
+                                set(Calendar.MILLISECOND, 0)
+                                add(Calendar.DAY_OF_YEAR, dayOffset)
+                            }.timeInMillis
+
+                            val dueMillis = ReminderScheduler.combineDateAndTime(dayStart, selectedTime)
+                                ?: (dayStart + 9 * 60 * 60 * 1000L) // fallback 9:00
+
+                            val displayTime = ReminderScheduler.formatTime(dueMillis)
+                            val dayLabel = dayPresets.find { it.first == dayOffset }?.second ?: "Today"
+                            val dueLabel = "$dayLabel · $displayTime"
+
+                            onAddTask(
+                                title,
+                                selectedCategory,
+                                selectedPriority,
+                                dueLabel,
+                                dueMillis,
+                                subtasks,
+                                null
+                            )
                             onDismiss()
                         }
                     },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(50.dp)
-                        .testTag("submit_add_task_btn"),
-                    shape = CircleShape,
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                ) {
-                    Text("Add Task", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                }
+                    modifier = Modifier.testTag("submit_add_task_btn")
+                )
             }
         }
     }

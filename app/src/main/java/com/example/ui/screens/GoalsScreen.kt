@@ -2,7 +2,6 @@ package com.example.ui.screens
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,25 +17,23 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.EmojiEvents
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -45,11 +42,23 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import com.example.data.Currencies
 import com.example.data.GoalEntity
+import com.example.ui.components.PixiBadge
+import com.example.ui.components.PixiCard
+import com.example.ui.components.PixiCardShapeSm
+import com.example.ui.components.PixiCloseButton
+import com.example.ui.components.PixiEmptyState
+import com.example.ui.components.PixiFieldShape
+import com.example.ui.components.PixiPillShape
+import com.example.ui.components.PixiPrimaryButton
+import com.example.ui.components.PixiSectionLabel
 
 @Composable
 fun GoalsScreen(
     goals: List<GoalEntity>,
+    currencyCode: String,
     onUpdateGoalProgress: (GoalEntity, Double) -> Unit,
     onDeleteGoal: (Int) -> Unit,
     onOpenAddGoal: () -> Unit,
@@ -57,24 +66,28 @@ fun GoalsScreen(
 ) {
     val completedCount = goals.count { it.isCompleted }
     val totalCount = goals.size
+    val currencySymbol = Currencies.symbolOf(currencyCode)
 
-    Box(modifier = modifier.fillMaxSize()) {
+    var amountGoal by remember { mutableStateOf<GoalEntity?>(null) }
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 16.dp),
-            contentPadding = PaddingValues(bottom = 88.dp, top = 16.dp)
+                .padding(horizontal = 20.dp),
+            contentPadding = PaddingValues(bottom = 24.dp, top = 16.dp)
         ) {
-            // Vision Goals Header
             item {
-                Card(
+                PixiCard(
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("goals_summary_card"),
-                    shape = RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
+                    borderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
                 ) {
                     Row(
                         modifier = Modifier
@@ -92,89 +105,92 @@ fun GoalsScreen(
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 text = if (totalCount == 0) "Start with your first milestone"
-                                else "$completedCount of $totalCount completed",
-                                fontSize = 12.sp,
+                                else "$completedCount of $totalCount completed · $currencyCode",
+                                fontSize = 13.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
 
                         Box(
                             modifier = Modifier
-                                .size(50.dp)
+                                .size(56.dp)
                                 .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primaryContainer),
+                                .background(MaterialTheme.colorScheme.primary),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.EmojiEvents,
                                 contentDescription = "Trophy",
-                                tint = MaterialTheme.colorScheme.primary,
+                                tint = MaterialTheme.colorScheme.onPrimary,
                                 modifier = Modifier.size(28.dp)
                             )
                         }
                     }
                 }
-
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(18.dp))
             }
 
             item {
-                Text(
-                    text = "Milestones",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(bottom = 10.dp)
-                )
+                PixiSectionLabel(text = "Milestones")
+                Spacer(modifier = Modifier.height(10.dp))
             }
 
             if (goals.isEmpty()) {
                 item {
-                    EmptyGoalsState()
+                    PixiEmptyState(
+                        title = "No goals yet",
+                        subtitle = "Tap the yellow + to set your first milestone",
+                        actionLabel = "Add a goal",
+                        onAction = onOpenAddGoal
+                    )
                 }
             } else {
                 items(goals, key = { it.id }) { goal ->
                     GoalCardItem(
                         goal = goal,
-                        onBumpProgress = { delta -> onUpdateGoalProgress(goal, delta) },
+                        currencyCode = currencyCode,
+                        currencySymbol = currencySymbol,
+                        onAddAmount = { amountGoal = goal },
                         onDelete = { onDeleteGoal(goal.id) }
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                 }
             }
         }
+    }
 
-        // Add Goal FAB
-        FloatingActionButton(
-            onClick = onOpenAddGoal,
-            containerColor = MaterialTheme.colorScheme.primary,
-            contentColor = MaterialTheme.colorScheme.onPrimary,
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(bottom = 16.dp, end = 16.dp)
-                .testTag("add_goal_fab")
-        ) {
-            Icon(imageVector = Icons.Filled.Add, contentDescription = "Add Goal")
-        }
+    amountGoal?.let { goal ->
+        AddGoalAmountDialog(
+            goal = goal,
+            currencyCode = currencyCode,
+            currencySymbol = currencySymbol,
+            onDismiss = { amountGoal = null },
+            onConfirm = { amount ->
+                if (amount != 0.0) {
+                    onUpdateGoalProgress(goal, amount)
+                }
+                amountGoal = null
+            }
+        )
     }
 }
 
 @Composable
 fun GoalCardItem(
     goal: GoalEntity,
-    onBumpProgress: (Double) -> Unit,
+    currencyCode: String,
+    currencySymbol: String,
+    onAddAmount: () -> Unit,
     onDelete: () -> Unit
 ) {
     val progressPct = (goal.currentAmount / goal.targetAmount).coerceIn(0.0, 1.0).toFloat()
     val animatedProgress by animateFloatAsState(targetValue = progressPct, label = "goalProgress")
+    val isMoney = isMoneyUnit(goal.unit, currencySymbol)
 
-    Card(
+    PixiCard(
         modifier = Modifier
             .fillMaxWidth()
-            .testTag("goal_item_${goal.id}"),
-        shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            .testTag("goal_item_${goal.id}")
     ) {
         Column(
             modifier = Modifier
@@ -187,43 +203,18 @@ fun GoalCardItem(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(MaterialTheme.colorScheme.primaryContainer)
-                            .padding(horizontal = 10.dp, vertical = 4.dp)
-                    ) {
-                        Text(
-                            text = goal.category,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-
+                    PixiBadge(text = goal.category)
                     Spacer(modifier = Modifier.width(8.dp))
-
                     if (goal.isCompleted) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(Color(0xFF10B981).copy(alpha = 0.2f))
-                                .padding(horizontal = 10.dp, vertical = 4.dp)
-                        ) {
-                            Text(
-                                text = "Done",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = Color(0xFF10B981)
-                            )
-                        }
+                        PixiBadge(
+                            text = "Done",
+                            containerColor = Color(0xFF34D399).copy(alpha = 0.2f),
+                            contentColor = Color(0xFF34D399)
+                        )
                     }
                 }
 
-                IconButton(
-                    onClick = onDelete,
-                    modifier = Modifier.size(28.dp)
-                ) {
+                IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
                     Icon(
                         imageVector = Icons.Filled.DeleteOutline,
                         contentDescription = "Delete Goal",
@@ -233,26 +224,24 @@ fun GoalCardItem(
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             Text(
                 text = goal.title,
-                fontSize = 16.sp,
+                fontSize = 17.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
             )
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            // Progress Bar & Percentage
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = if (goal.unit == "$") "$${goal.currentAmount.toInt()} / $${goal.targetAmount.toInt()}"
-                    else "${goal.currentAmount.toInt()} / ${goal.targetAmount.toInt()} ${goal.unit}",
+                    text = formatGoalAmount(goal.currentAmount, goal.targetAmount, goal.unit, currencyCode, currencySymbol),
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -260,27 +249,26 @@ fun GoalCardItem(
 
                 Text(
                     text = "${(progressPct * 100).toInt()}%",
-                    fontSize = 13.sp,
+                    fontSize = 14.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = MaterialTheme.colorScheme.primary
                 )
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             LinearProgressIndicator(
                 progress = { animatedProgress },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(8.dp)
-                    .clip(RoundedCornerShape(4.dp)),
-                color = if (goal.isCompleted) Color(0xFF10B981) else MaterialTheme.colorScheme.primary,
+                    .height(10.dp)
+                    .clip(PixiCardShapeSm),
+                color = if (goal.isCompleted) Color(0xFF34D399) else MaterialTheme.colorScheme.primary,
                 trackColor = MaterialTheme.colorScheme.surfaceVariant
             )
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
-            // Quick Bump Buttons
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
@@ -288,25 +276,26 @@ fun GoalCardItem(
             ) {
                 Text(
                     text = "Deadline: ${goal.deadlineStr}",
-                    fontSize = 11.sp,
+                    fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f)
                 )
 
-                val bumpAmount = if (goal.unit == "$") 50.0 else 1.0
-                val bumpLabel = if (goal.unit == "$") "+$50" else "+1 ${goal.unit}"
-
                 Button(
-                    onClick = { onBumpProgress(bumpAmount) },
-                    shape = CircleShape,
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-                    modifier = Modifier.height(34.dp)
+                    onClick = onAddAmount,
+                    shape = PixiPillShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary
+                    ),
+                    modifier = Modifier
+                        .height(38.dp)
+                        .testTag("add_goal_amount_${goal.id}")
                 ) {
                     Text(
-                        text = bumpLabel,
-                        fontSize = 11.sp,
+                        text = if (isMoney) "Add amount" else "Add progress",
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
+                        color = MaterialTheme.colorScheme.onPrimary
                     )
                 }
             }
@@ -315,25 +304,117 @@ fun GoalCardItem(
 }
 
 @Composable
-fun EmptyGoalsState() {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 40.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(text = "🌟", fontSize = 40.sp)
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = "No goals yet",
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        Text(
-            text = "Tap + to set your first milestone",
-            fontSize = 12.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+private fun AddGoalAmountDialog(
+    goal: GoalEntity,
+    currencyCode: String,
+    currencySymbol: String,
+    onDismiss: () -> Unit,
+    onConfirm: (Double) -> Unit
+) {
+    var amountStr by remember { mutableStateOf("") }
+    val isMoney = isMoneyUnit(goal.unit, currencySymbol)
+    val unitLabel = if (isMoney) currencySymbol else goal.unit
+
+    val fieldColors = OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = MaterialTheme.colorScheme.primary,
+        unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+    )
+
+    Dialog(onDismissRequest = onDismiss) {
+        PixiCard(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(24.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (isMoney) "Add amount" else "Add progress",
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    PixiCloseButton(onClick = onDismiss)
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = goal.title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Current: ${formatSingle(goal.currentAmount, goal.unit, currencyCode, currencySymbol)} · Target: ${formatSingle(goal.targetAmount, goal.unit, currencyCode, currencySymbol)}",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                OutlinedTextField(
+                    value = amountStr,
+                    onValueChange = { amountStr = it.filter { ch -> ch.isDigit() || ch == '.' || ch == '-' } },
+                    label = { Text(if (isMoney) "Amount ($unitLabel)" else "Amount ($unitLabel)") },
+                    placeholder = { Text(if (isMoney) "e.g. 25.50" else "e.g. 1") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("input_goal_amount"),
+                    singleLine = true,
+                    shape = PixiFieldShape,
+                    colors = fieldColors
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = "Tip: use a negative value to subtract progress",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                PixiPrimaryButton(
+                    text = "Save",
+                    onClick = {
+                        val amount = amountStr.toDoubleOrNull() ?: 0.0
+                        onConfirm(amount)
+                    },
+                    modifier = Modifier.testTag("confirm_goal_amount_btn")
+                )
+            }
+        }
+    }
+}
+
+private fun isMoneyUnit(unit: String, currencySymbol: String): Boolean {
+    return unit == "$" || unit == currencySymbol || unit.equals("money", ignoreCase = true)
+}
+
+private fun formatGoalAmount(
+    current: Double,
+    target: Double,
+    unit: String,
+    currencyCode: String,
+    currencySymbol: String
+): String {
+    return if (isMoneyUnit(unit, currencySymbol)) {
+        "${Currencies.format(current, currencyCode)} / ${Currencies.format(target, currencyCode)}"
+    } else {
+        "${current.toInt()} / ${target.toInt()} $unit"
+    }
+}
+
+private fun formatSingle(
+    amount: Double,
+    unit: String,
+    currencyCode: String,
+    currencySymbol: String
+): String {
+    return if (isMoneyUnit(unit, currencySymbol)) {
+        Currencies.format(amount, currencyCode)
+    } else {
+        "${amount.toInt()} $unit"
     }
 }

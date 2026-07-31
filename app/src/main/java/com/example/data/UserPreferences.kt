@@ -31,7 +31,7 @@ data class UserProfile(
     val email: String = "",
     val location: String = "",
     val avatarUri: String = "",
-    val themeOption: AppThemeOption = AppThemeOption.PIXIDO_DARK,
+    val themeOption: AppThemeOption = AppThemeOption.PIXIDO_LIGHT,
     val currencyCode: String = "USD",
     val monthlyBudgetLimit: Double = 0.0,
     val userXp: Int = 0,
@@ -67,8 +67,8 @@ class UserPreferencesRepository(private val context: Context) {
             location = prefs[Keys.LOCATION].orEmpty(),
             avatarUri = prefs[Keys.AVATAR_URI].orEmpty(),
             themeOption = runCatching {
-                AppThemeOption.valueOf(prefs[Keys.THEME] ?: AppThemeOption.PIXIDO_DARK.name)
-            }.getOrDefault(AppThemeOption.PIXIDO_DARK),
+                AppThemeOption.valueOf(prefs[Keys.THEME] ?: AppThemeOption.PIXIDO_LIGHT.name)
+            }.getOrDefault(AppThemeOption.PIXIDO_LIGHT),
             currencyCode = prefs[Keys.CURRENCY] ?: "USD",
             monthlyBudgetLimit = prefs[Keys.MONTHLY_BUDGET] ?: 0.0,
             userXp = prefs[Keys.USER_XP] ?: 0,

@@ -61,10 +61,15 @@ val pixiDoTabs = listOf(
 /** Alias for existing references. */
 val auraTabs = pixiDoTabs
 
+/**
+ * Soft Lilac bottom bar matching the reference:
+ *  [Tasks] [Budget]  [yellow +]  [Calendar] [Goals]
+ */
 @Composable
 fun AuraBottomNavigation(
     selectedTab: Int,
     onTabSelected: (Int) -> Unit,
+    onCenterAdd: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Surface(
@@ -73,79 +78,111 @@ fun AuraBottomNavigation(
             .navigationBarsPadding(),
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 0.dp,
-        shadowElevation = 8.dp,
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+        shadowElevation = 12.dp,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceAround,
+                .padding(horizontal = 8.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            pixiDoTabs.forEachIndexed { index, tab ->
-                val isSelected = selectedTab == index
-                val interaction = remember { MutableInteractionSource() }
-                val pressed by interaction.collectIsPressedAsState()
-                val scale by animateFloatAsState(
-                    targetValue = if (pressed) 0.92f else 1f,
-                    animationSpec = spring(stiffness = Spring.StiffnessHigh),
-                    label = "tabScale"
-                )
-                val activeTextColor by animateColorAsState(
-                    targetValue = if (isSelected) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                    label = "tabTextColor"
-                )
-                val activeIconColor by animateColorAsState(
-                    targetValue = if (isSelected) MaterialTheme.colorScheme.onPrimary
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                    label = "tabIconColor"
-                )
+            // Left pair: Tasks (0), Budget (1)
+            NavItem(
+                tab = pixiDoTabs[0],
+                selected = selectedTab == 0,
+                onClick = { onTabSelected(0) }
+            )
+            NavItem(
+                tab = pixiDoTabs[1],
+                selected = selectedTab == 1,
+                onClick = { onTabSelected(1) }
+            )
 
-                Box(
-                    modifier = Modifier
-                        .testTag(tab.testTag)
-                        .scale(scale)
-                        .clip(RoundedCornerShape(16.dp))
-                        .clickable(
-                            interactionSource = interaction,
-                            indication = null
-                        ) { onTabSelected(index) }
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .clip(CircleShape)
-                                .background(
-                                    if (isSelected) MaterialTheme.colorScheme.primary
-                                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0f)
-                                )
-                                .padding(horizontal = 16.dp, vertical = 6.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = if (isSelected) tab.selectedIcon else tab.unselectedIcon,
-                                contentDescription = tab.title,
-                                tint = activeIconColor,
-                                modifier = Modifier.size(22.dp)
-                            )
-                        }
-                        Text(
-                            text = tab.title,
-                            fontSize = 10.sp,
-                            fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
-                            color = activeTextColor,
-                            modifier = Modifier.padding(top = 2.dp)
-                        )
-                    }
-                }
-            }
+            // Center yellow + FAB
+            PixiYellowFab(
+                onClick = onCenterAdd,
+                modifier = Modifier
+                    .padding(horizontal = 4.dp)
+                    .testTag("center_add_fab")
+            )
+
+            // Right pair: Calendar (2), Goals (3)
+            NavItem(
+                tab = pixiDoTabs[2],
+                selected = selectedTab == 2,
+                onClick = { onTabSelected(2) }
+            )
+            NavItem(
+                tab = pixiDoTabs[3],
+                selected = selectedTab == 3,
+                onClick = { onTabSelected(3) }
+            )
         }
+    }
+}
+
+@Composable
+private fun NavItem(
+    tab: NavigationTab,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.9f else 1f,
+        animationSpec = spring(stiffness = Spring.StiffnessHigh),
+        label = "tabScale"
+    )
+    val iconColor by animateColorAsState(
+        targetValue = if (selected) MaterialTheme.colorScheme.onPrimary
+        else MaterialTheme.colorScheme.onSurfaceVariant,
+        label = "tabIconColor"
+    )
+    val labelColor by animateColorAsState(
+        targetValue = if (selected) MaterialTheme.colorScheme.primary
+        else MaterialTheme.colorScheme.onSurfaceVariant,
+        label = "tabLabelColor"
+    )
+
+    Column(
+        modifier = Modifier
+            .testTag(tab.testTag)
+            .scale(scale)
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+                onClick = onClick
+            )
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(
+                    if (selected) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0f)
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = if (selected) tab.selectedIcon else tab.unselectedIcon,
+                contentDescription = tab.title,
+                tint = iconColor,
+                modifier = Modifier.size(22.dp)
+            )
+        }
+        Text(
+            text = tab.title,
+            fontSize = 10.sp,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+            color = labelColor,
+            modifier = Modifier.padding(top = 2.dp)
+        )
     }
 }

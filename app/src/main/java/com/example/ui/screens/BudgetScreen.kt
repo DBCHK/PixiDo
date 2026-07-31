@@ -1,7 +1,6 @@
 package com.example.ui.screens
 
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -20,20 +19,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalance
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Savings
-import androidx.compose.material.icons.filled.Wallet
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -50,7 +43,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -62,6 +54,12 @@ import com.example.data.BudgetItemEntity
 import com.example.data.Currencies
 import com.example.ui.components.AddAccountDialog
 import com.example.ui.components.BudgetSettingsDialog
+import com.example.ui.components.PixiBadge
+import com.example.ui.components.PixiCard
+import com.example.ui.components.PixiCardShapeSm
+import com.example.ui.components.PixiEmptyState
+import com.example.ui.components.PixiScreenHeader
+import com.example.ui.components.PixiSectionLabel
 
 @Composable
 fun BudgetScreen(
@@ -95,69 +93,55 @@ fun BudgetScreen(
 
     val (vibeStatus, vibeColor) = when {
         !hasLimit -> "Set a limit" to MaterialTheme.colorScheme.primary
-        spentPercentage < 0.6f -> "On track" to Color(0xFF10B981)
-        spentPercentage < 0.85f -> "Watch spend" to Color(0xFFF59E0B)
-        else -> "Over budget" to Color(0xFFF43F5E)
+        spentPercentage < 0.6f -> "On track" to Color(0xFF34D399)
+        spentPercentage < 0.85f -> "Watch spend" to Color(0xFFFBBF24)
+        else -> "Over budget" to Color(0xFFFF7A8A)
     }
 
-    Box(modifier = modifier.fillMaxSize()) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 16.dp),
-            contentPadding = PaddingValues(bottom = 88.dp, top = 16.dp)
+                .padding(horizontal = 20.dp),
+            contentPadding = PaddingValues(bottom = 24.dp, top = 16.dp)
         ) {
-            // Header + currency chip
             item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text(
-                            text = "Budget",
-                            style = MaterialTheme.typography.headlineMedium,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "Accounts · limits · cashflow",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                PixiScreenHeader(
+                    title = "Budget",
+                    subtitle = "Accounts · limits · cashflow",
+                    trailing = {
+                        Box(
+                            modifier = Modifier
+                                .clip(PixiCardShapeSm)
+                                .background(MaterialTheme.colorScheme.primaryContainer)
+                                .clickable {
+                                    sound.play(Sfx.SETTINGS_CHANGE)
+                                    showSettings = true
+                                }
+                                .padding(horizontal = 14.dp, vertical = 10.dp)
+                                .testTag("budget_settings_chip")
+                        ) {
+                            Text(
+                                text = "$currencyCode · $symbol",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
                     }
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(MaterialTheme.colorScheme.primaryContainer)
-                            .clickable {
-                                sound.play(Sfx.SETTINGS_CHANGE)
-                                showSettings = true
-                            }
-                            .padding(horizontal = 12.dp, vertical = 8.dp)
-                            .testTag("budget_settings_chip")
-                    ) {
-                        Text(
-                            text = "$currencyCode · $symbol",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.height(14.dp))
+                )
+                Spacer(modifier = Modifier.height(16.dp))
             }
 
-            // Summary card
             item {
-                Card(
+                PixiCard(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .testTag("budget_summary_card"),
-                    shape = RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                        .testTag("budget_summary_card")
                 ) {
                     Column(
                         modifier = Modifier
@@ -182,9 +166,8 @@ fun BudgetScreen(
                                     } else {
                                         Currencies.format(netWorth, currencyCode)
                                     },
-                                    fontSize = 28.sp,
+                                    fontSize = 30.sp,
                                     fontWeight = FontWeight.ExtraBold,
-                                    fontFamily = FontFamily.Monospace,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
@@ -193,24 +176,16 @@ fun BudgetScreen(
                                     } else {
                                         "Tap currency to set monthly limit"
                                     },
-                                    fontSize = 11.sp,
+                                    fontSize = 12.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
 
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(vibeColor.copy(alpha = 0.15f))
-                                    .padding(horizontal = 12.dp, vertical = 6.dp)
-                            ) {
-                                Text(
-                                    text = vibeStatus,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = vibeColor
-                                )
-                            }
+                            PixiBadge(
+                                text = vibeStatus,
+                                containerColor = vibeColor.copy(alpha = 0.15f),
+                                contentColor = vibeColor
+                            )
                         }
 
                         if (hasLimit) {
@@ -220,7 +195,7 @@ fun BudgetScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(10.dp)
-                                    .clip(RoundedCornerShape(5.dp)),
+                                    .clip(PixiCardShapeSm),
                                 color = vibeColor,
                                 trackColor = MaterialTheme.colorScheme.surfaceVariant
                             )
@@ -236,7 +211,7 @@ fun BudgetScreen(
                                 label = "Income",
                                 value = "+${Currencies.format(totalIncome, currencyCode)}",
                                 icon = Icons.Filled.ArrowDownward,
-                                tint = Color(0xFF10B981),
+                                tint = Color(0xFF34D399),
                                 modifier = Modifier.weight(1f)
                             )
                             Spacer(modifier = Modifier.width(12.dp))
@@ -244,40 +219,24 @@ fun BudgetScreen(
                                 label = "Spent",
                                 value = "-${Currencies.format(totalExpenses, currencyCode)}",
                                 icon = Icons.Filled.ArrowUpward,
-                                tint = Color(0xFFF43F5E),
+                                tint = Color(0xFFFF7A8A),
                                 modifier = Modifier.weight(1f)
                             )
                         }
                     }
                 }
-                Spacer(modifier = Modifier.height(18.dp))
+                Spacer(modifier = Modifier.height(20.dp))
             }
 
-            // Accounts section
             item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Accounts",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = "+ Add",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier
-                            .clickable {
-                                sound.play(Sfx.DIALOG_OPEN)
-                                showAddAccount = true
-                            }
-                            .testTag("add_account_btn")
-                    )
-                }
+                PixiSectionLabel(
+                    text = "Accounts",
+                    action = "+ Add",
+                    onAction = {
+                        sound.play(Sfx.DIALOG_OPEN)
+                        showAddAccount = true
+                    }
+                )
                 Spacer(modifier = Modifier.height(10.dp))
             }
 
@@ -289,8 +248,8 @@ fun BudgetScreen(
             } else {
                 item {
                     LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        modifier = Modifier.padding(bottom = 16.dp)
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.padding(bottom = 18.dp)
                     ) {
                         items(accounts, key = { it.id }) { account ->
                             AccountCard(
@@ -303,18 +262,18 @@ fun BudgetScreen(
                 }
             }
 
-            // Transactions
             item {
-                Text(
-                    text = "Transactions",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
+                PixiSectionLabel(text = "Transactions")
+                Spacer(modifier = Modifier.height(10.dp))
             }
 
             if (budgetItems.isEmpty()) {
-                item { EmptyBudgetFeed(symbol = symbol) }
+                item {
+                    PixiEmptyState(
+                        title = "No transactions yet",
+                        subtitle = "Tap the yellow + to log your first expense or income in $symbol"
+                    )
+                }
             } else {
                 items(budgetItems, key = { it.id }) { item ->
                     BudgetItemRow(
@@ -323,21 +282,9 @@ fun BudgetScreen(
                         accountName = accounts.find { it.id == item.accountId }?.name,
                         onDelete = { onDeleteBudgetItem(item.id) }
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
                 }
             }
-        }
-
-        FloatingActionButton(
-            onClick = onOpenAddBudget,
-            containerColor = MaterialTheme.colorScheme.primary,
-            contentColor = MaterialTheme.colorScheme.onPrimary,
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(bottom = 16.dp, end = 16.dp)
-                .testTag("add_budget_fab")
-        ) {
-            Icon(imageVector = Icons.Filled.Add, contentDescription = "Log transaction")
         }
     }
 
@@ -377,14 +324,14 @@ private fun CashflowPill(
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(tint.copy(alpha = 0.1f))
+            .clip(PixiCardShapeSm)
+            .background(tint.copy(alpha = 0.12f))
             .padding(12.dp)
     ) {
         Icon(imageVector = icon, contentDescription = label, tint = tint, modifier = Modifier.size(20.dp))
         Spacer(modifier = Modifier.width(8.dp))
         Column {
-            Text(label, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(label, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(value, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = tint)
         }
     }
@@ -411,16 +358,13 @@ fun AccountCard(
         (account.monthlyUsage / account.creditLimit).toFloat().coerceIn(0f, 1f)
     } else 0f
 
-    Card(
+    PixiCard(
         modifier = Modifier
             .width(220.dp)
             .testTag("account_card_${account.id}"),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, accent.copy(alpha = 0.4f)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        borderColor = accent.copy(alpha = 0.35f)
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
+        Column(modifier = Modifier.padding(16.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -428,12 +372,12 @@ fun AccountCard(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(36.dp)
+                        .size(40.dp)
                         .clip(CircleShape)
                         .background(accent.copy(alpha = 0.18f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(icon, contentDescription = type.name, tint = accent, modifier = Modifier.size(18.dp))
+                    Icon(icon, contentDescription = type.name, tint = accent, modifier = Modifier.size(20.dp))
                 }
                 IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
                     Icon(
@@ -444,35 +388,34 @@ fun AccountCard(
                     )
                 }
             }
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(12.dp))
             Text(
                 text = account.name,
-                fontSize = 14.sp,
+                fontSize = 15.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
             )
             Text(
                 text = type.name.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() },
-                fontSize = 11.sp,
+                fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(10.dp))
             Text(
                 text = Currencies.format(account.balance, currencyCode),
-                fontSize = 18.sp,
+                fontSize = 20.sp,
                 fontWeight = FontWeight.ExtraBold,
-                fontFamily = FontFamily.Monospace,
                 color = accent
             )
             if (account.creditLimit > 0) {
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(10.dp))
                 LinearProgressIndicator(
                     progress = { usagePct },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(6.dp)
-                        .clip(RoundedCornerShape(3.dp)),
-                    color = if (usagePct > 0.85f) Color(0xFFF43F5E) else accent,
+                        .clip(PixiCardShapeSm),
+                    color = if (usagePct > 0.85f) Color(0xFFFF7A8A) else accent,
                     trackColor = MaterialTheme.colorScheme.surfaceVariant
                 )
                 Spacer(modifier = Modifier.height(4.dp))
@@ -493,14 +436,10 @@ fun BudgetItemRow(
     accountName: String?,
     onDelete: () -> Unit
 ) {
-    Card(
+    PixiCard(
         modifier = Modifier
             .fillMaxWidth()
-            .testTag("budget_item_${item.id}"),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            .testTag("budget_item_${item.id}")
     ) {
         Row(
             modifier = Modifier
@@ -512,18 +451,18 @@ fun BudgetItemRow(
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                 Box(
                     modifier = Modifier
-                        .size(38.dp)
+                        .size(42.dp)
                         .clip(CircleShape)
                         .background(
-                            if (item.isExpense) Color(0xFFF43F5E).copy(alpha = 0.15f)
-                            else Color(0xFF10B981).copy(alpha = 0.15f)
+                            if (item.isExpense) Color(0xFFFF7A8A).copy(alpha = 0.15f)
+                            else Color(0xFF34D399).copy(alpha = 0.15f)
                         ),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = if (item.isExpense) Icons.Filled.ArrowUpward else Icons.Filled.ArrowDownward,
                         contentDescription = null,
-                        tint = if (item.isExpense) Color(0xFFF43F5E) else Color(0xFF10B981),
+                        tint = if (item.isExpense) Color(0xFFFF7A8A) else Color(0xFF34D399),
                         modifier = Modifier.size(20.dp)
                     )
                 }
@@ -531,7 +470,7 @@ fun BudgetItemRow(
                 Column {
                     Text(
                         text = item.title,
-                        fontSize = 14.sp,
+                        fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -540,7 +479,7 @@ fun BudgetItemRow(
                             append(item.category)
                             if (!accountName.isNullOrBlank()) append(" · $accountName")
                         },
-                        fontSize = 11.sp,
+                        fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
@@ -549,12 +488,12 @@ fun BudgetItemRow(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = "${if (item.isExpense) "-" else "+"}${Currencies.format(item.amount, currencyCode)}",
-                    fontSize = 14.sp,
+                    fontSize = 15.sp,
                     fontWeight = FontWeight.ExtraBold,
-                    color = if (item.isExpense) Color(0xFFF43F5E) else Color(0xFF10B981)
+                    color = if (item.isExpense) Color(0xFFFF7A8A) else Color(0xFF34D399)
                 )
                 Spacer(modifier = Modifier.width(4.dp))
-                IconButton(onClick = onDelete, modifier = Modifier.size(26.dp)) {
+                IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
                     Icon(
                         Icons.Filled.DeleteOutline,
                         contentDescription = "Delete",
@@ -568,55 +507,30 @@ fun BudgetItemRow(
 }
 
 @Composable
-fun EmptyBudgetFeed(symbol: String = "$") {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 36.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(text = "💳", fontSize = 40.sp)
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = "No transactions yet",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        Text(
-            text = "Tap + to log your first expense or income in $symbol",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-}
-
-@Composable
 private fun EmptyAccountsCard(onAdd: () -> Unit) {
-    Card(
+    PixiCard(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onAdd() }
             .testTag("empty_accounts_card"),
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+        onClick = onAdd,
+        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(20.dp),
+                .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(text = "🏦", fontSize = 32.sp)
-            Spacer(modifier = Modifier.height(6.dp))
             Text(
                 text = "Add your first account",
                 fontWeight = FontWeight.Bold,
+                fontSize = 16.sp,
                 color = MaterialTheme.colorScheme.onSurface
             )
+            Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = "Bank · Cash · Credit card · Savings · Wallet",
-                fontSize = 12.sp,
+                fontSize = 13.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }

@@ -12,18 +12,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -68,38 +61,30 @@ fun AddBudgetDialog(
     val symbol = Currencies.symbolOf(currencyCode)
 
     val expenseCategories = listOf(
-        "Food & Drink",
-        "Subscriptions",
-        "Transport",
-        "Shopping",
-        "Bills",
-        "Health",
-        "Entertainment",
-        "Savings",
-        "Other"
+        "Food & Drink", "Subscriptions", "Transport", "Shopping",
+        "Bills", "Health", "Entertainment", "Savings", "Other"
+    )
+    val incomeCategories = listOf(
+        "Salary", "Freelance", "Gifts", "Investments", "Refund", "Other"
     )
 
-    val incomeCategories = listOf(
-        "Salary",
-        "Freelance",
-        "Gifts",
-        "Investments",
-        "Refund",
-        "Other"
+    val fieldColors = OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = MaterialTheme.colorScheme.primary,
+        unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
     )
 
     Dialog(onDismissRequest = onDismiss) {
-        Card(
+        PixiCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .testTag("add_budget_dialog"),
-            shape = RoundedCornerShape(28.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                .testTag("add_budget_dialog")
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
                     .padding(24.dp)
             ) {
                 Row(
@@ -109,27 +94,29 @@ fun AddBudgetDialog(
                 ) {
                     Text(
                         text = if (isExpense) "Log Expense" else "Log Income",
-                        style = MaterialTheme.typography.titleLarge,
+                        style = MaterialTheme.typography.headlineSmall,
                         color = MaterialTheme.colorScheme.onSurface
                     )
-                    IconButton(onClick = onDismiss, modifier = Modifier.testTag("close_add_budget")) {
-                        Icon(imageVector = Icons.Filled.Close, contentDescription = "Close")
-                    }
+                    PixiCloseButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.testTag("close_add_budget")
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
 
+                // Expense / Income segmented control
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(CircleShape)
+                        .clip(PixiPillShape)
                         .background(MaterialTheme.colorScheme.surfaceVariant)
                         .padding(4.dp)
                 ) {
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .clip(CircleShape)
+                            .clip(PixiPillShape)
                             .background(
                                 if (isExpense) MaterialTheme.colorScheme.primary
                                 else MaterialTheme.colorScheme.surfaceVariant
@@ -138,7 +125,7 @@ fun AddBudgetDialog(
                                 isExpense = true
                                 category = expenseCategories[0]
                             }
-                            .padding(vertical = 10.dp),
+                            .padding(vertical = 12.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
@@ -148,11 +135,10 @@ fun AddBudgetDialog(
                             else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .clip(CircleShape)
+                            .clip(PixiPillShape)
                             .background(
                                 if (!isExpense) MaterialTheme.colorScheme.primary
                                 else MaterialTheme.colorScheme.surfaceVariant
@@ -161,7 +147,7 @@ fun AddBudgetDialog(
                                 isExpense = false
                                 category = incomeCategories[0]
                             }
-                            .padding(vertical = 10.dp),
+                            .padding(vertical = 12.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
@@ -184,7 +170,8 @@ fun AddBudgetDialog(
                         .fillMaxWidth()
                         .testTag("input_budget_amount"),
                     singleLine = true,
-                    shape = RoundedCornerShape(12.dp)
+                    shape = PixiFieldShape,
+                    colors = fieldColors
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -198,46 +185,34 @@ fun AddBudgetDialog(
                         .fillMaxWidth()
                         .testTag("input_budget_title"),
                     singleLine = true,
-                    shape = RoundedCornerShape(12.dp)
+                    shape = PixiFieldShape,
+                    colors = fieldColors
                 )
 
                 if (accounts.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
                     Text(
                         text = "Account",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         accounts.forEach { acc ->
-                            val isSel = acc.id == selectedAccountId
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(
-                                        if (isSel) MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.surfaceVariant
-                                    )
-                                    .clickable { selectedAccountId = acc.id }
-                                    .padding(horizontal = 12.dp, vertical = 6.dp)
-                            ) {
-                                Text(
-                                    text = acc.name,
-                                    fontSize = 12.sp,
-                                    color = if (isSel) MaterialTheme.colorScheme.onPrimary
-                                    else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
+                            PixiChip(
+                                label = acc.name,
+                                selected = acc.id == selectedAccountId,
+                                onClick = { selectedAccountId = acc.id }
+                            )
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
                 Text(
                     text = "Category",
@@ -245,7 +220,7 @@ fun AddBudgetDialog(
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
                 val currentCats = if (isExpense) expenseCategories else incomeCategories
                 FlowRow(
@@ -253,53 +228,29 @@ fun AddBudgetDialog(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     currentCats.forEach { cat ->
-                        val isSel = cat == category
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(
-                                    if (isSel) MaterialTheme.colorScheme.primary
-                                    else MaterialTheme.colorScheme.surfaceVariant
-                                )
-                                .clickable { category = cat }
-                                .padding(horizontal = 12.dp, vertical = 6.dp)
-                        ) {
-                            Text(
-                                text = cat,
-                                fontSize = 12.sp,
-                                color = if (isSel) MaterialTheme.colorScheme.onPrimary
-                                else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                        PixiChip(
+                            label = cat,
+                            selected = cat == category,
+                            onClick = { category = cat }
+                        )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(22.dp))
 
-                Button(
+                PixiPrimaryButton(
+                    text = "Save Transaction",
                     onClick = {
                         val parsedAmount = amountStr.toDoubleOrNull() ?: 0.0
                         if (parsedAmount > 0) {
                             onAddBudgetItem(
-                                title,
-                                parsedAmount,
-                                isExpense,
-                                category,
-                                note,
-                                selectedAccountId
+                                title, parsedAmount, isExpense, category, note, selectedAccountId
                             )
                             onDismiss()
                         }
                     },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(50.dp)
-                        .testTag("submit_add_budget_btn"),
-                    shape = CircleShape,
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                ) {
-                    Text("Save Transaction", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                }
+                    modifier = Modifier.testTag("submit_add_budget_btn")
+                )
             }
         }
     }

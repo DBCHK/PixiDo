@@ -20,21 +20,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -58,6 +53,11 @@ import com.example.audio.LocalSoundEngine
 import com.example.audio.Sfx
 import com.example.data.AppThemeOption
 import com.example.data.UserProfile
+import com.example.ui.components.PixiCard
+import com.example.ui.components.PixiCardShapeSm
+import com.example.ui.components.PixiCloseButton
+import com.example.ui.components.PixiFieldShape
+import com.example.ui.components.PixiPrimaryButton
 import com.example.ui.theme.description
 import com.example.ui.theme.displayName
 
@@ -94,17 +94,21 @@ fun ProfileDialog(
         }
     }
 
+    val fieldColors = OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = MaterialTheme.colorScheme.primary,
+        unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+    )
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
-        Card(
+        PixiCard(
             modifier = Modifier
                 .fillMaxWidth(0.94f)
-                .testTag("profile_dialog"),
-            shape = RoundedCornerShape(28.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                .testTag("profile_dialog")
         ) {
             Column(
                 modifier = Modifier
@@ -122,18 +126,19 @@ fun ProfileDialog(
                         style = MaterialTheme.typography.headlineSmall,
                         color = MaterialTheme.colorScheme.onSurface
                     )
-                    IconButton(onClick = onDismiss, modifier = Modifier.testTag("close_profile")) {
-                        Icon(Icons.Filled.Close, contentDescription = "Close")
-                    }
+                    PixiCloseButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.testTag("close_profile")
+                    )
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(18.dp))
 
                 // Avatar
                 Box(
                     modifier = Modifier
                         .align(Alignment.CenterHorizontally)
-                        .size(96.dp)
+                        .size(100.dp)
                         .clip(CircleShape)
                         .border(3.dp, MaterialTheme.colorScheme.primary, CircleShape)
                         .clickable { imagePicker.launch(arrayOf("image/*")) }
@@ -153,7 +158,7 @@ fun ProfileDialog(
                             model = profile.avatarUri,
                             contentDescription = "Avatar",
                             modifier = Modifier
-                                .size(96.dp)
+                                .size(100.dp)
                                 .clip(CircleShape),
                             contentScale = ContentScale.Crop
                         )
@@ -168,7 +173,7 @@ fun ProfileDialog(
                     Box(
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
-                            .size(28.dp)
+                            .size(30.dp)
                             .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.primary)
                             .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape),
@@ -203,7 +208,8 @@ fun ProfileDialog(
                         .fillMaxWidth()
                         .testTag("input_profile_name"),
                     singleLine = true,
-                    shape = RoundedCornerShape(14.dp)
+                    shape = PixiFieldShape,
+                    colors = fieldColors
                 )
 
                 Spacer(modifier = Modifier.height(10.dp))
@@ -217,7 +223,8 @@ fun ProfileDialog(
                         .fillMaxWidth()
                         .testTag("input_profile_bio"),
                     minLines = 2,
-                    shape = RoundedCornerShape(14.dp)
+                    shape = PixiFieldShape,
+                    colors = fieldColors
                 )
 
                 Spacer(modifier = Modifier.height(10.dp))
@@ -231,7 +238,8 @@ fun ProfileDialog(
                         .fillMaxWidth()
                         .testTag("input_profile_email"),
                     singleLine = true,
-                    shape = RoundedCornerShape(14.dp)
+                    shape = PixiFieldShape,
+                    colors = fieldColors
                 )
 
                 Spacer(modifier = Modifier.height(10.dp))
@@ -245,10 +253,11 @@ fun ProfileDialog(
                         .fillMaxWidth()
                         .testTag("input_profile_location"),
                     singleLine = true,
-                    shape = RoundedCornerShape(14.dp)
+                    shape = PixiFieldShape,
+                    colors = fieldColors
                 )
 
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(22.dp))
 
                 Text(
                     text = "Feedback",
@@ -292,7 +301,7 @@ fun ProfileDialog(
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = "Including Material You wallpaper colors",
+                    text = "Soft Lilac by default · wallpaper colors optional",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -307,7 +316,7 @@ fun ProfileDialog(
                         val selected = profile.themeOption == option
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(14.dp))
+                                .clip(PixiCardShapeSm)
                                 .background(
                                     if (selected) MaterialTheme.colorScheme.primary
                                     else MaterialTheme.colorScheme.surfaceVariant
@@ -316,13 +325,13 @@ fun ProfileDialog(
                                     sound.play(Sfx.THEME_CHANGE)
                                     onThemeSelected(option)
                                 }
-                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                                .padding(horizontal = 14.dp, vertical = 10.dp)
                                 .testTag("theme_${option.name}")
                         ) {
                             Column {
                                 Text(
                                     text = option.displayName(),
-                                    fontSize = 12.sp,
+                                    fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = if (selected) MaterialTheme.colorScheme.onPrimary
                                     else MaterialTheme.colorScheme.onSurface
@@ -338,29 +347,17 @@ fun ProfileDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(22.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
-                Button(
+                PixiPrimaryButton(
+                    text = "Save Profile",
                     onClick = {
                         sound.play(Sfx.PROFILE_SAVE)
                         onSaveProfile(name.trim(), bio.trim(), email.trim(), location.trim())
                         onDismiss()
                     },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp)
-                        .testTag("save_profile_btn"),
-                    shape = CircleShape,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary
-                    )
-                ) {
-                    Text(
-                        text = "Save Profile",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp
-                    )
-                }
+                    modifier = Modifier.testTag("save_profile_btn")
+                )
             }
         }
     }
@@ -377,7 +374,7 @@ private fun PreferenceSwitchRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp)
+            .padding(vertical = 6.dp)
             .testTag(testTag),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -390,13 +387,19 @@ private fun PreferenceSwitchRow(
             )
             Text(
                 text = subtitle,
-                fontSize = 11.sp,
+                fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
         Switch(
             checked = checked,
-            onCheckedChange = onCheckedChange
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                uncheckedThumbColor = MaterialTheme.colorScheme.outline,
+                uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant
+            )
         )
     }
 }

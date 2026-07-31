@@ -14,14 +14,14 @@ class AuraRepository(private val dao: AuraDao) {
     val allDailyActivity = dao.getAllDailyActivity()
     val allNotes = dao.getAllNotes()
 
-    suspend fun addTask(task: TaskEntity) = dao.insertTask(task)
+    suspend fun addTask(task: TaskEntity): Long = dao.insertTask(task)
     suspend fun updateTask(task: TaskEntity) = dao.updateTask(task)
     suspend fun deleteTask(taskId: Int) = dao.deleteTaskById(taskId)
 
     suspend fun addBudgetItem(item: BudgetItemEntity) = dao.insertBudgetItem(item)
     suspend fun deleteBudgetItem(itemId: Int) = dao.deleteBudgetItemById(itemId)
 
-    suspend fun addCalendarEvent(event: CalendarEventEntity) = dao.insertCalendarEvent(event)
+    suspend fun addCalendarEvent(event: CalendarEventEntity): Long = dao.insertCalendarEvent(event)
     suspend fun updateCalendarEvent(event: CalendarEventEntity) = dao.updateCalendarEvent(event)
     suspend fun deleteCalendarEvent(eventId: Int) = dao.deleteCalendarEventById(eventId)
 

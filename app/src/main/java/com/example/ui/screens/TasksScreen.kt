@@ -1,9 +1,6 @@
 package com.example.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -25,26 +22,20 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
@@ -55,13 +46,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.R
 import com.example.audio.LocalSoundEngine
 import com.example.audio.Sfx
 import com.example.data.DailyActivityEntity
@@ -70,8 +61,12 @@ import com.example.data.NoteEntity
 import com.example.data.TaskEntity
 import com.example.data.UserProfile
 import com.example.ui.components.DailyHeaderBanner
-import com.example.ui.components.QuickNotesSection
-import com.example.ui.components.StatsStrip
+import com.example.ui.components.PixiBadge
+import com.example.ui.components.PixiCard
+import com.example.ui.components.PixiChip
+import com.example.ui.components.PixiEmptyState
+import com.example.ui.components.PixiSearchField
+import com.example.ui.components.PixiSectionLabel
 
 @Composable
 fun TasksScreen(
@@ -95,7 +90,6 @@ fun TasksScreen(
     val sound = LocalSoundEngine.current
     var selectedFilter by remember { mutableStateOf("ALL") }
     var query by remember { mutableStateOf("") }
-    var fabPressed by remember { mutableStateOf(false) }
 
     val filteredTasks by remember(tasks, selectedFilter, query) {
         derivedStateOf {
@@ -114,19 +108,18 @@ fun TasksScreen(
         }
     }
 
-    val fabScale by animateFloatAsState(
-        targetValue = if (fabPressed) 0.9f else 1f,
-        animationSpec = spring(stiffness = Spring.StiffnessMedium),
-        label = "fabScale"
-    )
-
-    Box(modifier = modifier.fillMaxSize()) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 16.dp),
-            contentPadding = PaddingValues(bottom = 88.dp, top = 8.dp)
+                .padding(horizontal = 20.dp),
+            contentPadding = PaddingValues(bottom = 24.dp, top = 8.dp)
         ) {
+            // Top: compact header + GitHub contributions heatmap
             item {
                 DailyHeaderBanner(
                     userXp = userXp,
@@ -141,59 +134,54 @@ fun TasksScreen(
                         onOpenProfile()
                     }
                 )
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(18.dp))
+            }
+
+            // Tasks section
+            item {
+                PixiSectionLabel(text = "Tasks")
+                Spacer(modifier = Modifier.height(10.dp))
             }
 
             item {
-                StatsStrip(tasks = tasks, activity = activity)
-                Spacer(modifier = Modifier.height(12.dp))
-            }
-
-            item {
-                QuickNotesSection(
-                    notes = notes,
-                    onAddNote = onAddNote,
-                    onTogglePin = onToggleNotePin,
-                    onDelete = onDeleteNote
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-            }
-
-            item {
-                OutlinedTextField(
+                PixiSearchField(
                     value = query,
                     onValueChange = { query = it },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("task_search"),
-                    placeholder = { Text("Search tasks…") },
-                    leadingIcon = {
-                        Icon(Icons.Filled.Search, contentDescription = null)
+                    placeholder = "Search tasks…",
+                    modifier = Modifier.testTag("task_search"),
+                    leading = {
+                        Icon(
+                            Icons.Filled.Search,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp)
+                        )
                     },
-                    trailingIcon = {
+                    trailing = {
                         if (query.isNotEmpty()) {
-                            IconButton(onClick = {
-                                sound.play(Sfx.TAP_SOFT)
-                                query = ""
-                            }) {
-                                Icon(Icons.Filled.Close, contentDescription = "Clear")
+                            IconButton(
+                                onClick = {
+                                    sound.play(Sfx.TAP_SOFT)
+                                    query = ""
+                                },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(
+                                    Icons.Filled.Close,
+                                    contentDescription = "Clear",
+                                    modifier = Modifier.size(16.dp)
+                                )
                             }
                         }
-                    },
-                    singleLine = true,
-                    shape = RoundedCornerShape(16.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outline
-                    )
+                    }
                 )
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(12.dp))
             }
 
             item {
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.padding(bottom = 12.dp)
+                    modifier = Modifier.padding(bottom = 14.dp)
                 ) {
                     val filters = listOf(
                         "ALL" to "All",
@@ -202,40 +190,35 @@ fun TasksScreen(
                         "QUICK_WIN" to "Quick",
                         "COMPLETED" to "Done"
                     )
-
                     items(filters) { (key, label) ->
-                        val isSel = selectedFilter == key
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(
-                                    if (isSel) MaterialTheme.colorScheme.primary
-                                    else MaterialTheme.colorScheme.surfaceVariant
-                                )
-                                .clickable {
-                                    sound.play(Sfx.FILTER_SELECT)
-                                    selectedFilter = key
-                                }
-                                .padding(horizontal = 14.dp, vertical = 8.dp)
-                        ) {
-                            Text(
-                                text = label,
-                                fontSize = 12.sp,
-                                fontWeight = if (isSel) FontWeight.Bold else FontWeight.Medium,
-                                color = if (isSel) MaterialTheme.colorScheme.onPrimary
-                                else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                        PixiChip(
+                            label = label,
+                            selected = selectedFilter == key,
+                            onClick = {
+                                sound.play(Sfx.FILTER_SELECT)
+                                selectedFilter = key
+                            }
+                        )
                     }
                 }
             }
 
             if (filteredTasks.isEmpty()) {
                 item {
-                    EmptyTaskState(
-                        filterName = selectedFilter,
-                        isFullyEmpty = tasks.isEmpty(),
-                        isSearch = query.isNotBlank()
+                    PixiEmptyState(
+                        title = when {
+                            query.isNotBlank() -> "No matches"
+                            tasks.isEmpty() -> "No tasks yet"
+                            else -> "Nothing here"
+                        },
+                        subtitle = when {
+                            query.isNotBlank() -> "Try a different search term"
+                            tasks.isEmpty() -> "Tap the yellow + to create your first task"
+                            else -> "Try another filter or add a new task"
+                        },
+                        doodleRes = if (tasks.isEmpty()) R.drawable.doodle_add_task else null,
+                        actionLabel = if (tasks.isEmpty()) "Add a task" else null,
+                        onAction = if (tasks.isEmpty()) onOpenAddTask else null
                     )
                 }
             } else {
@@ -267,22 +250,6 @@ fun TasksScreen(
                 }
             }
         }
-
-        FloatingActionButton(
-            onClick = {
-                sound.play(Sfx.FAB)
-                onOpenAddTask()
-            },
-            containerColor = MaterialTheme.colorScheme.primary,
-            contentColor = MaterialTheme.colorScheme.onPrimary,
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(bottom = 16.dp, end = 16.dp)
-                .scale(fabScale)
-                .testTag("add_task_fab")
-        ) {
-            Icon(imageVector = Icons.Filled.Add, contentDescription = "Add Task")
-        }
     }
 }
 
@@ -305,10 +272,10 @@ fun TaskCardItem(
     }
 
     val priorityColor = when (task.priority) {
-        "HIGH_FIRE" -> Color(0xFFF43F5E)
-        "QUICK_WIN" -> Color(0xFF38BDF8)
-        "CORE_GOAL" -> Color(0xFFA78BFA)
-        else -> Color(0xFF10B981)
+        "HIGH_FIRE" -> Color(0xFFFF6BA8)
+        "QUICK_WIN" -> Color(0xFF67D4E8)
+        "CORE_GOAL" -> Color(0xFFC4A8F5)
+        else -> Color(0xFF34D399)
     }
 
     val priorityLabel = when (task.priority) {
@@ -318,20 +285,15 @@ fun TaskCardItem(
         else -> "Idea"
     }
 
-    Card(
+    PixiCard(
         modifier = Modifier
             .fillMaxWidth()
             .testTag("task_item_${task.id}"),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (task.isCompleted) {
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-            } else {
-                MaterialTheme.colorScheme.surface
-            }
-        ),
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        containerColor = if (task.isCompleted) {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+        } else {
+            MaterialTheme.colorScheme.surface
+        }
     ) {
         Column(
             modifier = Modifier
@@ -347,15 +309,16 @@ fun TaskCardItem(
                     modifier = Modifier.testTag("checkbox_task_${task.id}")
                 ) {
                     Icon(
-                        imageVector = if (task.isCompleted) Icons.Filled.CheckCircle else Icons.Filled.RadioButtonUnchecked,
+                        imageVector = if (task.isCompleted) Icons.Filled.CheckCircle
+                        else Icons.Filled.RadioButtonUnchecked,
                         contentDescription = "Complete Task",
                         tint = if (task.isCompleted) MaterialTheme.colorScheme.primary
                         else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(26.dp)
+                        modifier = Modifier.size(28.dp)
                     )
                 }
 
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(4.dp))
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
@@ -364,57 +327,55 @@ fun TaskCardItem(
                         fontWeight = FontWeight.Bold,
                         color = if (task.isCompleted) MaterialTheme.colorScheme.onSurfaceVariant
                         else MaterialTheme.colorScheme.onSurface,
-                        textDecoration = if (task.isCompleted) TextDecoration.LineThrough else TextDecoration.None
+                        textDecoration = if (task.isCompleted) TextDecoration.LineThrough
+                        else TextDecoration.None
                     )
 
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(top = 4.dp)
+                        modifier = Modifier.padding(top = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant)
-                                .padding(horizontal = 8.dp, vertical = 2.dp)
-                        ) {
-                            Text(
-                                text = task.category,
-                                fontSize = 10.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                        PixiBadge(
+                            text = task.category,
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        PixiBadge(
+                            text = priorityLabel,
+                            containerColor = priorityColor.copy(alpha = 0.15f),
+                            contentColor = priorityColor
+                        )
+                        if (task.dueTimeStr.isNotBlank()) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Filled.Schedule,
+                                    contentDescription = "Due",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Spacer(modifier = Modifier.width(2.dp))
+                                Text(
+                                    text = task.dueTimeStr,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
                         }
-
-                        Spacer(modifier = Modifier.width(6.dp))
-
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(priorityColor.copy(alpha = 0.15f))
-                                .padding(horizontal = 8.dp, vertical = 2.dp)
-                        ) {
-                            Text(
-                                text = priorityLabel,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = priorityColor
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.width(6.dp))
-
                         if (task.streakCount > 1) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
                                     imageVector = Icons.Filled.LocalFireDepartment,
                                     contentDescription = "Streak",
-                                    tint = Color(0xFFF59E0B),
+                                    tint = Color(0xFFFBBF24),
                                     modifier = Modifier.size(12.dp)
                                 )
                                 Text(
                                     text = "${task.streakCount}d",
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color(0xFFF59E0B)
+                                    color = Color(0xFFFBBF24)
                                 )
                             }
                         }
@@ -426,13 +387,13 @@ fun TaskCardItem(
                         modifier = Modifier
                             .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.primaryContainer)
-                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
                     ) {
                         Text(
                             text = "+${task.xpReward}",
-                            fontSize = 10.sp,
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.ExtraBold,
-                            color = MaterialTheme.colorScheme.primary
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
                         )
                     }
 
@@ -445,7 +406,7 @@ fun TaskCardItem(
                         Icon(
                             imageVector = Icons.Filled.DeleteOutline,
                             contentDescription = "Delete Task",
-                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
+                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.65f),
                             modifier = Modifier.size(18.dp)
                         )
                     }
@@ -453,13 +414,13 @@ fun TaskCardItem(
             }
 
             linkedGoal?.let { goal ->
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(8.dp))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
+                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
                         .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
-                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                        .padding(horizontal = 10.dp, vertical = 5.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Star,
@@ -478,7 +439,7 @@ fun TaskCardItem(
             }
 
             if (subtaskList.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(10.dp))
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -491,13 +452,14 @@ fun TaskCardItem(
                 ) {
                     Text(
                         text = "Subtasks (${completedSubtaskSet.size}/${subtaskList.size})",
-                        fontSize = 11.sp,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
                         text = if (expandedSubtasks) "Hide" else "View",
-                        fontSize = 11.sp,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.primary
                     )
                 }
@@ -524,7 +486,7 @@ fun TaskCardItem(
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
                                     text = subtask,
-                                    fontSize = 12.sp,
+                                    fontSize = 13.sp,
                                     color = if (isSubDone) MaterialTheme.colorScheme.onSurfaceVariant
                                     else MaterialTheme.colorScheme.onSurface,
                                     textDecoration = if (isSubDone) TextDecoration.LineThrough
@@ -536,47 +498,5 @@ fun TaskCardItem(
                 }
             }
         }
-    }
-}
-
-@Composable
-fun EmptyTaskState(
-    filterName: String,
-    isFullyEmpty: Boolean = false,
-    isSearch: Boolean = false
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 40.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = when {
-                isSearch -> "🔎"
-                isFullyEmpty -> "✨"
-                else -> "🔍"
-            },
-            fontSize = 40.sp
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = when {
-                isSearch -> "No matches"
-                isFullyEmpty -> "No tasks yet"
-                else -> "Nothing in “$filterName”"
-            },
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        Text(
-            text = when {
-                isSearch -> "Try a different search term"
-                isFullyEmpty -> "Tap + to create your first task. Notes & the activity grid grow with you."
-                else -> "Try another filter or add a new task."
-            },
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
     }
 }

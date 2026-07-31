@@ -1,9 +1,14 @@
 package com.example
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -11,9 +16,12 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarDuration
@@ -27,11 +35,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.audio.LocalSoundEngine
 import com.example.audio.ProvideSoundEngine
 import com.example.audio.Sfx
+import com.example.notify.NotificationHelper
 import com.example.ui.AuraViewModel
 import com.example.ui.components.AddBudgetDialog
 import com.example.ui.components.AddEventDialog
@@ -50,6 +62,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        NotificationHelper.ensureChannels(this)
         setContent {
             val viewModel: AuraViewModel = viewModel()
             val profile by viewModel.userProfile.collectAsStateWithLifecycle()
@@ -68,6 +81,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun PixiDoApp(viewModel: AuraViewModel = viewModel()) {
     val sound = LocalSoundEngine.current
+    val context = LocalContext.current
 
     val tasks by viewModel.tasks.collectAsStateWithLifecycle()
     val budgetItems by viewModel.budgetItems.collectAsStateWithLifecycle()
@@ -95,6 +109,33 @@ fun PixiDoApp(viewModel: AuraViewModel = viewModel()) {
     val snackbarHostState = remember { SnackbarHostState() }
     val reduceMotion = profile.reduceMotion
 
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { /* granted or not — scheduling still works; display needs grant */ }
+
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val granted = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+            if (!granted) {
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+    }
+
+    fun openAddForCurrentTab() {
+        sound.play(Sfx.FAB)
+        sound.play(Sfx.DIALOG_OPEN)
+        when (selectedTab) {
+            0 -> showAddTaskDialog = true
+            1 -> showAddBudgetDialog = true
+            2 -> showAddEventDialog = true
+            3 -> showAddGoalDialog = true
+        }
+    }
+
     LaunchedEffect(snackbarMessage) {
         val msg = snackbarMessage ?: return@LaunchedEffect
         if (msg.contains("Focus complete", ignoreCase = true)) {
@@ -113,10 +154,19 @@ fun PixiDoApp(viewModel: AuraViewModel = viewModel()) {
     }
 
     Scaffold(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+        containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = {
             SnackbarHost(hostState = snackbarHostState) { data ->
-                Snackbar(snackbarData = data)
+                Snackbar(
+                    snackbarData = data,
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                    actionColor = MaterialTheme.colorScheme.primary,
+                    shape = RoundedCornerShape(16.dp)
+                )
             }
         },
         bottomBar = {
@@ -129,7 +179,8 @@ fun PixiDoApp(viewModel: AuraViewModel = viewModel()) {
                     } else {
                         sound.play(Sfx.TAP_SOFT)
                     }
-                }
+                },
+                onCenterAdd = { openAddForCurrentTab() }
             )
         }
     ) { innerPadding ->
@@ -137,6 +188,7 @@ fun PixiDoApp(viewModel: AuraViewModel = viewModel()) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
+                .background(MaterialTheme.colorScheme.background)
         ) {
             AnimatedContent(
                 targetState = selectedTab,
@@ -231,6 +283,7 @@ fun PixiDoApp(viewModel: AuraViewModel = viewModel()) {
 
                     3 -> GoalsScreen(
                         goals = goals,
+                        currencyCode = profile.currencyCode,
                         onUpdateGoalProgress = { goal, delta ->
                             val willComplete =
                                 delta > 0 && goal.currentAmount + delta >= goal.targetAmount
@@ -259,9 +312,11 @@ fun PixiDoApp(viewModel: AuraViewModel = viewModel()) {
                 sound.play(Sfx.DIALOG_CLOSE)
                 showAddTaskDialog = false
             },
-            onAddTask = { title, category, priority, dueTimeStr, subtasks, linkedGoalId ->
+            onAddTask = { title, category, priority, dueTimeStr, dueDateMillis, subtasks, linkedGoalId ->
                 sound.play(Sfx.ADD_TASK)
-                viewModel.addTask(title, category, priority, dueTimeStr, subtasks, linkedGoalId)
+                viewModel.addTask(
+                    title, category, priority, dueTimeStr, dueDateMillis, subtasks, linkedGoalId
+                )
             }
         )
     }
@@ -288,15 +343,18 @@ fun PixiDoApp(viewModel: AuraViewModel = viewModel()) {
                 sound.play(Sfx.DIALOG_CLOSE)
                 showAddEventDialog = false
             },
-            onAddEvent = { title, category, dateMillis, timeSlot, description ->
+            onAddEvent = { title, category, dateMillis, timeSlot, startMillis, description ->
                 sound.play(Sfx.ADD_EVENT)
-                viewModel.addCalendarEvent(title, category, dateMillis, timeSlot, description)
+                viewModel.addCalendarEvent(
+                    title, category, dateMillis, timeSlot, startMillis, description
+                )
             }
         )
     }
 
     if (showAddGoalDialog) {
         AddGoalDialog(
+            currencyCode = profile.currencyCode,
             onDismiss = {
                 sound.play(Sfx.DIALOG_CLOSE)
                 showAddGoalDialog = false

@@ -13,38 +13,20 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import com.example.data.AppThemeOption
 
-private val PixiDoDarkScheme = darkColorScheme(
-    primary = PixiVioletLight,
-    onPrimary = Color.Black,
-    primaryContainer = Color(0xFF3B1F7A),
-    onPrimaryContainer = PixiVioletLight,
-    secondary = PixiCyan,
-    onSecondary = Color.Black,
-    secondaryContainer = Color(0xFF0E3A45),
-    onSecondaryContainer = PixiCyan,
-    tertiary = PixiRose,
-    onTertiary = Color.White,
-    background = PixiDarkBg,
-    surface = PixiDarkSurface,
-    surfaceVariant = PixiDarkSurfaceVariant,
-    onBackground = PixiDarkOnBg,
-    onSurface = PixiDarkOnBg,
-    onSurfaceVariant = PixiDarkMuted,
-    outline = PixiDarkBorder,
-    error = PixiRose
-)
-
+/** Soft Lilac light — primary look matching idea2 reference. */
 private val PixiDoLightScheme = lightColorScheme(
-    primary = PixiViolet,
+    primary = PixiLavender,
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFEDE9FE),
-    onPrimaryContainer = Color(0xFF4C1D95),
-    secondary = PixiCyan,
+    primaryContainer = PixiLavenderSoft,
+    onPrimaryContainer = PixiLavenderDeep,
+    secondary = PixiPink,
     onSecondary = Color.White,
-    secondaryContainer = Color(0xFFCFFAFE),
-    onSecondaryContainer = Color(0xFF0E7490),
-    tertiary = PixiRose,
-    onTertiary = Color.White,
+    secondaryContainer = PixiPinkSoft,
+    onSecondaryContainer = Color(0xFF9B2D5C),
+    tertiary = PixiYellowDeep,
+    onTertiary = Color(0xFF1C1C1E),
+    tertiaryContainer = Color(0xFFFFF6C8),
+    onTertiaryContainer = Color(0xFF5C4A00),
     background = PixiLightBg,
     surface = PixiLightSurface,
     surfaceVariant = PixiLightSurfaceVariant,
@@ -52,7 +34,33 @@ private val PixiDoLightScheme = lightColorScheme(
     onSurface = PixiLightOnBg,
     onSurfaceVariant = PixiLightMuted,
     outline = PixiLightBorder,
-    error = PixiRose
+    outlineVariant = PixiLightChip,
+    error = PixiCoral,
+    onError = Color.White,
+    errorContainer = Color(0xFFFFE4E8),
+    onErrorContainer = Color(0xFF8B1E2D)
+)
+
+/** Soft Lilac dark — same language, night surfaces. */
+private val PixiDoDarkScheme = darkColorScheme(
+    primary = PixiLavender,
+    onPrimary = Color(0xFF1C1C1E),
+    primaryContainer = Color(0xFF3D2F5C),
+    onPrimaryContainer = PixiLavenderSoft,
+    secondary = PixiPink,
+    onSecondary = Color.White,
+    secondaryContainer = Color(0xFF5C1F3A),
+    onSecondaryContainer = PixiPinkSoft,
+    tertiary = PixiYellow,
+    onTertiary = Color(0xFF1C1C1E),
+    background = PixiDarkBg,
+    surface = PixiDarkSurface,
+    surfaceVariant = PixiDarkSurfaceVariant,
+    onBackground = PixiDarkOnBg,
+    onSurface = PixiDarkOnBg,
+    onSurfaceVariant = PixiDarkMuted,
+    outline = PixiDarkBorder,
+    error = PixiCoral
 )
 
 private val OceanScheme = darkColorScheme(
@@ -69,7 +77,7 @@ private val OceanScheme = darkColorScheme(
     onSurface = Color(0xFFE0F2FE),
     onSurfaceVariant = Color(0xFF7DD3FC),
     outline = Color(0xFF1E4A5F),
-    error = PixiRose
+    error = PixiCoral
 )
 
 private val SunsetScheme = darkColorScheme(
@@ -86,7 +94,7 @@ private val SunsetScheme = darkColorScheme(
     onSurface = Color(0xFFFFF7ED),
     onSurfaceVariant = Color(0xFFFDBA74),
     outline = Color(0xFF5C2E1E),
-    error = PixiRose
+    error = PixiCoral
 )
 
 private val ForestScheme = darkColorScheme(
@@ -103,7 +111,7 @@ private val ForestScheme = darkColorScheme(
     onSurface = Color(0xFFECFDF5),
     onSurfaceVariant = Color(0xFF86EFAC),
     outline = Color(0xFF1F4A32),
-    error = PixiRose
+    error = PixiCoral
 )
 
 private val MidnightScheme = darkColorScheme(
@@ -120,7 +128,7 @@ private val MidnightScheme = darkColorScheme(
     onSurface = Color(0xFFFAE8FF),
     onSurfaceVariant = Color(0xFFD8B4FE),
     outline = Color(0xFF3B2654),
-    error = PixiRose
+    error = PixiCoral
 )
 
 @Composable
@@ -152,8 +160,8 @@ fun resolveColorScheme(
 fun AppThemeOption.displayName(): String = when (this) {
     AppThemeOption.MATERIAL_YOU -> "Material You"
     AppThemeOption.SYSTEM -> "System"
-    AppThemeOption.PIXIDO_DARK -> "PixiDo Dark"
-    AppThemeOption.PIXIDO_LIGHT -> "PixiDo Light"
+    AppThemeOption.PIXIDO_DARK -> "Soft Night"
+    AppThemeOption.PIXIDO_LIGHT -> "Soft Lilac"
     AppThemeOption.OCEAN -> "Ocean"
     AppThemeOption.SUNSET -> "Sunset"
     AppThemeOption.FOREST -> "Forest"
@@ -163,8 +171,8 @@ fun AppThemeOption.displayName(): String = when (this) {
 fun AppThemeOption.description(): String = when (this) {
     AppThemeOption.MATERIAL_YOU -> "Wallpaper colors (Android 12+)"
     AppThemeOption.SYSTEM -> "Follow device light/dark"
-    AppThemeOption.PIXIDO_DARK -> "Signature violet night"
-    AppThemeOption.PIXIDO_LIGHT -> "Clean bright workspace"
+    AppThemeOption.PIXIDO_DARK -> "Soft lilac on night surfaces"
+    AppThemeOption.PIXIDO_LIGHT -> "Clean pastel workspace"
     AppThemeOption.OCEAN -> "Deep teal focus"
     AppThemeOption.SUNSET -> "Warm orange glow"
     AppThemeOption.FOREST -> "Calm green productivity"
@@ -173,7 +181,7 @@ fun AppThemeOption.description(): String = when (this) {
 
 @Composable
 fun PixiDoTheme(
-    themeOption: AppThemeOption = AppThemeOption.PIXIDO_DARK,
+    themeOption: AppThemeOption = AppThemeOption.PIXIDO_LIGHT,
     content: @Composable () -> Unit
 ) {
     val colorScheme = resolveColorScheme(themeOption)

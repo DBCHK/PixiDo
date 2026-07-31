@@ -10,12 +10,15 @@ import com.example.data.AuraDatabase
 import com.example.data.AuraRepository
 import com.example.data.BudgetItemEntity
 import com.example.data.CalendarEventEntity
+import com.example.data.Currencies
 import com.example.data.DailyActivityEntity
 import com.example.data.GoalEntity
 import com.example.data.NoteEntity
 import com.example.data.TaskEntity
 import com.example.data.UserPreferencesRepository
 import com.example.data.UserProfile
+import com.example.notify.NotificationHelper
+import com.example.notify.ReminderScheduler
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,6 +27,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.util.Calendar
 
 class AuraViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -115,7 +119,24 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = UserProfile()
         )
+
+        // Normalize selected calendar date to local midnight
+        _selectedCalendarDate.value = startOfDay(System.currentTimeMillis())
+
+        NotificationHelper.ensureChannels(application)
     }
+
+    private fun startOfDay(millis: Long): Long {
+        return Calendar.getInstance().apply {
+            timeInMillis = millis
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+    }
+
+    private fun appContext() = getApplication<Application>()
 
     fun clearSnackbar() {
         _snackbarMessage.value = null
@@ -130,7 +151,7 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setSelectedCalendarDate(dateMillis: Long) {
-        _selectedCalendarDate.value = dateMillis
+        _selectedCalendarDate.value = startOfDay(dateMillis)
     }
 
     fun openProfile() {
@@ -230,6 +251,8 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
             repository.updateTask(updated)
 
             if (newCompleted) {
+                // No more reminder once completed
+                ReminderScheduler.cancel(appContext(), ReminderScheduler.TYPE_TASK, task.id)
                 preferences.addXp(task.xpReward)
                 repository.recordTaskCompletion(task.xpReward, now)
                 task.linkedGoalId?.let { goalId ->
@@ -267,31 +290,43 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
         category: String,
         priority: String,
         dueTimeStr: String,
+        dueDateMillis: Long,
         subtasks: String,
         linkedGoalId: Int?
     ) {
         viewModelScope.launch {
-            repository.addTask(
-                TaskEntity(
-                    title = title.ifBlank { "Untitled Task" },
-                    category = category,
-                    priority = priority,
-                    dueTimeStr = dueTimeStr.ifBlank { "Today" },
-                    subtasks = subtasks,
-                    linkedGoalId = linkedGoalId,
-                    xpReward = when (priority) {
-                        "HIGH_FIRE" -> 40
-                        "CORE_GOAL" -> 30
-                        else -> 20
-                    }
-                )
+            val task = TaskEntity(
+                title = title.ifBlank { "Untitled Task" },
+                category = category,
+                priority = priority,
+                dueTimeStr = dueTimeStr.ifBlank { "Today" },
+                dueDateMillis = if (dueDateMillis > 0) dueDateMillis else System.currentTimeMillis(),
+                subtasks = subtasks,
+                linkedGoalId = linkedGoalId,
+                xpReward = when (priority) {
+                    "HIGH_FIRE" -> 40
+                    "CORE_GOAL" -> 30
+                    else -> 20
+                }
             )
+            val newId = repository.addTask(task).toInt()
+            if (task.dueDateMillis > System.currentTimeMillis()) {
+                ReminderScheduler.schedule(
+                    context = appContext(),
+                    type = ReminderScheduler.TYPE_TASK,
+                    itemId = newId,
+                    triggerAtMillis = task.dueDateMillis,
+                    title = "Task due: ${task.title}",
+                    body = "It's time for “${task.title}” (${task.dueTimeStr})"
+                )
+            }
         }
     }
 
     fun deleteTask(taskId: Int) {
         viewModelScope.launch {
             lastDeletedTask = tasks.value.find { it.id == taskId }
+            ReminderScheduler.cancel(appContext(), ReminderScheduler.TYPE_TASK, taskId)
             repository.deleteTask(taskId)
             _snackbarMessage.value = "Task deleted · undo available"
         }
@@ -300,7 +335,18 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
     fun undoDeleteTask() {
         viewModelScope.launch {
             lastDeletedTask?.let { task ->
-                repository.addTask(task.copy(id = 0))
+                val restored = task.copy(id = 0)
+                val newId = repository.addTask(restored).toInt()
+                if (!restored.isCompleted && restored.dueDateMillis > System.currentTimeMillis()) {
+                    ReminderScheduler.schedule(
+                        context = appContext(),
+                        type = ReminderScheduler.TYPE_TASK,
+                        itemId = newId,
+                        triggerAtMillis = restored.dueDateMillis,
+                        title = "Task due: ${restored.title}",
+                        body = "It's time for “${restored.title}” (${restored.dueTimeStr})"
+                    )
+                }
                 lastDeletedTask = null
                 _snackbarMessage.value = "Task restored"
             }
@@ -432,29 +478,46 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
         category: String,
         dateMillis: Long,
         timeSlot: String,
+        startMillis: Long,
         description: String
     ) {
         viewModelScope.launch {
-            repository.addCalendarEvent(
-                CalendarEventEntity(
-                    title = title.ifBlank { "Event" },
-                    category = category,
-                    dateMillis = dateMillis,
-                    timeSlot = timeSlot.ifBlank { "All Day" },
-                    description = description
-                )
+            val day = startOfDay(dateMillis)
+            val event = CalendarEventEntity(
+                title = title.ifBlank { "Event" },
+                category = category,
+                dateMillis = day,
+                timeSlot = timeSlot.ifBlank { "All Day" },
+                startMillis = if (startMillis > 0) startMillis else day,
+                description = description
             )
+            val newId = repository.addCalendarEvent(event).toInt()
+            if (event.startMillis > System.currentTimeMillis()) {
+                ReminderScheduler.schedule(
+                    context = appContext(),
+                    type = ReminderScheduler.TYPE_EVENT,
+                    itemId = newId,
+                    triggerAtMillis = event.startMillis,
+                    title = "Event: ${event.title}",
+                    body = "Starting now · ${event.timeSlot}"
+                )
+            }
         }
     }
 
     fun toggleCalendarEventCompleted(event: CalendarEventEntity) {
         viewModelScope.launch {
-            repository.updateCalendarEvent(event.copy(isCompleted = !event.isCompleted))
+            val done = !event.isCompleted
+            repository.updateCalendarEvent(event.copy(isCompleted = done))
+            if (done) {
+                ReminderScheduler.cancel(appContext(), ReminderScheduler.TYPE_EVENT, event.id)
+            }
         }
     }
 
     fun deleteCalendarEvent(eventId: Int) {
         viewModelScope.launch {
+            ReminderScheduler.cancel(appContext(), ReminderScheduler.TYPE_EVENT, eventId)
             repository.deleteCalendarEvent(eventId)
         }
     }
@@ -469,12 +532,18 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
         colorHex: String
     ) {
         viewModelScope.launch {
+            // Money goals use the same currency as Budget settings
+            val currencyUnit = if (unit == "$" || unit.equals("money", ignoreCase = true)) {
+                Currencies.symbolOf(userProfile.value.currencyCode)
+            } else {
+                unit.ifBlank { Currencies.symbolOf(userProfile.value.currencyCode) }
+            }
             repository.addGoal(
                 GoalEntity(
                     title = title.ifBlank { "New Goal" },
                     category = category,
                     targetAmount = maxOf(1.0, targetAmount),
-                    unit = unit.ifBlank { "$" },
+                    unit = currencyUnit,
                     deadlineStr = deadlineStr.ifBlank { "2027" },
                     colorHex = colorHex
                 )

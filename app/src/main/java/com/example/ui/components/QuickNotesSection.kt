@@ -17,16 +17,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.PushPin
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -57,22 +55,19 @@ fun QuickNotesSection(
 ) {
     val sound = LocalSoundEngine.current
     var draft by remember { mutableStateOf("") }
-    val colors = listOf("#7C3AED", "#06B6D4", "#10B981", "#F59E0B", "#F43F5E", "#EC4899")
+    val colors = listOf("#C4A8F5", "#FF6BA8", "#FFE566", "#34D399", "#67D4E8", "#FBBF24")
     var color by remember { mutableStateOf(colors[0]) }
 
-    Card(
+    PixiCard(
         modifier = modifier
             .fillMaxWidth()
             .animateContentSize()
-            .testTag("quick_notes_section"),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+            .testTag("quick_notes_section")
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
+        Column(modifier = Modifier.padding(16.dp)) {
             Text(
                 text = "Quick notes",
-                style = MaterialTheme.typography.titleSmall,
+                style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurface
             )
             Text(
@@ -81,7 +76,7 @@ fun QuickNotesSection(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             OutlinedTextField(
                 value = draft,
@@ -90,25 +85,31 @@ fun QuickNotesSection(
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("input_quick_note"),
-                shape = RoundedCornerShape(14.dp),
+                shape = PixiFieldShape,
                 singleLine = false,
-                maxLines = 3
+                maxLines = 3,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                )
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     colors.forEach { hex ->
                         val c = Color(android.graphics.Color.parseColor(hex))
                         val selected = color == hex
                         Box(
                             modifier = Modifier
-                                .size(if (selected) 22.dp else 18.dp)
+                                .size(if (selected) 24.dp else 20.dp)
                                 .clip(CircleShape)
                                 .background(c)
                                 .border(
@@ -136,13 +137,17 @@ fun QuickNotesSection(
                     },
                     modifier = Modifier.testTag("save_quick_note_btn")
                 ) {
-                    Text("Save note", fontWeight = FontWeight.Bold)
+                    Text(
+                        "Save note",
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 }
             }
 
             if (notes.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(10.dp))
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Spacer(modifier = Modifier.height(12.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     items(notes, key = { it.id }) { note ->
                         NoteChip(
                             note = note,
@@ -171,15 +176,14 @@ private fun NoteChip(
     val accent = runCatching { Color(android.graphics.Color.parseColor(note.colorHex)) }
         .getOrDefault(MaterialTheme.colorScheme.primary)
 
-    Card(
+    PixiCard(
         modifier = Modifier
             .width(170.dp)
             .testTag("note_${note.id}"),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = accent.copy(alpha = 0.12f)),
-        border = androidx.compose.foundation.BorderStroke(1.dp, accent.copy(alpha = 0.35f))
+        containerColor = accent.copy(alpha = 0.14f),
+        borderColor = accent.copy(alpha = 0.3f)
     ) {
-        Column(modifier = Modifier.padding(10.dp)) {
+        Column(modifier = Modifier.padding(12.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -216,7 +220,7 @@ private fun NoteChip(
             }
             Text(
                 text = note.content,
-                fontSize = 12.sp,
+                fontSize = 13.sp,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 4,
                 overflow = TextOverflow.Ellipsis
