@@ -45,6 +45,55 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
+
+        <!-- Home screen widgets (4×2) -->
+        <receiver
+            android:name=".widget.ContributionWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_contribution_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_contribution_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.TodosWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_todos_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_todos_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.FocusWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_focus_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_focus_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.TransactionsWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_transactions_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_transactions_info" />
+        </receiver>
     </application>
 
 </manifest>

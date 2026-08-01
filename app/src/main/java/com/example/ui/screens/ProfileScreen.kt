@@ -69,7 +69,9 @@ import com.example.ui.components.PixiOutlineButton
 import com.example.ui.components.PixiPillShape
 import com.example.ui.components.PixiPrimaryButton
 import com.example.ui.components.PixiSecondaryButton
+import com.example.ui.theme.AccentPalette
 import com.example.ui.theme.displayName
+import com.example.ui.theme.swatchColor
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -92,6 +94,7 @@ fun ProfileDialog(
     onSaveName: (name: String) -> Unit,
     onAvatarPicked: (String) -> Unit,
     onThemeSelected: (AppThemeOption) -> Unit,
+    onAccentSelected: (String) -> Unit = {},
     onSoundToggle: (Boolean) -> Unit = {},
     onHapticsToggle: (Boolean) -> Unit = {},
     onGoogleSignIn: () -> Unit = {},
@@ -402,14 +405,21 @@ fun ProfileDialog(
                 // ── Theme ────────────────────────────────────────────
                 Spacer(modifier = Modifier.height(16.dp))
                 SectionLabel("Theme")
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "16 looks · pick a base, then customize accent",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(10.dp))
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     AppThemeOption.entries.forEach { option ->
                         val selected = profile.themeOption == option
-                        Box(
+                        val swatch = option.swatchColor()
+                        Row(
                             modifier = Modifier
                                 .clip(PixiPillShape)
                                 .background(
@@ -420,17 +430,93 @@ fun ProfileDialog(
                                     sound.play(Sfx.THEME_CHANGE)
                                     onThemeSelected(option)
                                 }
-                                .padding(horizontal = 14.dp, vertical = 9.dp)
-                                .testTag("theme_${option.name}")
+                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                                .testTag("theme_${option.name}"),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(12.dp)
+                                    .clip(CircleShape)
+                                    .background(if (selected) Color.White.copy(alpha = 0.9f) else swatch)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 text = option.displayName(),
-                                fontSize = 13.sp,
+                                fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = if (selected) MaterialTheme.colorScheme.onPrimary
                                 else MaterialTheme.colorScheme.onSurface
                             )
                         }
+                    }
+                }
+
+                // ── Accent color ─────────────────────────────────────
+                Spacer(modifier = Modifier.height(18.dp))
+                SectionLabel("Accent color")
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Tints buttons, chips & highlights. Tap again to clear.",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    // Default = clear custom accent
+                    val noneSelected = profile.accentColorHex.isBlank()
+                    Box(
+                        modifier = Modifier
+                            .size(if (noneSelected) 36.dp else 32.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .border(
+                                width = if (noneSelected) 2.5.dp else 1.dp,
+                                color = if (noneSelected) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.outline,
+                                shape = CircleShape
+                            )
+                            .clickable {
+                                sound.play(Sfx.THEME_CHANGE)
+                                onAccentSelected("")
+                            }
+                            .testTag("accent_none"),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "A",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    AccentPalette.forEach { hex ->
+                        val c = runCatching {
+                            Color(android.graphics.Color.parseColor(hex))
+                        }.getOrNull() ?: return@forEach
+                        val selected = profile.accentColorHex.equals(hex, ignoreCase = true)
+                        Box(
+                            modifier = Modifier
+                                .size(if (selected) 36.dp else 32.dp)
+                                .clip(CircleShape)
+                                .background(c)
+                                .border(
+                                    width = if (selected) 2.5.dp else 0.dp,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    shape = CircleShape
+                                )
+                                .clickable {
+                                    sound.play(Sfx.THEME_CHANGE)
+                                    // Toggle off if already selected
+                                    onAccentSelected(
+                                        if (selected) "" else hex
+                                    )
+                                }
+                                .testTag("accent_$hex")
+                        )
                     }
                 }
 

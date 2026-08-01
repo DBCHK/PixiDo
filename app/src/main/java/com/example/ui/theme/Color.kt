@@ -71,6 +71,72 @@ val MidnightBg = Color(0xFF05030A)
 val MidnightSurface = Color(0xFF120A1C)
 val MidnightAccent = Color(0xFF67E8F9)
 
+// Rose (soft pink light)
+val RosePrimary = Color(0xFFF472B6)
+val RoseBg = Color(0xFFFFF7FB)
+val RoseSurface = Color(0xFFFFFFFF)
+val RoseContainer = Color(0xFFFFE4F1)
+
+// Sand (warm beige light)
+val SandPrimary = Color(0xFFD4A574)
+val SandBg = Color(0xFFFBF7F2)
+val SandSurface = Color(0xFFFFFCF9)
+val SandContainer = Color(0xFFF5E6D3)
+
+// Sky (airy blue light)
+val SkyPrimary = Color(0xFF60A5FA)
+val SkyBg = Color(0xFFF5F9FF)
+val SkySurface = Color(0xFFFFFFFF)
+val SkyContainer = Color(0xFFDCEBFF)
+
+// Peach (soft coral light)
+val PeachPrimary = Color(0xFFFB923C)
+val PeachBg = Color(0xFFFFF8F3)
+val PeachSurface = Color(0xFFFFFFFF)
+val PeachContainer = Color(0xFFFFE8D6)
+
+// Aurora (teal–violet dark)
+val AuroraPrimary = Color(0xFF5EEAD4)
+val AuroraBg = Color(0xFF0A1214)
+val AuroraSurface = Color(0xFF12202A)
+val AuroraAccent = Color(0xFFA78BFA)
+
+// Cherry (deep wine dark)
+val CherryPrimary = Color(0xFFF43F5E)
+val CherryBg = Color(0xFF14080C)
+val CherrySurface = Color(0xFF221018)
+val CherryAccent = Color(0xFFFBBF24)
+
+// Graphite (neutral charcoal)
+val GraphitePrimary = Color(0xFF94A3B8)
+val GraphiteBg = Color(0xFF0F1115)
+val GraphiteSurface = Color(0xFF1A1D24)
+val GraphiteAccent = Color(0xFFE2E8F0)
+
+// Mint (fresh green light)
+val MintPrimary = Color(0xFF34D399)
+val MintBg = Color(0xFFF4FDF8)
+val MintSurface = Color(0xFFFFFFFF)
+val MintContainer = Color(0xFFD1FAE5)
+
+/** Preset accent colors users can apply on top of any theme. */
+val AccentPalette = listOf(
+    "#C4A8F5", // lilac
+    "#9B7AE8", // deep lilac
+    "#FF6BA8", // pink
+    "#F472B6", // rose
+    "#FB923C", // peach
+    "#FBBF24", // amber
+    "#FFE566", // yellow
+    "#34D399", // mint
+    "#2DD4BF", // teal
+    "#60A5FA", // sky
+    "#67D4E8", // cyan
+    "#A78BFA", // violet
+    "#F43F5E", // cherry
+    "#94A3B8"  // slate
+)
+
 // Contribution heatmap — soft lilac scale
 val HeatmapEmpty = Color(0xFF2A2436)
 val HeatmapL1 = Color(0xFF3D2F5C)

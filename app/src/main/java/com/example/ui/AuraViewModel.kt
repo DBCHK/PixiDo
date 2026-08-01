@@ -26,6 +26,7 @@ import com.example.data.UserPreferencesRepository
 import com.example.data.UserProfile
 import com.example.notify.NotificationHelper
 import com.example.notify.ReminderScheduler
+import com.example.widget.WidgetActions
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -173,6 +174,11 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun appContext() = getApplication<Application>()
 
+    /** Push latest Room / prefs into home-screen widgets. */
+    private fun refreshWidgets() {
+        runCatching { WidgetActions.refreshAll(appContext()) }
+    }
+
     fun clearSnackbar() {
         _snackbarMessage.value = null
     }
@@ -223,6 +229,12 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
     fun setTheme(option: AppThemeOption) {
         viewModelScope.launch {
             preferences.setTheme(option)
+        }
+    }
+
+    fun setAccentColor(hex: String) {
+        viewModelScope.launch {
+            preferences.setAccentColorHex(hex)
         }
     }
 
@@ -419,6 +431,7 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
             }
+            refreshWidgets()
         }
     }
 
@@ -474,6 +487,7 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
                     body = "It's time for “${task.title}” (${task.dueTimeStr})"
                 )
             }
+            refreshWidgets()
         }
     }
 
@@ -483,6 +497,7 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
             ReminderScheduler.cancel(appContext(), ReminderScheduler.TYPE_TASK, taskId)
             repository.deleteTask(taskId)
             _snackbarMessage.value = "Task deleted · undo available"
+            refreshWidgets()
         }
     }
 
@@ -503,6 +518,7 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 lastDeletedTask = null
                 _snackbarMessage.value = "Task restored"
+                refreshWidgets()
             }
         }
     }
@@ -555,24 +571,110 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 }
             }
+            refreshWidgets()
         }
     }
 
     fun deleteBudgetItem(itemId: Int) {
         viewModelScope.launch {
             val item = budgetItems.value.find { it.id == itemId }
-            if (item != null && item.accountId != null) {
-                accounts.value.find { it.id == item.accountId }?.let { account ->
-                    val updated = applyTransactionToAccount(
-                        account,
-                        item.type,
-                        item.amount,
-                        reverse = true
-                    )
-                    repository.updateAccount(updated)
+            if (item != null) {
+                if (item.type == TransactionType.TRANSFER) {
+                    reverseTransfer(item)
+                } else if (item.accountId != null) {
+                    accounts.value.find { it.id == item.accountId }?.let { account ->
+                        val updated = applyTransactionToAccount(
+                            account,
+                            item.type,
+                            item.amount,
+                            reverse = true
+                        )
+                        repository.updateAccount(updated)
+                    }
                 }
             }
             repository.deleteBudgetItem(itemId)
+            refreshWidgets()
+        }
+    }
+
+    /**
+     * Move money between accounts (bank → bank, bank → credit card repayment, etc.).
+     * Does not count as monthly spend. Paying a credit card reduces its debt.
+     */
+    fun transferBetweenAccounts(
+        fromAccountId: Int,
+        toAccountId: Int,
+        amount: Double,
+        note: String = ""
+    ) {
+        if (amount <= 0 || fromAccountId == toAccountId) return
+        viewModelScope.launch {
+            val from = accounts.value.find { it.id == fromAccountId } ?: return@launch
+            val to = accounts.value.find { it.id == toAccountId } ?: return@launch
+            if (from.isCreditCard) {
+                _snackbarMessage.value = "Transfer from a credit card isn’t supported — use expense"
+                return@launch
+            }
+
+            // Debit source (asset)
+            repository.updateAccount(
+                from.copy(balance = from.balance - amount)
+            )
+            // Credit destination
+            if (to.isCreditCard) {
+                val newDebt = (to.balance - amount).coerceAtLeast(0.0)
+                repository.updateAccount(
+                    to.copy(balance = newDebt, monthlyUsage = newDebt)
+                )
+            } else {
+                repository.updateAccount(
+                    to.copy(balance = to.balance + amount)
+                )
+            }
+
+            val title = if (to.isCreditCard) {
+                "Card payment · ${to.name}"
+            } else {
+                "Transfer · ${from.name} → ${to.name}"
+            }
+            repository.addBudgetItem(
+                BudgetItemEntity(
+                    title = title,
+                    amount = amount,
+                    isExpense = true,
+                    category = if (to.isCreditCard) "Credit payment" else "Transfer",
+                    note = note.ifBlank {
+                        "${from.name} → ${to.name}"
+                    },
+                    accountId = fromAccountId,
+                    transactionType = TransactionType.TRANSFER.name,
+                    relatedAccountId = toAccountId
+                )
+            )
+            _snackbarMessage.value = if (to.isCreditCard) {
+                "Paid ${Currencies.format(amount, userProfile.value.currencyCode)} on ${to.name}"
+            } else {
+                "Transferred ${Currencies.format(amount, userProfile.value.currencyCode)}"
+            }
+            refreshWidgets()
+        }
+    }
+
+    private suspend fun reverseTransfer(item: BudgetItemEntity) {
+        val amount = item.amount
+        val fromId = item.accountId ?: return
+        val toId = item.relatedAccountId ?: return
+        accounts.value.find { it.id == fromId }?.let { from ->
+            repository.updateAccount(from.copy(balance = from.balance + amount))
+        }
+        accounts.value.find { it.id == toId }?.let { to ->
+            if (to.isCreditCard) {
+                val newDebt = to.balance + amount
+                repository.updateAccount(to.copy(balance = newDebt, monthlyUsage = newDebt))
+            } else {
+                repository.updateAccount(to.copy(balance = to.balance - amount))
+            }
         }
     }
 
@@ -590,20 +692,19 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
     ): AccountEntity {
         val signed = if (reverse) -amount else amount
         return if (account.isCreditCard) {
-            // Debt goes up on EXPENSE/LENT; down on INCOME (payment) / BORROW not typical
+            // Debt goes up on EXPENSE/LENT; down on INCOME / payment-style
             val debtDelta = when (type) {
                 TransactionType.EXPENSE, TransactionType.LENT -> signed
-                TransactionType.INCOME, TransactionType.BORROW -> -signed
+                TransactionType.INCOME, TransactionType.BORROW, TransactionType.TRANSFER -> -signed
             }
             val newDebt = (account.balance + debtDelta).coerceAtLeast(0.0)
-            // Utilization tracks debt against limit (limit itself never enters net worth)
             account.copy(
                 balance = newDebt,
                 monthlyUsage = newDebt
             )
         } else {
             val cashDelta = when (type) {
-                TransactionType.EXPENSE, TransactionType.LENT -> -signed
+                TransactionType.EXPENSE, TransactionType.LENT, TransactionType.TRANSFER -> -signed
                 TransactionType.INCOME, TransactionType.BORROW -> signed
             }
             val newBalance = account.balance + cashDelta

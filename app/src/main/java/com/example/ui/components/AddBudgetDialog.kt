@@ -77,11 +77,20 @@ fun AddBudgetDialog(
         "Friend", "Family", "Loan", "Business", "Other"
     )
 
+    // TRANSFER is handled by TransferDialog on the Budget screen
+    val loggableTypes = listOf(
+        TransactionType.EXPENSE,
+        TransactionType.INCOME,
+        TransactionType.LENT,
+        TransactionType.BORROW
+    )
+
     val currentCats = when (txnType) {
         TransactionType.EXPENSE -> expenseCategories
         TransactionType.INCOME -> incomeCategories
         TransactionType.LENT -> lentCategories
         TransactionType.BORROW -> borrowCategories
+        TransactionType.TRANSFER -> expenseCategories
     }
 
     val dialogTitle = when (txnType) {
@@ -89,6 +98,7 @@ fun AddBudgetDialog(
         TransactionType.INCOME -> "Log Income"
         TransactionType.LENT -> "Log Money Lent"
         TransactionType.BORROW -> "Log Money Borrowed"
+        TransactionType.TRANSFER -> "Transfer"
     }
 
     val hint = when (txnType) {
@@ -96,6 +106,7 @@ fun AddBudgetDialog(
         TransactionType.INCOME -> "Added to income · not a budget spend"
         TransactionType.LENT -> "You lent this out · not a budget expense"
         TransactionType.BORROW -> "You borrowed this · not counted as income"
+        TransactionType.TRANSFER -> "Use Transfer on Accounts for bank → card payments"
     }
 
     val fieldColors = OutlinedTextFieldDefaults.colors(
@@ -152,7 +163,7 @@ fun AddBudgetDialog(
                         .padding(4.dp),
                     horizontalArrangement = Arrangement.spacedBy(0.dp)
                 ) {
-                    TransactionType.entries.forEach { type ->
+                    loggableTypes.forEach { type ->
                         val selected = txnType == type
                         Box(
                             modifier = Modifier
@@ -168,6 +179,7 @@ fun AddBudgetDialog(
                                         TransactionType.INCOME -> incomeCategories[0]
                                         TransactionType.LENT -> lentCategories[0]
                                         TransactionType.BORROW -> borrowCategories[0]
+                                        TransactionType.TRANSFER -> expenseCategories[0]
                                     }
                                 }
                                 .padding(horizontal = 14.dp, vertical = 10.dp),

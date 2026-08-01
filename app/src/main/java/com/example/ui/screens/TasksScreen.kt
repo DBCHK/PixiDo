@@ -70,6 +70,8 @@ import com.example.ui.components.PixiCard
 import com.example.ui.components.PixiChip
 import com.example.ui.components.PixiEmptyState
 import com.example.ui.components.PixiListItemEnter
+import com.example.ui.components.PixiPillShape
+import com.example.ui.components.PixiPrimaryButton
 import com.example.ui.components.PixiSearchField
 import com.example.ui.components.PixiSectionLabel
 import com.example.ui.components.rememberPopScale
@@ -87,6 +89,8 @@ fun TasksScreen(
     onToggleSubtask: (TaskEntity, String) -> Unit,
     onDeleteTask: (Int) -> Unit,
     onOpenAddTask: () -> Unit,
+    /** Quick-create a todo with the given title (from search). */
+    onQuickAddTask: (title: String) -> Unit = {},
     onOpenFocusMode: () -> Unit,
     onOpenProfile: () -> Unit,
     onAddNote: (String, String) -> Unit,
@@ -219,21 +223,37 @@ fun TasksScreen(
 
             if (filteredTasks.isEmpty()) {
                 item {
-                    PixiEmptyState(
-                        title = when {
-                            query.isNotBlank() -> "No matches"
-                            tasks.isEmpty() -> "No tasks yet"
-                            else -> "Nothing here"
-                        },
-                        subtitle = when {
-                            query.isNotBlank() -> "Try a different search term"
-                            tasks.isEmpty() -> "Tap the yellow + to create your first task"
-                            else -> "Try another filter or add a new task"
-                        },
-                        doodleRes = if (tasks.isEmpty()) R.drawable.doodle_tasks else null,
-                        actionLabel = if (tasks.isEmpty()) "Add a task" else null,
-                        onAction = if (tasks.isEmpty()) onOpenAddTask else null
-                    )
+                    val trimmed = query.trim()
+                    if (trimmed.isNotBlank()) {
+                        // Typed in search with no hits → offer quick todo
+                        QuickAddFromSearchCard(
+                            query = trimmed,
+                            onAdd = {
+                                sound.play(Sfx.ADD_TASK)
+                                onQuickAddTask(trimmed)
+                                query = ""
+                                selectedFilter = "ALL"
+                            },
+                            onDismiss = {
+                                sound.play(Sfx.TAP_SOFT)
+                                query = ""
+                            }
+                        )
+                    } else {
+                        PixiEmptyState(
+                            title = when {
+                                tasks.isEmpty() -> "No tasks yet"
+                                else -> "Nothing here"
+                            },
+                            subtitle = when {
+                                tasks.isEmpty() -> "Tap the yellow + to create your first task"
+                                else -> "Try another filter or add a new task"
+                            },
+                            doodleRes = if (tasks.isEmpty()) R.drawable.doodle_tasks else null,
+                            actionLabel = if (tasks.isEmpty()) "Add a task" else null,
+                            onAction = if (tasks.isEmpty()) onOpenAddTask else null
+                        )
+                    }
                 }
             } else {
                 itemsIndexed(filteredTasks, key = { _, t -> t.id }) { index, task ->
@@ -259,6 +279,64 @@ fun TasksScreen(
                     Spacer(modifier = Modifier.height(10.dp))
                 }
             }
+        }
+    }
+}
+
+/**
+ * Shown when search has text but zero matches — ask to create a quick todo.
+ */
+@Composable
+private fun QuickAddFromSearchCard(
+    query: String,
+    onAdd: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    PixiCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("quick_add_from_search")
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "No matches",
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = "Nothing found for “$query”",
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            PixiPrimaryButton(
+                text = "Add “$query” as a todo",
+                onClick = onAdd,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("btn_quick_add_search_todo")
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = "Clear search",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .clip(PixiPillShape)
+                    .clickable(onClick = onDismiss)
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .testTag("btn_clear_search_no_match")
+            )
         }
     }
 }

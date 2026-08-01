@@ -19,12 +19,21 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
 enum class AppThemeOption {
     MATERIAL_YOU,
     SYSTEM,
-    PIXIDO_DARK,
     PIXIDO_LIGHT,
+    PIXIDO_DARK,
     OCEAN,
     SUNSET,
     FOREST,
-    MIDNIGHT
+    MIDNIGHT,
+    // New soft / bold presets
+    ROSE,
+    SAND,
+    SKY,
+    PEACH,
+    AURORA,
+    CHERRY,
+    GRAPHITE,
+    MINT
 }
 
 /** Cloud backup preference: automatic daily vs never. */
@@ -40,6 +49,8 @@ data class UserProfile(
     val location: String = "",
     val avatarUri: String = "",
     val themeOption: AppThemeOption = AppThemeOption.PIXIDO_LIGHT,
+    /** Optional accent override (e.g. "#C4A8F5"). Empty = theme default. */
+    val accentColorHex: String = "",
     val currencyCode: String = "USD",
     val monthlyBudgetLimit: Double = 0.0,
     val userXp: Int = 0,
@@ -55,6 +66,7 @@ data class UserProfile(
     val lastBackupAt: Long = 0L
 ) {
     val isSignedIn: Boolean get() = googleUid.isNotBlank()
+    val hasCustomAccent: Boolean get() = accentColorHex.isNotBlank()
 }
 
 class UserPreferencesRepository(private val context: Context) {
@@ -66,6 +78,7 @@ class UserPreferencesRepository(private val context: Context) {
         val LOCATION = stringPreferencesKey("location")
         val AVATAR_URI = stringPreferencesKey("avatar_uri")
         val THEME = stringPreferencesKey("theme_option")
+        val ACCENT_COLOR = stringPreferencesKey("accent_color_hex")
         val CURRENCY = stringPreferencesKey("currency_code")
         val MONTHLY_BUDGET = doublePreferencesKey("monthly_budget_limit")
         val USER_XP = intPreferencesKey("user_xp")
@@ -95,6 +108,7 @@ class UserPreferencesRepository(private val context: Context) {
         themeOption = runCatching {
             AppThemeOption.valueOf(this[Keys.THEME] ?: AppThemeOption.PIXIDO_LIGHT.name)
         }.getOrDefault(AppThemeOption.PIXIDO_LIGHT),
+        accentColorHex = this[Keys.ACCENT_COLOR].orEmpty(),
         currencyCode = this[Keys.CURRENCY] ?: "USD",
         monthlyBudgetLimit = this[Keys.MONTHLY_BUDGET] ?: 0.0,
         userXp = this[Keys.USER_XP] ?: 0,
@@ -177,6 +191,7 @@ class UserPreferencesRepository(private val context: Context) {
             "location" to p.location,
             "avatarUri" to p.avatarUri,
             "themeOption" to p.themeOption.name,
+            "accentColorHex" to p.accentColorHex,
             "currencyCode" to p.currencyCode,
             "monthlyBudgetLimit" to p.monthlyBudgetLimit,
             "userXp" to p.userXp,
@@ -196,6 +211,7 @@ class UserPreferencesRepository(private val context: Context) {
             (map["location"] as? String)?.let { prefs[Keys.LOCATION] = it }
             (map["avatarUri"] as? String)?.let { prefs[Keys.AVATAR_URI] = it }
             (map["themeOption"] as? String)?.let { prefs[Keys.THEME] = it }
+            (map["accentColorHex"] as? String)?.let { prefs[Keys.ACCENT_COLOR] = it }
             (map["currencyCode"] as? String)?.let { prefs[Keys.CURRENCY] = it }
             when (val v = map["monthlyBudgetLimit"]) {
                 is Number -> prefs[Keys.MONTHLY_BUDGET] = v.toDouble()
@@ -213,6 +229,10 @@ class UserPreferencesRepository(private val context: Context) {
 
     suspend fun setTheme(option: AppThemeOption) {
         context.dataStore.edit { it[Keys.THEME] = option.name }
+    }
+
+    suspend fun setAccentColorHex(hex: String) {
+        context.dataStore.edit { it[Keys.ACCENT_COLOR] = hex }
     }
 
     suspend fun setCurrency(code: String) {

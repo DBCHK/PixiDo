@@ -85,17 +85,27 @@ fun AccountFormDialog(
         )
     }
 
-    val colors = listOf("#C4A8F5", "#67D4E8", "#34D399", "#FBBF24", "#FF6BA8", "#FFE566", "#9B7AE8")
+    // Expanded soft palette for banks, cards, wallets, savings
+    val colors = listOf(
+        // Lilacs & violets
+        "#C4A8F5", "#9B7AE8", "#A78BFA", "#8B5CF6", "#DDD6FE",
+        // Pinks & roses
+        "#FF6BA8", "#F472B6", "#FB7185", "#F43F5E", "#FDA4AF",
+        // Blues & cyans
+        "#67D4E8", "#60A5FA", "#38BDF8", "#0EA5E9", "#22D3EE", "#818CF8",
+        // Greens & mints
+        "#34D399", "#6EE7B7", "#10B981", "#84CC16", "#A3E635",
+        // Warm golds & oranges
+        "#FBBF24", "#FFE566", "#F59E0B", "#FB923C", "#F97316", "#D4A574",
+        // Neutrals
+        "#94A3B8", "#64748B", "#1C1C1E", "#E2E8F0"
+    )
     var selectedColor by remember(existing?.id) {
         mutableStateOf(
-            existing?.colorHex?.takeIf { it in colors } ?: colors[0]
+            existing?.colorHex?.takeIf { hex ->
+                colors.any { it.equals(hex, ignoreCase = true) }
+            } ?: existing?.colorHex?.takeIf { it.isNotBlank() } ?: colors[0]
         )
-    }
-    // Preserve custom hex if not in palette
-    if (existing != null && existing.colorHex !in colors && selectedColor == colors[0] &&
-        existing.colorHex.isNotBlank()
-    ) {
-        // handled via initial selectedColor fallback above when in list
     }
 
     val symbol = Currencies.symbolOf(currencyCode)
@@ -232,14 +242,26 @@ fun AccountFormDialog(
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Pick a shade for this account",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(10.dp))
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    val palette = if (existing != null && existing.colorHex !in colors) {
-                        listOf(existing.colorHex) + colors
-                    } else colors
+                    val palette = buildList {
+                        val existingHex = existing?.colorHex.orEmpty()
+                        if (existingHex.isNotBlank() &&
+                            colors.none { it.equals(existingHex, ignoreCase = true) }
+                        ) {
+                            add(existingHex)
+                        }
+                        addAll(colors)
+                    }
                     palette.forEach { hex ->
                         val c = runCatching {
                             androidx.compose.ui.graphics.Color(
@@ -249,12 +271,13 @@ fun AccountFormDialog(
                         val isSel = selectedColor.equals(hex, ignoreCase = true)
                         Box(
                             modifier = Modifier
-                                .size(if (isSel) 32.dp else 28.dp)
+                                .size(if (isSel) 34.dp else 30.dp)
                                 .clip(CircleShape)
                                 .background(c)
                                 .border(
-                                    width = if (isSel) 2.5.dp else 0.dp,
-                                    color = MaterialTheme.colorScheme.onSurface,
+                                    width = if (isSel) 2.5.dp else 1.dp,
+                                    color = if (isSel) MaterialTheme.colorScheme.onSurface
+                                    else MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
                                     shape = CircleShape
                                 )
                                 .clickable { selectedColor = hex }

@@ -55,40 +55,31 @@ fun PixiDoodle3D(
     float: Boolean = true,
     contentScale: ContentScale = ContentScale.Fit
 ) {
+    // Single infinite phase — half the animation work of dual orbits
     val infinite = rememberInfiniteTransition(label = "doodle3d")
-
     val phase by infinite.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = orbitSeconds * 1000, easing = LinearEasing),
+            animation = tween(
+                durationMillis = (orbitSeconds * 1000).coerceAtLeast(4000),
+                easing = LinearEasing
+            ),
             repeatMode = RepeatMode.Restart
         ),
         label = "orbitPhase"
     )
 
-    val floatPhase by infinite.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = (orbitSeconds * 1300), easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "floatPhase"
-    )
-
+    // Sensor at UI rate (not GAME) for smoother, cooler battery on 90/120 Hz
     val tilt by rememberDeviceTilt(enabled = tiltStrength > 0f)
 
     val angle = (phase * 2f * PI).toFloat()
-    val floatAngle = (floatPhase * 2f * PI).toFloat()
-
     val rotY = sin(angle) * yawDegrees + tilt.x * tiltStrength
     val rotX = cos(angle * 0.85f) * pitchDegrees + tilt.y * (tiltStrength * 0.75f)
-    val rotZ = sin(angle * 0.5f) * 3.5f
-
-    val translateY = if (float) sin(floatAngle) * 10f else 0f
-    val translateX = cos(floatAngle * 0.7f) * 5f
-    val scale = 1f + sin(angle) * 0.04f
+    val rotZ = sin(angle * 0.5f) * 2.5f
+    val translateY = if (float) sin(angle * 1.15f) * 8f else 0f
+    val translateX = if (float) cos(angle * 0.7f) * 4f else 0f
+    val scale = 1f + sin(angle) * 0.03f
 
     Box(
         modifier = modifier.size(size),
@@ -108,10 +99,10 @@ fun PixiDoodle3D(
                     translationY = translateY
                     scaleX = scale
                     scaleY = scale
-                    // Perspective depth (higher = subtler)
-                    cameraDistance = 14f * density
+                    cameraDistance = 16f * density
                     transformOrigin = TransformOrigin.Center
-                    alpha = 0.93f + cos(angle) * 0.07f
+                    // Compositing-friendly layer
+                    alpha = 0.95f
                 }
         )
     }
@@ -149,7 +140,8 @@ fun rememberDeviceTilt(enabled: Boolean = true): State<DeviceTilt> {
                 override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
             }
             if (sm != null && sensor != null) {
-                sm.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_GAME)
+                // UI rate is enough for gentle parallax and kinder to high-refresh panels
+                sm.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_UI)
             }
             onDispose { sm?.unregisterListener(listener) }
         }

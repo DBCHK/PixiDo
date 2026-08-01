@@ -1,6 +1,7 @@
 package com.example
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -13,8 +14,11 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -35,6 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -49,40 +54,97 @@ import com.example.ui.components.AddBudgetDialog
 import com.example.ui.components.AddEventDialog
 import com.example.ui.components.AddGoalDialog
 import com.example.ui.components.AddTaskDialog
-import com.example.ui.components.AuraBottomNavigation
+import com.example.ui.components.AutoHideBottomNavigation
 import com.example.ui.components.FocusTimerModal
 import com.example.ui.components.StartupSplash
+import com.example.ui.components.rememberScrollHideBarState
+import com.example.ui.components.scrollHideNestedConnection
 import com.example.ui.screens.BudgetScreen
 import com.example.ui.screens.CalendarScreen
 import com.example.ui.screens.GoalsScreen
 import com.example.ui.screens.ProfileDialog
 import com.example.ui.screens.TasksScreen
 import com.example.ui.theme.PixiDoTheme
+import com.example.widget.WidgetActions
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+
+    private var pendingWidgetAction by mutableStateOf<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        preferHighRefreshRate()
         NotificationHelper.ensureChannels(this)
+        pendingWidgetAction = intent?.getStringExtra(com.example.widget.WidgetActions.EXTRA_ACTION)
         setContent {
             val viewModel: AuraViewModel = viewModel()
             val profile by viewModel.userProfile.collectAsStateWithLifecycle()
-            PixiDoTheme(themeOption = profile.themeOption) {
+            PixiDoTheme(
+                themeOption = profile.themeOption,
+                accentColorHex = profile.accentColorHex
+            ) {
                 ProvideSoundEngine(
                     enabled = profile.soundEnabled,
                     hapticsEnabled = profile.hapticsEnabled
                 ) {
-                    PixiDoApp(viewModel = viewModel)
+                    PixiDoApp(
+                        viewModel = viewModel,
+                        pendingWidgetAction = pendingWidgetAction,
+                        onWidgetActionConsumed = { pendingWidgetAction = null }
+                    )
                 }
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        pendingWidgetAction = intent.getStringExtra(com.example.widget.WidgetActions.EXTRA_ACTION)
+    }
+
+    /**
+     * Prefer the highest supported refresh rate (90 / 120 Hz when available)
+     * so Compose animations and scroll stay buttery.
+     */
+    private fun preferHighRefreshRate() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
+        try {
+            val d = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                display
+            } else {
+                @Suppress("DEPRECATION")
+                windowManager.defaultDisplay
+            } ?: return
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val modes = d.supportedModes
+                // Pick highest refresh rate mode with reasonable resolution match
+                val best = modes.maxWithOrNull(
+                    compareBy<android.view.Display.Mode> { it.refreshRate }
+                        .thenBy { it.physicalWidth * it.physicalHeight }
+                ) ?: return
+                if (best.refreshRate >= 89f) {
+                    val lp = window.attributes
+                    lp.preferredDisplayModeId = best.modeId
+                    window.attributes = lp
+                }
+            }
+        } catch (_: Exception) {
+            // Devices without multi-mode displays are fine at 60 Hz
         }
     }
 }
 
 @Composable
-fun PixiDoApp(viewModel: AuraViewModel = viewModel()) {
+fun PixiDoApp(
+    viewModel: AuraViewModel = viewModel(),
+    pendingWidgetAction: String? = null,
+    onWidgetActionConsumed: () -> Unit = {}
+) {
     val sound = LocalSoundEngine.current
     val context = LocalContext.current
 
@@ -110,19 +172,48 @@ fun PixiDoApp(viewModel: AuraViewModel = viewModel()) {
     var showAddGoalDialog by remember { mutableStateOf(false) }
     var showSplash by remember { mutableStateOf(true) }
 
+    // Deep links from home-screen widgets
+    LaunchedEffect(pendingWidgetAction) {
+        val action = pendingWidgetAction ?: return@LaunchedEffect
+        // Skip splash so dialogs appear immediately
+        showSplash = false
+        when (action) {
+            WidgetActions.ACTION_ADD_TASK -> {
+                viewModel.selectTab(0)
+                showAddTaskDialog = true
+            }
+            WidgetActions.ACTION_OPEN_FOCUS -> {
+                viewModel.selectTab(0)
+                viewModel.openFocusModal()
+            }
+            WidgetActions.ACTION_OPEN_TASKS -> viewModel.selectTab(0)
+            WidgetActions.ACTION_OPEN_BUDGET -> viewModel.selectTab(1)
+            else -> { /* open app only */ }
+        }
+        onWidgetActionConsumed()
+    }
+
     val snackbarHostState = remember { SnackbarHostState() }
     val reduceMotion = profile.reduceMotion
     val scope = rememberCoroutineScope()
 
-    // Soft scale-in of main content after splash
+    // Bottom nav hide — isolated state so scroll never recomposes the whole app tree
+    val scrollHideBar = rememberScrollHideBarState()
+    val nestedScrollConnection = remember(scrollHideBar) {
+        scrollHideNestedConnection(scrollHideBar)
+    }
+    // Fixed bottom inset: no layout thrash while the bar slides (GPU-only transform)
+    val contentBottomPad = 88.dp
+
+    // Soft scale-in of main content after splash (splash only)
     val contentAlpha by animateFloatAsState(
         targetValue = if (showSplash) 0.0f else 1f,
-        animationSpec = tween(durationMillis = 380),
+        animationSpec = tween(durationMillis = 320),
         label = "contentAlpha"
     )
     val contentScale by animateFloatAsState(
-        targetValue = if (showSplash) 0.96f else 1f,
-        animationSpec = tween(durationMillis = 420),
+        targetValue = if (showSplash) 0.97f else 1f,
+        animationSpec = tween(durationMillis = 360),
         label = "contentScale"
     )
 
@@ -180,6 +271,7 @@ fun PixiDoApp(viewModel: AuraViewModel = viewModel()) {
     }
 
     fun selectTab(index: Int) {
+        scrollHideBar.snapShow()
         if (index != selectedTab) {
             sound.playTab(index)
             viewModel.selectTab(index)
@@ -220,6 +312,8 @@ fun PixiDoApp(viewModel: AuraViewModel = viewModel()) {
                 }
                 .background(MaterialTheme.colorScheme.background),
             containerColor = MaterialTheme.colorScheme.background,
+            // Bottom bar is overlaid so it can slide away without leaving a gap
+            bottomBar = {},
             snackbarHost = {
                 SnackbarHost(hostState = snackbarHostState) { data ->
                     Snackbar(
@@ -230,22 +324,19 @@ fun PixiDoApp(viewModel: AuraViewModel = viewModel()) {
                         shape = RoundedCornerShape(50)
                     )
                 }
-            },
-            bottomBar = {
-                AuraBottomNavigation(
-                    selectedTab = selectedTab,
-                    onTabSelected = { selectTab(it) },
-                    onCenterAdd = { openAddForCurrentTab() }
-                )
             }
         ) { innerPadding ->
             HorizontalPager(
                 state = pagerState,
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(innerPadding)
+                    .nestedScroll(nestedScrollConnection)
+                    .padding(top = innerPadding.calculateTopPadding())
+                    .padding(bottom = contentBottomPad)
+                    .windowInsetsPadding(WindowInsets.navigationBars)
                     .background(MaterialTheme.colorScheme.background),
-                beyondViewportPageCount = 1,
+                // Keep only the current offscreen page to cut composition cost
+                beyondViewportPageCount = 0,
                 userScrollEnabled = !showSplash
             ) { page ->
                 when (page) {
@@ -262,6 +353,25 @@ fun PixiDoApp(viewModel: AuraViewModel = viewModel()) {
                         onOpenAddTask = {
                             sound.play(Sfx.DIALOG_OPEN)
                             showAddTaskDialog = true
+                        },
+                        onQuickAddTask = { title ->
+                            val dayStart = java.util.Calendar.getInstance().apply {
+                                set(java.util.Calendar.HOUR_OF_DAY, 0)
+                                set(java.util.Calendar.MINUTE, 0)
+                                set(java.util.Calendar.SECOND, 0)
+                                set(java.util.Calendar.MILLISECOND, 0)
+                            }.timeInMillis
+                            // Due later today so it lands on "today"
+                            val due = dayStart + 18L * 60 * 60 * 1000
+                            viewModel.addTask(
+                                title = title,
+                                category = "Personal",
+                                priority = "QUICK_WIN",
+                                dueTimeStr = "Today · quick add",
+                                dueDateMillis = due,
+                                subtasks = "",
+                                linkedGoalId = null
+                            )
                         },
                         onOpenFocusMode = { viewModel.openFocusModal() },
                         onOpenProfile = { viewModel.openProfile() },
@@ -295,6 +405,9 @@ fun PixiDoApp(viewModel: AuraViewModel = viewModel()) {
                         onDeleteAccount = {
                             sound.play(Sfx.DELETE)
                             viewModel.deleteAccount(it)
+                        },
+                        onTransfer = { from, to, amount, note ->
+                            viewModel.transferBetweenAccounts(from, to, amount, note)
                         },
                         onSetCurrency = {
                             sound.play(Sfx.SETTINGS_CHANGE)
@@ -351,6 +464,16 @@ fun PixiDoApp(viewModel: AuraViewModel = viewModel()) {
                 }
             }
         }
+
+        // Isolated auto-hide bar — only this branch recomposes on scroll
+        AutoHideBottomNavigation(
+            state = scrollHideBar,
+            selectedTab = selectedTab,
+            onTabSelected = { selectTab(it) },
+            onCenterAdd = { openAddForCurrentTab() },
+            contentAlpha = contentAlpha,
+            reduceMotion = reduceMotion
+        )
 
         if (showSplash) {
             StartupSplash(onFinished = { showSplash = false })
@@ -461,6 +584,9 @@ fun PixiDoApp(viewModel: AuraViewModel = viewModel()) {
                 viewModel.setAvatarUri(uri)
             },
             onThemeSelected = { viewModel.setTheme(it) },
+            onAccentSelected = { hex ->
+                viewModel.setAccentColor(hex)
+            },
             onSoundToggle = {
                 sound.play(Sfx.SETTINGS_CHANGE)
                 viewModel.setSoundEnabled(it)

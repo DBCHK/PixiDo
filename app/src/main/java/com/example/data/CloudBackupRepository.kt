@@ -185,7 +185,8 @@ private fun BudgetItemEntity.toMap() = mapOf(
     "timestamp" to timestamp,
     "note" to note,
     "accountId" to accountId,
-    "transactionType" to transactionType
+    "transactionType" to transactionType,
+    "relatedAccountId" to relatedAccountId
 )
 
 private fun CalendarEventEntity.toMap() = mapOf(
@@ -274,7 +275,8 @@ private fun mapToBudget(raw: Any?): BudgetItemEntity? {
         note = m["note"] as? String ?: "",
         accountId = (m["accountId"] as? Number)?.toInt(),
         transactionType = m["transactionType"] as? String
-            ?: if (isExpense) TransactionType.EXPENSE.name else TransactionType.INCOME.name
+            ?: if (isExpense) TransactionType.EXPENSE.name else TransactionType.INCOME.name,
+        relatedAccountId = (m["relatedAccountId"] as? Number)?.toInt()
     )
 }
 

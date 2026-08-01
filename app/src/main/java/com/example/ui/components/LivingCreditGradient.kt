@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -23,15 +24,9 @@ import kotlin.math.hypot
 import kotlin.math.sin
 
 /**
- * Soft center-bloom palette by utilization (no linear stripes).
- * Inspired by smooth radial color fields (see PixiDoGradientReference).
- *
- *  0%   → soft mint / green glow
- *  mid  → green + peach / orange
- *  high → orange / coral
- *  full → rose-red with a soft orange core
+ * Soft palette by utilization — green → orange → red as credit fills.
  */
-private fun coreColors(utilization: Float): List<Color> {
+private fun fluidPalette(utilization: Float): List<Color> {
     val t = utilization.coerceIn(0f, 1f)
     val mint = Color(0xFFB8F5D4)
     val softGreen = Color(0xFF8FE0B8)
@@ -42,24 +37,25 @@ private fun coreColors(utilization: Float): List<Color> {
     val coral = Color(0xFFFF8A78)
     val rose = Color(0xFFFF6B82)
     val deepRose = Color(0xFFE85A72)
+    val white = Color.White
 
     return when {
         t < 0.3f -> {
             val k = t / 0.3f
             listOf(
-                Color.White.copy(alpha = 0.9f),
+                white.copy(alpha = 0.95f),
                 lerp(mint, softGreen, k),
                 lerp(softGreen, lime, k * 0.6f),
-                Color.Transparent
+                lerp(lime, cream, k * 0.3f)
             )
         }
         t < 0.65f -> {
             val k = (t - 0.3f) / 0.35f
             listOf(
-                lerp(Color.White, cream, k * 0.5f),
+                lerp(white, cream, k * 0.5f),
                 lerp(softGreen, peach, k),
                 lerp(lime, orange, k),
-                lerp(mint, Color.Transparent, 0.4f)
+                lerp(mint, peach, k * 0.7f)
             )
         }
         t < 0.88f -> {
@@ -68,7 +64,7 @@ private fun coreColors(utilization: Float): List<Color> {
                 lerp(cream, peach, k),
                 lerp(peach, orange, k),
                 lerp(orange, coral, k),
-                lerp(softGreen, Color.Transparent, 0.7f)
+                lerp(softGreen, peach, 1f - k * 0.5f)
             )
         }
         else -> {
@@ -77,7 +73,7 @@ private fun coreColors(utilization: Float): List<Color> {
                 lerp(peach, coral, k),
                 lerp(orange, rose, k),
                 lerp(coral, deepRose, k),
-                Color.Transparent
+                lerp(lime, coral, 0.4f)
             )
         }
     }
@@ -94,10 +90,8 @@ private fun lerp(a: Color, b: Color, t: Float): Color {
 }
 
 /**
- * Living credit fill — color blooms from the **center** of the card (radial, soft),
- * never linear stripes. A transparent edge vignette sits over the whole face;
- * as [utilization] rises the bloom expands and the vignette softens so the card
- * gradually fills with color.
+ * Fluid multi-blob credit fill — independent orbits create a lava-lamp / liquid feel
+ * (not a single rigid radial). Vignette softens as utilization rises.
  */
 @Composable
 fun LivingCreditGradientBox(
@@ -106,35 +100,35 @@ fun LivingCreditGradientBox(
     content: @Composable BoxScope.() -> Unit
 ) {
     val util = utilization.coerceIn(0f, 1f)
-    val infinite = rememberInfiniteTransition(label = "creditBloom")
+    val palette = remember(util) { fluidPalette(util) }
 
-    // Gentle center drift + breathe (soothing motion, no harsh lines)
-    val phase by infinite.animateFloat(
-        initialValue = 0f,
-        targetValue = (2f * PI).toFloat(),
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 12000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "phase"
+    val infinite = rememberInfiniteTransition(label = "fluidCredit")
+
+    // Several independent phases at incommensurate speeds → organic fluid motion
+    val p1 by infinite.animateFloat(
+        0f, (2f * PI).toFloat(),
+        infiniteRepeatable(tween(9000, easing = LinearEasing), RepeatMode.Restart),
+        label = "p1"
     )
-    val phase2 by infinite.animateFloat(
-        initialValue = 0f,
-        targetValue = (2f * PI).toFloat(),
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 17000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "phase2"
+    val p2 by infinite.animateFloat(
+        0f, (2f * PI).toFloat(),
+        infiniteRepeatable(tween(13000, easing = LinearEasing), RepeatMode.Restart),
+        label = "p2"
     )
-    val breathe by infinite.animateFloat(
-        initialValue = 0.96f,
-        targetValue = 1.04f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 5000, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "breathe"
+    val p3 by infinite.animateFloat(
+        0f, (2f * PI).toFloat(),
+        infiniteRepeatable(tween(17000, easing = LinearEasing), RepeatMode.Restart),
+        label = "p3"
+    )
+    val p4 by infinite.animateFloat(
+        0f, (2f * PI).toFloat(),
+        infiniteRepeatable(tween(11000, easing = LinearEasing), RepeatMode.Restart),
+        label = "p4"
+    )
+    val morph by infinite.animateFloat(
+        0.88f, 1.14f,
+        infiniteRepeatable(tween(7000, easing = LinearEasing), RepeatMode.Reverse),
+        label = "morph"
     )
 
     Box(modifier = modifier) {
@@ -143,72 +137,96 @@ fun LivingCreditGradientBox(
             val h = size.height
             if (w <= 0f || h <= 0f) return@Canvas
 
-            val cx = w * 0.5f + w * 0.04f * cos(phase)
-            val cy = h * 0.5f + h * 0.05f * sin(phase2)
-            val center = Offset(cx, cy)
-            val maxR = hypot(w, h) * 0.72f
+            val maxR = hypot(w, h)
+            val fill = 0.20f + util * 0.80f
 
-            // Soft neutral base so empty credit still looks like a card
-            drawRect(Color(0xFFF7F8FA))
+            // Soft base that tints slightly with fill color
+            drawRect(lerp(Color(0xFFF7F8FA), palette[1].copy(alpha = 1f), util * 0.12f))
 
-            // ── Center bloom radius grows with utilization ────────────
-            // Low util: small soft green core · High util: fills almost entire card
-            val fill = 0.18f + util * 0.82f
-            val bloomR = maxR * fill * breathe
+            // ── Fluid blobs: Lissajous-like paths so they swirl, not orbit rigidly ──
+            data class Blob(
+                val cx: Float,
+                val cy: Float,
+                val radius: Float,
+                val color: Color,
+                val alpha: Float
+            )
 
-            val colors = coreColors(util)
-
-            // Primary soft radial bloom from center (smooth field, no lines)
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colorStops = arrayOf(
-                        0.0f to colors[0].copy(alpha = 0.95f),
-                        0.28f to colors[1].copy(alpha = 0.88f),
-                        0.58f to colors[2].copy(alpha = 0.72f),
-                        1.0f to Color.Transparent
-                    ),
-                    center = center,
-                    radius = bloomR
+            val blobs = listOf(
+                // Core bloom — drifts slowly around center
+                Blob(
+                    cx = w * (0.50f + 0.12f * sin(p1) + 0.06f * cos(p2)),
+                    cy = h * (0.48f + 0.14f * cos(p1 * 0.9f) + 0.05f * sin(p3)),
+                    radius = maxR * (0.42f + 0.28f * fill) * morph,
+                    color = palette[0],
+                    alpha = 0.92f
                 ),
-                radius = bloomR,
-                center = center
+                // Secondary mass — counter-rotates
+                Blob(
+                    cx = w * (0.38f + 0.22f * cos(p2) + 0.08f * sin(p4)),
+                    cy = h * (0.55f + 0.18f * sin(p2 * 1.1f) + 0.07f * cos(p1)),
+                    radius = maxR * (0.36f + 0.22f * fill) * (2f - morph * 0.85f),
+                    color = palette[1],
+                    alpha = 0.72f + util * 0.12f
+                ),
+                // Accent tongue
+                Blob(
+                    cx = w * (0.62f + 0.18f * sin(p3 * 0.8f) + 0.1f * cos(p1)),
+                    cy = h * (0.38f + 0.20f * cos(p3) + 0.08f * sin(p2)),
+                    radius = maxR * (0.30f + 0.20f * fill) * (0.9f + 0.1f * sin(p4)),
+                    color = palette[2],
+                    alpha = 0.55f + util * 0.2f
+                ),
+                // Soft edge swirl
+                Blob(
+                    cx = w * (0.45f + 0.25f * cos(p4 * 0.7f)),
+                    cy = h * (0.70f + 0.15f * sin(p4 * 0.85f + p1 * 0.3f)),
+                    radius = maxR * (0.34f + 0.18f * fill) * morph,
+                    color = palette.getOrElse(3) { palette[2] },
+                    alpha = 0.40f + util * 0.18f
+                ),
+                // Highlight glint — faster, smaller
+                Blob(
+                    cx = w * (0.42f + 0.15f * cos(p1 * 1.3f)),
+                    cy = h * (0.35f + 0.12f * sin(p2 * 1.2f)),
+                    radius = maxR * 0.22f * (0.95f + 0.08f * sin(p3)),
+                    color = Color.White,
+                    alpha = 0.35f - util * 0.12f
+                )
             )
 
-            // Secondary soft accent lobe (gives organic mesh feel like the reference)
-            val lobeCenter = Offset(
-                cx + w * 0.12f * cos(phase2 * 0.7f),
-                cy + h * 0.10f * sin(phase * 0.9f)
-            )
-            val lobeR = bloomR * (0.55f + 0.15f * util)
+            blobs.forEach { blob ->
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colorStops = arrayOf(
+                            0.0f to blob.color.copy(alpha = blob.alpha),
+                            0.45f to blob.color.copy(alpha = blob.alpha * 0.55f),
+                            1.0f to Color.Transparent
+                        ),
+                        center = Offset(blob.cx, blob.cy),
+                        radius = blob.radius
+                    ),
+                    radius = blob.radius,
+                    center = Offset(blob.cx, blob.cy)
+                )
+            }
+
+            // Soft cross-fade veil that slowly shifts hue feel
+            val veilCx = w * (0.5f + 0.08f * sin(p2 * 0.5f))
+            val veilCy = h * (0.5f + 0.08f * cos(p3 * 0.5f))
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(
-                        colors.getOrElse(1) { colors[0] }.copy(alpha = 0.35f + util * 0.2f),
+                        palette[1].copy(alpha = 0.12f + util * 0.08f),
                         Color.Transparent
                     ),
-                    center = lobeCenter,
-                    radius = lobeR
+                    center = Offset(veilCx, veilCy),
+                    radius = maxR * 0.55f
                 ),
-                radius = lobeR,
-                center = lobeCenter
+                radius = maxR * 0.55f,
+                center = Offset(veilCx, veilCy)
             )
 
-            // Warm highlight near center (reference soft glow)
-            val hiR = bloomR * 0.35f
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(
-                        Color.White.copy(alpha = 0.35f - util * 0.12f),
-                        Color.Transparent
-                    ),
-                    center = Offset(cx - w * 0.06f, cy - h * 0.08f),
-                    radius = hiR
-                ),
-                radius = hiR,
-                center = Offset(cx - w * 0.06f, cy - h * 0.08f)
-            )
-
-            // ── Transparent vignette (strong when empty, softens as filled) ──
             drawVignette(
                 strength = (1f - util * 0.88f).coerceIn(0.08f, 1f),
                 w = w,
@@ -220,42 +238,24 @@ fun LivingCreditGradientBox(
     }
 }
 
-/**
- * Soft edge vignette: transparent center, darker/softer edges.
- * [strength] 1 = strong vignette (low utilization), 0 = nearly gone (full).
- */
 private fun DrawScope.drawVignette(strength: Float, w: Float, h: Float) {
     val cx = w / 2f
     val cy = h / 2f
     val r = hypot(w, h) * 0.62f
-    // Outer veil
     drawRect(
         brush = Brush.radialGradient(
             colorStops = arrayOf(
                 0.0f to Color.Transparent,
                 0.42f to Color.Transparent,
                 0.72f to Color(0xFF0A0A12).copy(alpha = 0.10f * strength),
-                1.0f to Color(0xFF0A0A12).copy(alpha = 0.28f * strength)
+                1.0f to Color(0xFF0A0A12).copy(alpha = 0.26f * strength)
             ),
             center = Offset(cx, cy),
             radius = r
         )
     )
-    // Soft white rim fade for airy card look at low utilization
-    drawRect(
-        brush = Brush.radialGradient(
-            colorStops = arrayOf(
-                0.0f to Color.Transparent,
-                0.55f to Color.Transparent,
-                1.0f to Color.White.copy(alpha = 0.22f * strength)
-            ),
-            center = Offset(cx, cy),
-            radius = r * 1.05f
-        )
-    )
 }
 
-/** Readable text on the soft radial card face. */
 fun creditGradientOnColor(utilization: Float): Color {
     return Color(0xFF1C1C1E).copy(alpha = 0.90f)
 }

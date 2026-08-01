@@ -2,6 +2,7 @@ package com.example.ui.components
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -160,13 +161,13 @@ private fun NavItem(
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.90f else 1f,
-        animationSpec = PixiSnappySpring,
+        targetValue = if (pressed) 0.92f else 1f,
+        animationSpec = tween(durationMillis = 90),
         label = "tabScale"
     )
     val selectBoost by animateFloatAsState(
-        targetValue = if (selected) 1.05f else 1f,
-        animationSpec = PixiSnappySpring,
+        targetValue = if (selected) 1.04f else 1f,
+        animationSpec = tween(durationMillis = 140),
         label = "tabSelectBoost"
     )
     val iconColor by animateColorAsState(

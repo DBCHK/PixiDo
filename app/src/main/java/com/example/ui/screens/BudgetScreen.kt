@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Savings
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -72,6 +73,7 @@ import com.example.ui.components.PixiDoodle3D
 import com.example.ui.components.PixiEmptyState
 import com.example.ui.components.PixiScreenHeader
 import com.example.ui.components.PixiSectionLabel
+import com.example.ui.components.TransferDialog
 import com.example.ui.components.creditGradientMutedOnColor
 import com.example.ui.components.creditGradientOnColor
 import com.example.ui.theme.rememberPixiDimens
@@ -87,6 +89,7 @@ fun BudgetScreen(
     onAddAccount: (String, AccountType, Double, Double, String) -> Unit,
     onEditAccount: (AccountEntity) -> Unit,
     onDeleteAccount: (Int) -> Unit,
+    onTransfer: (fromId: Int, toId: Int, amount: Double, note: String) -> Unit,
     onSetCurrency: (String) -> Unit,
     onSetMonthlyLimit: (Double) -> Unit,
     modifier: Modifier = Modifier
@@ -96,6 +99,7 @@ fun BudgetScreen(
     var showAddAccount by remember { mutableStateOf(false) }
     var editingAccount by remember { mutableStateOf<AccountEntity?>(null) }
     var showSettings by remember { mutableStateOf(false) }
+    var showTransfer by remember { mutableStateOf(false) }
 
     val symbol = Currencies.symbolOf(currencyCode)
 
@@ -443,14 +447,50 @@ fun BudgetScreen(
             }
 
             item {
-                PixiSectionLabel(
-                    text = "Accounts",
-                    action = "+ Add",
-                    onAction = {
-                        sound.play(Sfx.DIALOG_OPEN)
-                        showAddAccount = true
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    PixiSectionLabel(
+                        text = "Accounts",
+                        action = "+ Add",
+                        onAction = {
+                            sound.play(Sfx.DIALOG_OPEN)
+                            showAddAccount = true
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (accounts.size >= 2) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Row(
+                            modifier = Modifier
+                                .clip(PixiCardShapeSm)
+                                .background(MaterialTheme.colorScheme.primaryContainer)
+                                .clickable {
+                                    sound.play(Sfx.DIALOG_OPEN)
+                                    showTransfer = true
+                                }
+                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                                .testTag("transfer_accounts_btn"),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Filled.SwapHoriz,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Transfer",
+                                fontSize = d.caption,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
                     }
-                )
+                }
                 Spacer(modifier = Modifier.height(10.dp))
             }
 
@@ -495,16 +535,36 @@ fun BudgetScreen(
                 }
             } else {
                 items(budgetItems, key = { it.id }) { item ->
+                    val fromName = accounts.find { it.id == item.accountId }?.name
+                    val toName = accounts.find { it.id == item.relatedAccountId }?.name
                     BudgetItemRow(
                         item = item,
                         currencyCode = currencyCode,
-                        accountName = accounts.find { it.id == item.accountId }?.name,
+                        accountName = when (item.type) {
+                            TransactionType.TRANSFER ->
+                                listOfNotNull(fromName, toName).joinToString(" → ")
+                                    .ifBlank { fromName }
+                            else -> fromName
+                        },
                         onDelete = { onDeleteBudgetItem(item.id) }
                     )
                     Spacer(modifier = Modifier.height(10.dp))
                 }
             }
         }
+    }
+
+    if (showTransfer) {
+        TransferDialog(
+            currencyCode = currencyCode,
+            accounts = accounts,
+            onDismiss = { showTransfer = false },
+            onTransfer = { from, to, amount, note ->
+                sound.play(Sfx.ADD_BUDGET)
+                onTransfer(from, to, amount, note)
+                showTransfer = false
+            }
+        )
     }
 
     if (showAddAccount) {
@@ -835,6 +895,7 @@ fun BudgetItemRow(
         TransactionType.INCOME -> Triple(Color(0xFF34D399), Icons.Filled.ArrowDownward, "+")
         TransactionType.LENT -> Triple(Color(0xFF67D4E8), Icons.AutoMirrored.Filled.CallMade, "−")
         TransactionType.BORROW -> Triple(Color(0xFFFBBF24), Icons.AutoMirrored.Filled.CallReceived, "+")
+        TransactionType.TRANSFER -> Triple(Color(0xFF9B7AE8), Icons.Filled.SwapHoriz, "↔")
     }
 
     PixiCard(

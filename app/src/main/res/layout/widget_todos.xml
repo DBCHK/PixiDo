@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_bg"
+    android:orientation="vertical"
+    android:padding="12dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Today’s todos"
+                android:textColor="@color/widget_on_surface"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/todo_date"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/widget_muted"
+                android:textSize="10sp" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/btn_quick_add"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:background="@drawable/widget_fab_bg"
+            android:gravity="center"
+            android:text="+"
+            android:textColor="#1C1C1E"
+            android:textSize="22sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/todo_stats"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:textColor="@color/widget_primary"
+        android:textSize="11sp"
+        android:textStyle="bold" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="6dp"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingVertical="2dp">
+
+            <TextView
+                android:id="@+id/todo_check_1"
+                android:layout_width="16dp"
+                android:layout_height="wrap_content"
+                android:text="○"
+                android:textColor="@color/widget_primary"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/todo_line_1"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="@color/widget_on_surface"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingVertical="2dp">
+
+            <TextView
+                android:id="@+id/todo_check_2"
+                android:layout_width="16dp"
+                android:layout_height="wrap_content"
+                android:text="○"
+                android:textColor="@color/widget_primary"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/todo_line_2"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="@color/widget_on_surface"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingVertical="2dp">
+
+            <TextView
+                android:id="@+id/todo_check_3"
+                android:layout_width="16dp"
+                android:layout_height="wrap_content"
+                android:text="○"
+                android:textColor="@color/widget_primary"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/todo_line_3"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="@color/widget_on_surface"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingVertical="2dp">
+
+            <TextView
+                android:id="@+id/todo_check_4"
+                android:layout_width="16dp"
+                android:layout_height="wrap_content"
+                android:text="○"
+                android:textColor="@color/widget_primary"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/todo_line_4"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="@color/widget_on_surface"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingVertical="2dp">
+
+            <TextView
+                android:id="@+id/todo_check_5"
+                android:layout_width="16dp"
+                android:layout_height="wrap_content"
+                android:text="○"
+                android:textColor="@color/widget_primary"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/todo_line_5"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="@color/widget_on_surface"
+                android:textSize="12sp" />
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>
