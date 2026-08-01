@@ -2,6 +2,7 @@ package com.example.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,6 +34,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.example.data.AccountEntity
 import com.example.data.Currencies
+import com.example.data.TransactionType
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -46,12 +48,13 @@ fun AddBudgetDialog(
         isExpense: Boolean,
         category: String,
         note: String,
-        accountId: Int?
+        accountId: Int?,
+        transactionType: TransactionType
     ) -> Unit
 ) {
     var title by remember { mutableStateOf("") }
     var amountStr by remember { mutableStateOf("") }
-    var isExpense by remember { mutableStateOf(true) }
+    var txnType by remember { mutableStateOf(TransactionType.EXPENSE) }
     var category by remember { mutableStateOf("Food & Drink") }
     var note by remember { mutableStateOf("") }
     var selectedAccountId by remember {
@@ -67,6 +70,33 @@ fun AddBudgetDialog(
     val incomeCategories = listOf(
         "Salary", "Freelance", "Gifts", "Investments", "Refund", "Other"
     )
+    val lentCategories = listOf(
+        "Friend", "Family", "Colleague", "Business", "Other"
+    )
+    val borrowCategories = listOf(
+        "Friend", "Family", "Loan", "Business", "Other"
+    )
+
+    val currentCats = when (txnType) {
+        TransactionType.EXPENSE -> expenseCategories
+        TransactionType.INCOME -> incomeCategories
+        TransactionType.LENT -> lentCategories
+        TransactionType.BORROW -> borrowCategories
+    }
+
+    val dialogTitle = when (txnType) {
+        TransactionType.EXPENSE -> "Log Expense"
+        TransactionType.INCOME -> "Log Income"
+        TransactionType.LENT -> "Log Money Lent"
+        TransactionType.BORROW -> "Log Money Borrowed"
+    }
+
+    val hint = when (txnType) {
+        TransactionType.EXPENSE -> "Counts toward your monthly budget"
+        TransactionType.INCOME -> "Added to income · not a budget spend"
+        TransactionType.LENT -> "You lent this out · not a budget expense"
+        TransactionType.BORROW -> "You borrowed this · not counted as income"
+    }
 
     val fieldColors = OutlinedTextFieldDefaults.colors(
         focusedBorderColor = MaterialTheme.colorScheme.primary,
@@ -93,7 +123,7 @@ fun AddBudgetDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = if (isExpense) "Log Expense" else "Log Income",
+                        text = dialogTitle,
                         style = MaterialTheme.typography.headlineSmall,
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -103,59 +133,54 @@ fun AddBudgetDialog(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = hint,
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
 
-                // Expense / Income segmented control
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Expense / Income / Lent / Borrow segmented control
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
                         .clip(PixiPillShape)
                         .background(MaterialTheme.colorScheme.surfaceVariant)
-                        .padding(4.dp)
+                        .padding(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(0.dp)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(PixiPillShape)
-                            .background(
-                                if (isExpense) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.surfaceVariant
+                    TransactionType.entries.forEach { type ->
+                        val selected = txnType == type
+                        Box(
+                            modifier = Modifier
+                                .clip(PixiPillShape)
+                                .background(
+                                    if (selected) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.surfaceVariant
+                                )
+                                .clickable {
+                                    txnType = type
+                                    category = when (type) {
+                                        TransactionType.EXPENSE -> expenseCategories[0]
+                                        TransactionType.INCOME -> incomeCategories[0]
+                                        TransactionType.LENT -> lentCategories[0]
+                                        TransactionType.BORROW -> borrowCategories[0]
+                                    }
+                                }
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = type.displayName,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                color = if (selected) MaterialTheme.colorScheme.onPrimary
+                                else MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            .clickable {
-                                isExpense = true
-                                category = expenseCategories[0]
-                            }
-                            .padding(vertical = 12.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "Expense",
-                            fontWeight = FontWeight.Bold,
-                            color = if (isExpense) MaterialTheme.colorScheme.onPrimary
-                            else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(PixiPillShape)
-                            .background(
-                                if (!isExpense) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.surfaceVariant
-                            )
-                            .clickable {
-                                isExpense = false
-                                category = incomeCategories[0]
-                            }
-                            .padding(vertical = 12.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "Income",
-                            fontWeight = FontWeight.Bold,
-                            color = if (!isExpense) MaterialTheme.colorScheme.onPrimary
-                            else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        }
                     }
                 }
 
@@ -179,8 +204,24 @@ fun AddBudgetDialog(
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
-                    label = { Text("Title / merchant") },
-                    placeholder = { Text("What was this for?") },
+                    label = {
+                        Text(
+                            when (txnType) {
+                                TransactionType.LENT -> "Who did you lend to?"
+                                TransactionType.BORROW -> "Who did you borrow from?"
+                                else -> "Title / merchant"
+                            }
+                        )
+                    },
+                    placeholder = {
+                        Text(
+                            when (txnType) {
+                                TransactionType.LENT -> "e.g. Alex"
+                                TransactionType.BORROW -> "e.g. Mom, bank loan"
+                                else -> "What was this for?"
+                            }
+                        )
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("input_budget_title"),
@@ -215,14 +256,16 @@ fun AddBudgetDialog(
                 Spacer(modifier = Modifier.height(14.dp))
 
                 Text(
-                    text = "Category",
+                    text = when (txnType) {
+                        TransactionType.LENT, TransactionType.BORROW -> "With"
+                        else -> "Category"
+                    },
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.height(8.dp))
 
-                val currentCats = if (isExpense) expenseCategories else incomeCategories
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -244,7 +287,13 @@ fun AddBudgetDialog(
                         val parsedAmount = amountStr.toDoubleOrNull() ?: 0.0
                         if (parsedAmount > 0) {
                             onAddBudgetItem(
-                                title, parsedAmount, isExpense, category, note, selectedAccountId
+                                title,
+                                parsedAmount,
+                                txnType.decreasesAsset,
+                                category,
+                                note,
+                                selectedAccountId,
+                                txnType
                             )
                             onDismiss()
                         }

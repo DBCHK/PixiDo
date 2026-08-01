@@ -1,7 +1,6 @@
 package com.example.ui.components
 
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -31,9 +30,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -87,13 +84,13 @@ fun FocusTimerModal(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                Image(
-                    painter = painterResource(id = R.drawable.doodle_focus),
-                    contentDescription = null,
-                    modifier = Modifier
-                        .size(140.dp)
-                        .padding(vertical = 4.dp),
-                    contentScale = ContentScale.Fit
+                PixiDoodle3D(
+                    resId = R.drawable.doodle_focus,
+                    size = 150.dp,
+                    modifier = Modifier.padding(vertical = 4.dp),
+                    yawDegrees = 18f,
+                    pitchDegrees = 12f,
+                    orbitSeconds = 5
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -137,21 +134,25 @@ fun FocusTimerModal(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     listOf(15 to "15m", 25 to "25m", 45 to "45m").forEach { (mins, label) ->
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(PixiPillShape)
-                                .background(MaterialTheme.colorScheme.primaryContainer)
-                                .clickable { onStart(mins) }
-                                .padding(vertical = 12.dp),
-                            contentAlignment = Alignment.Center
+                        PixiPopClickable(
+                            onClick = { onStart(mins) },
+                            modifier = Modifier.weight(1f)
                         ) {
-                            Text(
-                                text = label,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(PixiPillShape)
+                                    .background(MaterialTheme.colorScheme.primaryContainer)
+                                    .padding(vertical = 12.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = label,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
                         }
                     }
                 }

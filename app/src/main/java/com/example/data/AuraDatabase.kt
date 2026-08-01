@@ -15,7 +15,7 @@ import androidx.room.RoomDatabase
         DailyActivityEntity::class,
         NoteEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class AuraDatabase : RoomDatabase() {

@@ -34,6 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.example.data.AccountEntity
 import com.example.data.AccountType
 import com.example.data.Currencies
 
@@ -44,13 +45,59 @@ fun AddAccountDialog(
     onDismiss: () -> Unit,
     onAdd: (name: String, type: AccountType, balance: Double, creditLimit: Double, colorHex: String) -> Unit
 ) {
-    var name by remember { mutableStateOf("") }
-    var type by remember { mutableStateOf(AccountType.BANK) }
-    var balanceStr by remember { mutableStateOf("") }
-    var limitStr by remember { mutableStateOf("") }
+    AccountFormDialog(
+        currencyCode = currencyCode,
+        existing = null,
+        onDismiss = onDismiss,
+        onSave = { name, type, balance, limit, color ->
+            onAdd(name, type, balance, limit, color)
+        }
+    )
+}
+
+/**
+ * Create or edit bank / credit / wallet accounts.
+ * After an account is added, open this with [existing] to change balances, limits, and details.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun AccountFormDialog(
+    currencyCode: String,
+    existing: AccountEntity?,
+    onDismiss: () -> Unit,
+    onSave: (name: String, type: AccountType, balance: Double, creditLimit: Double, colorHex: String) -> Unit
+) {
+    val isEdit = existing != null
+    var name by remember(existing?.id) { mutableStateOf(existing?.name.orEmpty()) }
+    var type by remember(existing?.id) {
+        mutableStateOf(
+            existing?.accountType ?: AccountType.BANK
+        )
+    }
+    var balanceStr by remember(existing?.id) {
+        mutableStateOf(
+            existing?.balance?.takeIf { it != 0.0 }?.let { trimNum(it) }.orEmpty()
+        )
+    }
+    var limitStr by remember(existing?.id) {
+        mutableStateOf(
+            existing?.creditLimit?.takeIf { it > 0 }?.let { trimNum(it) }.orEmpty()
+        )
+    }
 
     val colors = listOf("#C4A8F5", "#67D4E8", "#34D399", "#FBBF24", "#FF6BA8", "#FFE566", "#9B7AE8")
-    var selectedColor by remember { mutableStateOf(colors[0]) }
+    var selectedColor by remember(existing?.id) {
+        mutableStateOf(
+            existing?.colorHex?.takeIf { it in colors } ?: colors[0]
+        )
+    }
+    // Preserve custom hex if not in palette
+    if (existing != null && existing.colorHex !in colors && selectedColor == colors[0] &&
+        existing.colorHex.isNotBlank()
+    ) {
+        // handled via initial selectedColor fallback above when in list
+    }
+
     val symbol = Currencies.symbolOf(currencyCode)
 
     val fieldColors = OutlinedTextFieldDefaults.colors(
@@ -64,7 +111,7 @@ fun AddAccountDialog(
         PixiCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .testTag("add_account_dialog")
+                .testTag(if (isEdit) "edit_account_dialog" else "add_account_dialog")
         ) {
             Column(
                 modifier = Modifier
@@ -78,7 +125,7 @@ fun AddAccountDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Add Account",
+                        text = if (isEdit) "Edit Account" else "Add Account",
                         style = MaterialTheme.typography.headlineSmall,
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -91,7 +138,7 @@ fun AddAccountDialog(
                     value = name,
                     onValueChange = { name = it },
                     label = { Text("Account name") },
-                    placeholder = { Text("e.g. Chase Checking, Wallet") },
+                    placeholder = { Text("e.g. Chase Checking, Amex") },
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("input_account_name"),
@@ -129,7 +176,15 @@ fun AddAccountDialog(
                 OutlinedTextField(
                     value = balanceStr,
                     onValueChange = { balanceStr = it },
-                    label = { Text("Starting balance ($symbol)") },
+                    label = {
+                        Text(
+                            if (type == AccountType.CREDIT_CARD) {
+                                "Amount currently owed ($symbol)"
+                            } else {
+                                "Balance ($symbol)"
+                            }
+                        )
+                    },
                     placeholder = { Text("0.00") },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -138,23 +193,38 @@ fun AddAccountDialog(
                     shape = PixiFieldShape,
                     colors = fieldColors
                 )
+                if (type == AccountType.CREDIT_CARD) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Debt on the card — not your credit limit.",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                OutlinedTextField(
-                    value = limitStr,
-                    onValueChange = { limitStr = it },
-                    label = { Text("Limit / credit cap (optional)") },
-                    placeholder = { Text("e.g. 2000 for credit card") },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("input_account_limit"),
-                    singleLine = true,
-                    shape = PixiFieldShape,
-                    colors = fieldColors
-                )
-
-                Spacer(modifier = Modifier.height(14.dp))
+                if (type == AccountType.CREDIT_CARD) {
+                    OutlinedTextField(
+                        value = limitStr,
+                        onValueChange = { limitStr = it },
+                        label = { Text("Credit limit ($symbol)") },
+                        placeholder = { Text("e.g. 2000") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("input_account_limit"),
+                        singleLine = true,
+                        shape = PixiFieldShape,
+                        colors = fieldColors
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Limit is never added to overall budget or net worth.",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
 
                 Text(
                     text = "Color",
@@ -167,11 +237,16 @@ fun AddAccountDialog(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    colors.forEach { hex ->
-                        val c = androidx.compose.ui.graphics.Color(
-                            android.graphics.Color.parseColor(hex)
-                        )
-                        val isSel = selectedColor == hex
+                    val palette = if (existing != null && existing.colorHex !in colors) {
+                        listOf(existing.colorHex) + colors
+                    } else colors
+                    palette.forEach { hex ->
+                        val c = runCatching {
+                            androidx.compose.ui.graphics.Color(
+                                android.graphics.Color.parseColor(hex)
+                            )
+                        }.getOrNull() ?: return@forEach
+                        val isSel = selectedColor.equals(hex, ignoreCase = true)
                         Box(
                             modifier = Modifier
                                 .size(if (isSel) 32.dp else 28.dp)
@@ -190,9 +265,9 @@ fun AddAccountDialog(
                 Spacer(modifier = Modifier.height(22.dp))
 
                 PixiPrimaryButton(
-                    text = "Create Account",
+                    text = if (isEdit) "Save Changes" else "Create Account",
                     onClick = {
-                        onAdd(
+                        onSave(
                             name.ifBlank { type.name.replace('_', ' ') },
                             type,
                             balanceStr.toDoubleOrNull() ?: 0.0,
@@ -200,11 +275,18 @@ fun AddAccountDialog(
                             selectedColor
                         )
                     },
-                    modifier = Modifier.testTag("submit_add_account_btn")
+                    modifier = Modifier.testTag(
+                        if (isEdit) "submit_edit_account_btn" else "submit_add_account_btn"
+                    )
                 )
             }
         }
     }
+}
+
+private fun trimNum(v: Double): String {
+    return if (v == v.toLong().toDouble()) v.toLong().toString()
+    else "%.2f".format(v).trimEnd('0').trimEnd('.')
 }
 
 @OptIn(ExperimentalLayoutApi::class)

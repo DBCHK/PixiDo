@@ -1,83 +1,83 @@
 package com.example.audio
 
 /**
- * Every interactive action maps to a unique sound fingerprint.
- * No two values share the same synthesis recipe.
+ * Every interactive action maps to a unique soft sound fingerprint.
+ * Recipes are subtle, sweet, slow, and low — pure sine, warm midrange.
  */
 enum class Sfx {
-    /** Soft wooden tick — generic light press */
+    /** Soft pillow tap — generic light press */
     TAP_SOFT,
 
-    /** Crisp UI click — chips, filters, secondary toggles */
+    /** Gentle glass click — chips, filters, secondary toggles */
     TAP_CRISP,
 
-    /** Deeper confirm — primary buttons / save */
+    /** Warm confirm hum — primary buttons / save */
     TAP_CONFIRM,
 
-    /** Airy open whoosh — dialogs open */
+    /** Slow airy open breath — dialogs open */
     DIALOG_OPEN,
 
-    /** Soft reverse whoosh — dialogs dismiss */
+    /** Soft settle close — dialogs dismiss */
     DIALOG_CLOSE,
 
-    /** Rising chime — create / add task */
+    /** Sweet rising third — create / add task */
     ADD_TASK,
 
-    /** Warm double-ping — create budget transaction */
+    /** Warm two-tone — create budget transaction */
     ADD_BUDGET,
 
-    /** Bright arpeggio up — create calendar event */
+    /** Gentle arpeggio — create calendar event */
     ADD_EVENT,
 
-    /** Sparkly triad — create goal */
+    /** Soft sparkle triad — create goal */
     ADD_GOAL,
 
-    /** Bank-card blip — create account */
+    /** Low bank-soft blip — create account */
     ADD_ACCOUNT,
 
-    /** Satisfying major chord — task marked done */
+    /** Satisfying soft major resolve — task marked done */
     TASK_COMPLETE,
 
-    /** Soft undo thud — task unchecked */
+    /** Soft undo sigh — task unchecked */
     TASK_UNDO,
 
-    /** Subtask tick — checkbox sub-item */
+    /** Tiny subtask tick — checkbox sub-item */
     SUBTASK_TOGGLE,
 
-    /** Paper tear — delete anything */
+    /** Soft paper hush — delete anything */
     DELETE,
 
-    /** Swipe filter select */
+    /** Filter select murmur */
     FILTER_SELECT,
 
-    /** Floating action button pop */
+    /** Soft FAB bloom */
     FAB,
 
-    /** Tab navigation — base; pitch offset applied at play */
+    /** Tab pad tone — pitch offset applied at play */
     TAB_SWITCH,
 
-    /** Profile sheet open */
+    /** Profile sheet lift */
     PROFILE_OPEN,
 
-    /** Profile saved */
+    /** Profile save soft chime */
     PROFILE_SAVE,
 
-    /** Theme swatch selected */
+    /** Theme cascade */
     THEME_CHANGE,
 
-    /** Currency / settings change */
+    /** Settings soft tick */
     SETTINGS_CHANGE,
 
-    /** Focus timer start */
+    /** Focus start breath */
     FOCUS_START,
 
-    /** Focus timer pause */
+    /** Focus pause hold */
     FOCUS_PAUSE,
 
-    /** Focus timer reset */
+    /** Focus reset settle */
     FOCUS_RESET,
 
-    /** Focus session finished */
+    /** Focus complete warm resolve */
     FOCUS_COMPLETE,
 
     /** Goal progress bump */
@@ -86,7 +86,7 @@ enum class Sfx {
     /** Goal fully completed */
     GOAL_COMPLETE,
 
-    /** Calendar day selected */
+    /** Calendar day select */
     DAY_SELECT,
 
     /** Event toggled complete */
@@ -98,9 +98,12 @@ enum class Sfx {
     /** Search field focus */
     SEARCH_FOCUS,
 
-    /** Success fanfare micro */
+    /** Success micro chime */
     SUCCESS,
 
-    /** Gentle error / invalid */
-    ERROR
+    /** Soft error murmur */
+    ERROR,
+
+    /** Slow sweet startup chime — splash intro */
+    SPLASH_INTRO
 }

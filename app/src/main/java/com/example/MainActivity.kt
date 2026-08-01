@@ -9,17 +9,14 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -33,8 +30,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -51,12 +51,15 @@ import com.example.ui.components.AddGoalDialog
 import com.example.ui.components.AddTaskDialog
 import com.example.ui.components.AuraBottomNavigation
 import com.example.ui.components.FocusTimerModal
+import com.example.ui.components.StartupSplash
 import com.example.ui.screens.BudgetScreen
 import com.example.ui.screens.CalendarScreen
 import com.example.ui.screens.GoalsScreen
 import com.example.ui.screens.ProfileDialog
 import com.example.ui.screens.TasksScreen
 import com.example.ui.theme.PixiDoTheme
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -105,9 +108,49 @@ fun PixiDoApp(viewModel: AuraViewModel = viewModel()) {
     var showAddBudgetDialog by remember { mutableStateOf(false) }
     var showAddEventDialog by remember { mutableStateOf(false) }
     var showAddGoalDialog by remember { mutableStateOf(false) }
+    var showSplash by remember { mutableStateOf(true) }
 
     val snackbarHostState = remember { SnackbarHostState() }
     val reduceMotion = profile.reduceMotion
+    val scope = rememberCoroutineScope()
+
+    // Soft scale-in of main content after splash
+    val contentAlpha by animateFloatAsState(
+        targetValue = if (showSplash) 0.0f else 1f,
+        animationSpec = tween(durationMillis = 380),
+        label = "contentAlpha"
+    )
+    val contentScale by animateFloatAsState(
+        targetValue = if (showSplash) 0.96f else 1f,
+        animationSpec = tween(durationMillis = 420),
+        label = "contentScale"
+    )
+
+    // Swipeable tabs (left / right)
+    val pagerState = rememberPagerState(
+        initialPage = selectedTab,
+        pageCount = { 4 }
+    )
+
+    // Bottom nav / code → pager
+    LaunchedEffect(selectedTab) {
+        if (pagerState.currentPage != selectedTab) {
+            if (reduceMotion) pagerState.scrollToPage(selectedTab)
+            else pagerState.animateScrollToPage(selectedTab)
+        }
+    }
+
+    // Swipe → selected tab
+    LaunchedEffect(pagerState) {
+        snapshotFlow { pagerState.settledPage }
+            .distinctUntilChanged()
+            .collect { page ->
+                if (page != selectedTab) {
+                    sound.playTab(page)
+                    viewModel.selectTab(page)
+                }
+            }
+    }
 
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -136,6 +179,19 @@ fun PixiDoApp(viewModel: AuraViewModel = viewModel()) {
         }
     }
 
+    fun selectTab(index: Int) {
+        if (index != selectedTab) {
+            sound.playTab(index)
+            viewModel.selectTab(index)
+            scope.launch {
+                if (reduceMotion) pagerState.scrollToPage(index)
+                else pagerState.animateScrollToPage(index)
+            }
+        } else {
+            sound.play(Sfx.TAP_SOFT)
+        }
+    }
+
     LaunchedEffect(snackbarMessage) {
         val msg = snackbarMessage ?: return@LaunchedEffect
         if (msg.contains("Focus complete", ignoreCase = true)) {
@@ -153,59 +209,46 @@ fun PixiDoApp(viewModel: AuraViewModel = viewModel()) {
         viewModel.clearSnackbar()
     }
 
-    Scaffold(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
-        containerColor = MaterialTheme.colorScheme.background,
-        snackbarHost = {
-            SnackbarHost(hostState = snackbarHostState) { data ->
-                Snackbar(
-                    snackbarData = data,
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    contentColor = MaterialTheme.colorScheme.onSurface,
-                    actionColor = MaterialTheme.colorScheme.primary,
-                    shape = RoundedCornerShape(16.dp)
-                )
-            }
-        },
-        bottomBar = {
-            AuraBottomNavigation(
-                selectedTab = selectedTab,
-                onTabSelected = { index ->
-                    if (index != selectedTab) {
-                        sound.playTab(index)
-                        viewModel.selectTab(index)
-                    } else {
-                        sound.play(Sfx.TAP_SOFT)
-                    }
-                },
-                onCenterAdd = { openAddForCurrentTab() }
-            )
-        }
-    ) { innerPadding ->
-        Box(
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .background(MaterialTheme.colorScheme.background)
-        ) {
-            AnimatedContent(
-                targetState = selectedTab,
-                transitionSpec = {
-                    if (reduceMotion) {
-                        fadeIn(tween(120)) togetherWith fadeOut(tween(120))
-                    } else {
-                        val dir = if (targetState > initialState) 1 else -1
-                        (slideInHorizontally(tween(240)) { it / 5 * dir } + fadeIn(tween(200)))
-                            .togetherWith(
-                                slideOutHorizontally(tween(200)) { -it / 6 * dir } + fadeOut(tween(160))
-                            )
-                    }
-                },
-                label = "tabContent"
-            ) { tab ->
-                when (tab) {
+                .graphicsLayer {
+                    alpha = contentAlpha
+                    scaleX = contentScale
+                    scaleY = contentScale
+                }
+                .background(MaterialTheme.colorScheme.background),
+            containerColor = MaterialTheme.colorScheme.background,
+            snackbarHost = {
+                SnackbarHost(hostState = snackbarHostState) { data ->
+                    Snackbar(
+                        snackbarData = data,
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        contentColor = MaterialTheme.colorScheme.onSurface,
+                        actionColor = MaterialTheme.colorScheme.primary,
+                        shape = RoundedCornerShape(50)
+                    )
+                }
+            },
+            bottomBar = {
+                AuraBottomNavigation(
+                    selectedTab = selectedTab,
+                    onTabSelected = { selectTab(it) },
+                    onCenterAdd = { openAddForCurrentTab() }
+                )
+            }
+        ) { innerPadding ->
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .background(MaterialTheme.colorScheme.background),
+                beyondViewportPageCount = 1,
+                userScrollEnabled = !showSplash
+            ) { page ->
+                when (page) {
                     0 -> TasksScreen(
                         tasks = tasks,
                         goals = goals,
@@ -244,6 +287,10 @@ fun PixiDoApp(viewModel: AuraViewModel = viewModel()) {
                         onAddAccount = { name, type, balance, limit, color ->
                             sound.play(Sfx.ADD_ACCOUNT)
                             viewModel.addAccount(name, type, balance, limit, color)
+                        },
+                        onEditAccount = { account ->
+                            sound.play(Sfx.SETTINGS_CHANGE)
+                            viewModel.updateAccount(account)
                         },
                         onDeleteAccount = {
                             sound.play(Sfx.DELETE)
@@ -304,6 +351,10 @@ fun PixiDoApp(viewModel: AuraViewModel = viewModel()) {
                 }
             }
         }
+
+        if (showSplash) {
+            StartupSplash(onFinished = { showSplash = false })
+        }
     }
 
     if (showAddTaskDialog) {
@@ -329,9 +380,11 @@ fun PixiDoApp(viewModel: AuraViewModel = viewModel()) {
                 sound.play(Sfx.DIALOG_CLOSE)
                 showAddBudgetDialog = false
             },
-            onAddBudgetItem = { title, amount, isExpense, category, note, accountId ->
+            onAddBudgetItem = { title, amount, isExpense, category, note, accountId, transactionType ->
                 sound.play(Sfx.ADD_BUDGET)
-                viewModel.addBudgetItem(title, amount, isExpense, category, note, accountId)
+                viewModel.addBudgetItem(
+                    title, amount, isExpense, category, note, accountId, transactionType
+                )
             }
         )
     }
@@ -390,14 +443,18 @@ fun PixiDoApp(viewModel: AuraViewModel = viewModel()) {
     }
 
     if (showProfile) {
+        val authBusy by viewModel.authBusy.collectAsStateWithLifecycle()
+        val backupBusy by viewModel.backupBusy.collectAsStateWithLifecycle()
         ProfileDialog(
             profile = profile,
+            authBusy = authBusy,
+            backupBusy = backupBusy,
             onDismiss = {
                 sound.play(Sfx.DIALOG_CLOSE)
                 viewModel.closeProfile()
             },
-            onSaveProfile = { name, bio, email, location ->
-                viewModel.updateProfile(name, bio, email, location)
+            onSaveName = { name ->
+                viewModel.updateProfile(name)
             },
             onAvatarPicked = { uri ->
                 sound.play(Sfx.TAP_CONFIRM)
@@ -412,9 +469,20 @@ fun PixiDoApp(viewModel: AuraViewModel = viewModel()) {
                 sound.play(Sfx.SETTINGS_CHANGE)
                 viewModel.setHapticsEnabled(it)
             },
-            onReduceMotionToggle = {
-                sound.play(Sfx.SETTINGS_CHANGE)
-                viewModel.setReduceMotion(it)
+            onGoogleSignIn = {
+                viewModel.signInWithGoogle(context)
+            },
+            onGoogleSignOut = {
+                viewModel.signOutGoogle()
+            },
+            onBackupFrequencyChange = { frequency ->
+                viewModel.setBackupFrequency(frequency)
+            },
+            onBackupNow = {
+                viewModel.backupNow()
+            },
+            onRestoreNow = {
+                viewModel.restoreFromCloud()
             }
         )
     }

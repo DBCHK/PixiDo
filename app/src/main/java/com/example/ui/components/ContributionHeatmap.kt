@@ -37,6 +37,7 @@ import com.example.ui.theme.HeatmapL3
 import com.example.ui.theme.HeatmapL3Light
 import com.example.ui.theme.HeatmapL4
 import com.example.ui.theme.HeatmapL4Light
+import com.example.ui.theme.rememberPixiDimens
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -51,6 +52,8 @@ fun ContributionHeatmap(
     modifier: Modifier = Modifier,
     weeks: Int = 17
 ) {
+    val d = rememberPixiDimens()
+    val cell = d.heatmapCell
     val isDark = MaterialTheme.colorScheme.background.red +
         MaterialTheme.colorScheme.background.green +
         MaterialTheme.colorScheme.background.blue < 1.5f
@@ -59,8 +62,9 @@ fun ContributionHeatmap(
         activity.associateBy { it.dateKey }
     }
 
-    val grid = remember(weeks) {
-        buildContributionGrid(weeks)
+    val weeksToShow = if (d.isCompact) 12 else weeks
+    val grid = remember(weeksToShow) {
+        buildContributionGrid(weeksToShow)
     }
 
     val totalCompletions = activity.sumOf { it.completedCount }
@@ -108,12 +112,12 @@ fun ContributionHeatmap(
                 horizontalArrangement = Arrangement.spacedBy(3.dp)
             ) {
                 grid.forEach { weekColumn ->
-                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         weekColumn.forEach { dayKey ->
                             val count = activityMap[dayKey]?.completedCount ?: 0
                             Box(
                                 modifier = Modifier
-                                    .size(12.dp)
+                                    .size(cell)
                                     .clip(RoundedCornerShape(3.dp))
                                     .background(heatmapColor(count, isDark))
                             )

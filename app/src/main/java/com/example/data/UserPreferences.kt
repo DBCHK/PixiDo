@@ -7,9 +7,11 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "pixido_prefs")
@@ -25,6 +27,12 @@ enum class AppThemeOption {
     MIDNIGHT
 }
 
+/** Cloud backup preference: automatic daily vs never. */
+enum class BackupFrequency {
+    EVERY_24_HOURS,
+    NEVER
+}
+
 data class UserProfile(
     val displayName: String = "",
     val bio: String = "",
@@ -38,8 +46,16 @@ data class UserProfile(
     val onboardingDone: Boolean = false,
     val soundEnabled: Boolean = true,
     val hapticsEnabled: Boolean = true,
-    val reduceMotion: Boolean = false
-)
+    val reduceMotion: Boolean = false,
+    // Google account + cloud backup
+    val googleUid: String = "",
+    val googleEmail: String = "",
+    val googlePhotoUrl: String = "",
+    val backupFrequency: BackupFrequency = BackupFrequency.EVERY_24_HOURS,
+    val lastBackupAt: Long = 0L
+) {
+    val isSignedIn: Boolean get() = googleUid.isNotBlank()
+}
 
 class UserPreferencesRepository(private val context: Context) {
 
@@ -57,27 +73,45 @@ class UserPreferencesRepository(private val context: Context) {
         val SOUND = booleanPreferencesKey("sound_enabled")
         val HAPTICS = booleanPreferencesKey("haptics_enabled")
         val REDUCE_MOTION = booleanPreferencesKey("reduce_motion")
+        val GOOGLE_UID = stringPreferencesKey("google_uid")
+        val GOOGLE_EMAIL = stringPreferencesKey("google_email")
+        val GOOGLE_PHOTO = stringPreferencesKey("google_photo_url")
+        val BACKUP_FREQUENCY = stringPreferencesKey("backup_frequency")
+        val LAST_BACKUP_AT = longPreferencesKey("last_backup_at")
     }
 
     val userProfile: Flow<UserProfile> = context.dataStore.data.map { prefs ->
-        UserProfile(
-            displayName = prefs[Keys.DISPLAY_NAME].orEmpty(),
-            bio = prefs[Keys.BIO].orEmpty(),
-            email = prefs[Keys.EMAIL].orEmpty(),
-            location = prefs[Keys.LOCATION].orEmpty(),
-            avatarUri = prefs[Keys.AVATAR_URI].orEmpty(),
-            themeOption = runCatching {
-                AppThemeOption.valueOf(prefs[Keys.THEME] ?: AppThemeOption.PIXIDO_LIGHT.name)
-            }.getOrDefault(AppThemeOption.PIXIDO_LIGHT),
-            currencyCode = prefs[Keys.CURRENCY] ?: "USD",
-            monthlyBudgetLimit = prefs[Keys.MONTHLY_BUDGET] ?: 0.0,
-            userXp = prefs[Keys.USER_XP] ?: 0,
-            onboardingDone = prefs[Keys.ONBOARDING] ?: false,
-            soundEnabled = prefs[Keys.SOUND] ?: true,
-            hapticsEnabled = prefs[Keys.HAPTICS] ?: true,
-            reduceMotion = prefs[Keys.REDUCE_MOTION] ?: false
-        )
+        prefs.toProfile()
     }
+
+    suspend fun currentProfile(): UserProfile = context.dataStore.data.first().toProfile()
+
+    private fun Preferences.toProfile(): UserProfile = UserProfile(
+        displayName = this[Keys.DISPLAY_NAME].orEmpty(),
+        bio = this[Keys.BIO].orEmpty(),
+        email = this[Keys.EMAIL].orEmpty(),
+        location = this[Keys.LOCATION].orEmpty(),
+        avatarUri = this[Keys.AVATAR_URI].orEmpty(),
+        themeOption = runCatching {
+            AppThemeOption.valueOf(this[Keys.THEME] ?: AppThemeOption.PIXIDO_LIGHT.name)
+        }.getOrDefault(AppThemeOption.PIXIDO_LIGHT),
+        currencyCode = this[Keys.CURRENCY] ?: "USD",
+        monthlyBudgetLimit = this[Keys.MONTHLY_BUDGET] ?: 0.0,
+        userXp = this[Keys.USER_XP] ?: 0,
+        onboardingDone = this[Keys.ONBOARDING] ?: false,
+        soundEnabled = this[Keys.SOUND] ?: true,
+        hapticsEnabled = this[Keys.HAPTICS] ?: true,
+        reduceMotion = this[Keys.REDUCE_MOTION] ?: false,
+        googleUid = this[Keys.GOOGLE_UID].orEmpty(),
+        googleEmail = this[Keys.GOOGLE_EMAIL].orEmpty(),
+        googlePhotoUrl = this[Keys.GOOGLE_PHOTO].orEmpty(),
+        backupFrequency = runCatching {
+            BackupFrequency.valueOf(
+                this[Keys.BACKUP_FREQUENCY] ?: BackupFrequency.EVERY_24_HOURS.name
+            )
+        }.getOrDefault(BackupFrequency.EVERY_24_HOURS),
+        lastBackupAt = this[Keys.LAST_BACKUP_AT] ?: 0L
+    )
 
     suspend fun updateProfile(
         displayName: String? = null,
@@ -92,6 +126,88 @@ class UserPreferencesRepository(private val context: Context) {
             email?.let { prefs[Keys.EMAIL] = it }
             location?.let { prefs[Keys.LOCATION] = it }
             avatarUri?.let { prefs[Keys.AVATAR_URI] = it }
+        }
+    }
+
+    suspend fun setGoogleAccount(
+        uid: String,
+        email: String,
+        displayName: String?,
+        photoUrl: String?
+    ) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.GOOGLE_UID] = uid
+            prefs[Keys.GOOGLE_EMAIL] = email
+            if (!displayName.isNullOrBlank()) {
+                prefs[Keys.DISPLAY_NAME] = displayName
+            }
+            if (!photoUrl.isNullOrBlank()) {
+                prefs[Keys.GOOGLE_PHOTO] = photoUrl
+                prefs[Keys.AVATAR_URI] = photoUrl
+            }
+            if (email.isNotBlank()) {
+                prefs[Keys.EMAIL] = email
+            }
+        }
+    }
+
+    suspend fun clearGoogleAccount() {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.GOOGLE_UID] = ""
+            prefs[Keys.GOOGLE_EMAIL] = ""
+            prefs[Keys.GOOGLE_PHOTO] = ""
+        }
+    }
+
+    suspend fun setBackupFrequency(frequency: BackupFrequency) {
+        context.dataStore.edit { it[Keys.BACKUP_FREQUENCY] = frequency.name }
+    }
+
+    suspend fun setLastBackupAt(millis: Long) {
+        context.dataStore.edit { it[Keys.LAST_BACKUP_AT] = millis }
+    }
+
+    /** Preferences map stored inside the cloud snapshot. */
+    suspend fun exportPreferencesMap(): Map<String, Any?> {
+        val p = currentProfile()
+        return mapOf(
+            "displayName" to p.displayName,
+            "bio" to p.bio,
+            "email" to p.email,
+            "location" to p.location,
+            "avatarUri" to p.avatarUri,
+            "themeOption" to p.themeOption.name,
+            "currencyCode" to p.currencyCode,
+            "monthlyBudgetLimit" to p.monthlyBudgetLimit,
+            "userXp" to p.userXp,
+            "onboardingDone" to p.onboardingDone,
+            "soundEnabled" to p.soundEnabled,
+            "hapticsEnabled" to p.hapticsEnabled,
+            "reduceMotion" to p.reduceMotion,
+            "backupFrequency" to p.backupFrequency.name
+        )
+    }
+
+    suspend fun importPreferencesMap(map: Map<String, Any?>) {
+        context.dataStore.edit { prefs ->
+            (map["displayName"] as? String)?.let { prefs[Keys.DISPLAY_NAME] = it }
+            (map["bio"] as? String)?.let { prefs[Keys.BIO] = it }
+            (map["email"] as? String)?.let { prefs[Keys.EMAIL] = it }
+            (map["location"] as? String)?.let { prefs[Keys.LOCATION] = it }
+            (map["avatarUri"] as? String)?.let { prefs[Keys.AVATAR_URI] = it }
+            (map["themeOption"] as? String)?.let { prefs[Keys.THEME] = it }
+            (map["currencyCode"] as? String)?.let { prefs[Keys.CURRENCY] = it }
+            when (val v = map["monthlyBudgetLimit"]) {
+                is Number -> prefs[Keys.MONTHLY_BUDGET] = v.toDouble()
+            }
+            when (val v = map["userXp"]) {
+                is Number -> prefs[Keys.USER_XP] = v.toInt()
+            }
+            (map["onboardingDone"] as? Boolean)?.let { prefs[Keys.ONBOARDING] = it }
+            (map["soundEnabled"] as? Boolean)?.let { prefs[Keys.SOUND] = it }
+            (map["hapticsEnabled"] as? Boolean)?.let { prefs[Keys.HAPTICS] = it }
+            (map["reduceMotion"] as? Boolean)?.let { prefs[Keys.REDUCE_MOTION] = it }
+            (map["backupFrequency"] as? String)?.let { prefs[Keys.BACKUP_FREQUENCY] = it }
         }
     }
 

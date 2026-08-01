@@ -1,20 +1,27 @@
 package com.example.ui
 
 import android.app.Application
+import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.auth.AuthResult
+import com.example.auth.GoogleAuthRepository
+import com.example.backup.BackupScheduler
 import com.example.data.AccountEntity
 import com.example.data.AccountType
 import com.example.data.AppThemeOption
 import com.example.data.AuraDatabase
 import com.example.data.AuraRepository
+import com.example.data.BackupFrequency
 import com.example.data.BudgetItemEntity
 import com.example.data.CalendarEventEntity
+import com.example.data.CloudBackupRepository
 import com.example.data.Currencies
 import com.example.data.DailyActivityEntity
 import com.example.data.GoalEntity
 import com.example.data.NoteEntity
 import com.example.data.TaskEntity
+import com.example.data.TransactionType
 import com.example.data.UserPreferencesRepository
 import com.example.data.UserProfile
 import com.example.notify.NotificationHelper
@@ -33,6 +40,8 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository: AuraRepository
     private val preferences: UserPreferencesRepository
+    private val cloudBackup: CloudBackupRepository
+    private val googleAuth: GoogleAuthRepository
 
     val tasks: StateFlow<List<TaskEntity>>
     val budgetItems: StateFlow<List<BudgetItemEntity>>
@@ -64,6 +73,12 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
     private val _snackbarMessage = MutableStateFlow<String?>(null)
     val snackbarMessage: StateFlow<String?> = _snackbarMessage.asStateFlow()
 
+    private val _authBusy = MutableStateFlow(false)
+    val authBusy: StateFlow<Boolean> = _authBusy.asStateFlow()
+
+    private val _backupBusy = MutableStateFlow(false)
+    val backupBusy: StateFlow<Boolean> = _backupBusy.asStateFlow()
+
     private var timerJob: Job? = null
     private var lastDeletedTask: TaskEntity? = null
 
@@ -71,6 +86,8 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
         val dao = AuraDatabase.getDatabase(application).auraDao()
         repository = AuraRepository(dao)
         preferences = UserPreferencesRepository(application)
+        cloudBackup = CloudBackupRepository(application, repository, preferences)
+        googleAuth = GoogleAuthRepository(application)
 
         tasks = repository.allTasks.stateIn(
             scope = viewModelScope,
@@ -124,6 +141,24 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
         _selectedCalendarDate.value = startOfDay(System.currentTimeMillis())
 
         NotificationHelper.ensureChannels(application)
+
+        // Re-apply backup schedule from saved prefs + hydrate Google session
+        viewModelScope.launch {
+            googleAuth.currentGoogleUser()?.let { user ->
+                preferences.setGoogleAccount(
+                    uid = user.uid,
+                    email = user.email,
+                    displayName = user.displayName,
+                    photoUrl = user.photoUrl
+                )
+            }
+            val profile = preferences.currentProfile()
+            BackupScheduler.apply(
+                application,
+                profile.backupFrequency,
+                profile.isSignedIn || googleAuth.isSignedIn
+            )
+        }
     }
 
     private fun startOfDay(millis: Long): Long {
@@ -165,9 +200,9 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
     // --- Profile / Preferences ---
     fun updateProfile(
         displayName: String,
-        bio: String,
-        email: String,
-        location: String
+        bio: String = "",
+        email: String = "",
+        location: String = ""
     ) {
         viewModelScope.launch {
             preferences.updateProfile(
@@ -188,6 +223,125 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
     fun setTheme(option: AppThemeOption) {
         viewModelScope.launch {
             preferences.setTheme(option)
+        }
+    }
+
+    // --- Google SSO + cloud backup ---
+
+    /**
+     * @param activityContext must be an Activity context for Credential Manager UI.
+     */
+    fun signInWithGoogle(activityContext: Context) {
+        viewModelScope.launch {
+            if (_authBusy.value) return@launch
+            _authBusy.value = true
+            try {
+                // Use activity-scoped auth for the credential UI
+                val auth = GoogleAuthRepository(activityContext)
+                when (val result = auth.signIn()) {
+                    is AuthResult.Success -> {
+                        preferences.setGoogleAccount(
+                            uid = result.user.uid,
+                            email = result.user.email,
+                            displayName = result.user.displayName,
+                            photoUrl = result.user.photoUrl
+                        )
+                        val sync = cloudBackup.syncOnSignIn()
+                        sync.onSuccess { msg ->
+                            _snackbarMessage.value = msg
+                        }.onFailure { e ->
+                            _snackbarMessage.value =
+                                "Signed in, but sync failed: ${e.message ?: "unknown error"}"
+                        }
+                        val profile = preferences.currentProfile()
+                        BackupScheduler.apply(
+                            appContext(),
+                            profile.backupFrequency,
+                            signedIn = true
+                        )
+                    }
+                    is AuthResult.Cancelled -> {
+                        // User dismissed the sheet — stay quiet
+                    }
+                    is AuthResult.Error -> {
+                        _snackbarMessage.value = result.message
+                    }
+                }
+            } finally {
+                _authBusy.value = false
+            }
+        }
+    }
+
+    fun signOutGoogle() {
+        viewModelScope.launch {
+            _authBusy.value = true
+            try {
+                googleAuth.signOut()
+                preferences.clearGoogleAccount()
+                BackupScheduler.apply(appContext(), BackupFrequency.NEVER, signedIn = false)
+                _snackbarMessage.value = "Signed out. Local data stays on this device."
+            } finally {
+                _authBusy.value = false
+            }
+        }
+    }
+
+    fun setBackupFrequency(frequency: BackupFrequency) {
+        viewModelScope.launch {
+            preferences.setBackupFrequency(frequency)
+            val profile = preferences.currentProfile()
+            BackupScheduler.apply(
+                appContext(),
+                frequency,
+                signedIn = profile.isSignedIn || googleAuth.isSignedIn
+            )
+            _snackbarMessage.value = when (frequency) {
+                BackupFrequency.EVERY_24_HOURS -> "Auto-backup every 24 hours enabled"
+                BackupFrequency.NEVER -> "Cloud backup turned off"
+            }
+        }
+    }
+
+    fun backupNow() {
+        viewModelScope.launch {
+            if (_backupBusy.value) return@launch
+            _backupBusy.value = true
+            try {
+                cloudBackup.backupNow().fold(
+                    onSuccess = {
+                        _snackbarMessage.value = "Backup saved to your Google account"
+                    },
+                    onFailure = { e ->
+                        _snackbarMessage.value = e.message ?: "Backup failed"
+                    }
+                )
+            } finally {
+                _backupBusy.value = false
+            }
+        }
+    }
+
+    fun restoreFromCloud() {
+        viewModelScope.launch {
+            if (_backupBusy.value) return@launch
+            _backupBusy.value = true
+            try {
+                cloudBackup.restoreIfAvailable().fold(
+                    onSuccess = { restored ->
+                        _snackbarMessage.value = if (restored) {
+                            "Data restored from Google account"
+                        } else {
+                            "No cloud backup found yet"
+                        }
+                    },
+                    onFailure = { e ->
+                        _snackbarMessage.value = e.message ?: "Restore failed"
+                    }
+                )
+            } finally {
+                _backupBusy.value = false
+            }
         }
     }
 
@@ -360,35 +514,34 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
         isExpense: Boolean,
         category: String,
         note: String,
-        accountId: Int? = null
+        accountId: Int? = null,
+        transactionType: TransactionType = if (isExpense) TransactionType.EXPENSE else TransactionType.INCOME
     ) {
         viewModelScope.launch {
+            val type = transactionType
+            val defaultTitle = type.displayName
             repository.addBudgetItem(
                 BudgetItemEntity(
-                    title = title.ifBlank { if (isExpense) "Expense" else "Income" },
+                    title = title.ifBlank { defaultTitle },
                     amount = amount,
-                    isExpense = isExpense,
+                    isExpense = type.decreasesAsset,
                     category = category,
                     note = note,
-                    accountId = accountId
+                    accountId = accountId,
+                    transactionType = type.name
                 )
             )
 
-            // Update linked account balance & usage
+            // Update linked account balance & credit utilization
             if (accountId != null) {
                 accounts.value.find { it.id == accountId }?.let { account ->
-                    val newBalance = if (isExpense) account.balance - amount else account.balance + amount
-                    val newUsage = if (isExpense) account.monthlyUsage + amount else account.monthlyUsage
-                    repository.updateAccount(
-                        account.copy(
-                            balance = newBalance,
-                            monthlyUsage = newUsage.coerceAtLeast(0.0)
-                        )
-                    )
+                    val updated = applyTransactionToAccount(account, type, amount, reverse = false)
+                    repository.updateAccount(updated)
                 }
             }
 
-            if (isExpense && category.contains("Savings", ignoreCase = true)) {
+            // Savings expenses can bump savings goals
+            if (type == TransactionType.EXPENSE && category.contains("Savings", ignoreCase = true)) {
                 goals.value.firstOrNull {
                     it.category.contains("Savings", ignoreCase = true) ||
                         it.category.contains("Travel", ignoreCase = true)
@@ -410,17 +563,55 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
             val item = budgetItems.value.find { it.id == itemId }
             if (item != null && item.accountId != null) {
                 accounts.value.find { it.id == item.accountId }?.let { account ->
-                    val restoredBalance =
-                        if (item.isExpense) account.balance + item.amount else account.balance - item.amount
-                    val restoredUsage =
-                        if (item.isExpense) (account.monthlyUsage - item.amount).coerceAtLeast(0.0)
-                        else account.monthlyUsage
-                    repository.updateAccount(
-                        account.copy(balance = restoredBalance, monthlyUsage = restoredUsage)
+                    val updated = applyTransactionToAccount(
+                        account,
+                        item.type,
+                        item.amount,
+                        reverse = true
                     )
+                    repository.updateAccount(updated)
                 }
             }
             repository.deleteBudgetItem(itemId)
+        }
+    }
+
+    /**
+     * Apply or reverse a transaction against an account.
+     *
+     * Credit cards: [AccountEntity.balance] = amount owed (debt). Credit limits never change.
+     * Asset accounts: balance = available funds.
+     */
+    private fun applyTransactionToAccount(
+        account: AccountEntity,
+        type: TransactionType,
+        amount: Double,
+        reverse: Boolean
+    ): AccountEntity {
+        val signed = if (reverse) -amount else amount
+        return if (account.isCreditCard) {
+            // Debt goes up on EXPENSE/LENT; down on INCOME (payment) / BORROW not typical
+            val debtDelta = when (type) {
+                TransactionType.EXPENSE, TransactionType.LENT -> signed
+                TransactionType.INCOME, TransactionType.BORROW -> -signed
+            }
+            val newDebt = (account.balance + debtDelta).coerceAtLeast(0.0)
+            // Utilization tracks debt against limit (limit itself never enters net worth)
+            account.copy(
+                balance = newDebt,
+                monthlyUsage = newDebt
+            )
+        } else {
+            val cashDelta = when (type) {
+                TransactionType.EXPENSE, TransactionType.LENT -> -signed
+                TransactionType.INCOME, TransactionType.BORROW -> signed
+            }
+            val newBalance = account.balance + cashDelta
+            val usageDelta = if (type == TransactionType.EXPENSE) signed else 0.0
+            account.copy(
+                balance = newBalance,
+                monthlyUsage = (account.monthlyUsage + usageDelta).coerceAtLeast(0.0)
+            )
         }
     }
 
@@ -436,13 +627,16 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val currency = userProfile.value.currencyCode
             val isFirst = accounts.value.isEmpty()
+            // Credit cards: balance = amount owed; limit is separate and never part of net worth
+            val isCard = type == AccountType.CREDIT_CARD
+            val owed = balance.coerceAtLeast(0.0)
             repository.addAccount(
                 AccountEntity(
                     name = name.ifBlank { type.name.replace('_', ' ') },
                     type = type.name,
-                    balance = balance,
-                    creditLimit = creditLimit,
-                    monthlyUsage = 0.0,
+                    balance = owed,
+                    creditLimit = if (isCard) creditLimit.coerceAtLeast(0.0) else 0.0,
+                    monthlyUsage = if (isCard) owed else 0.0,
                     currencyCode = currency,
                     colorHex = colorHex,
                     isPrimary = isFirst,

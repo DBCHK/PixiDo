@@ -28,18 +28,20 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.data.DailyActivityEntity
 import com.example.data.UserProfile
+import com.example.ui.theme.rememberPixiDimens
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
 /**
- * Compact tasks header: greeting + focus/profile, then GitHub-style activity heatmap.
- * Level / XP card intentionally removed.
+ * Soft Lilac tasks header (idea2):
+ * greeting + soft Focus chip + circular avatar, then activity heatmap.
  */
 @Composable
 fun DailyHeaderBanner(
@@ -50,7 +52,11 @@ fun DailyHeaderBanner(
     onOpenProfile: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val dateFormat = SimpleDateFormat("EEEE · MMM dd", Locale.getDefault())
+    val d = rememberPixiDimens()
+    val dateFormat = SimpleDateFormat(
+        if (d.isCompact) "EEE · MMM d" else "EEEE · MMM dd",
+        Locale.getDefault()
+    )
     val dateString = dateFormat.format(Date())
     val greetingName = profile.displayName.ifBlank { "there" }
 
@@ -62,102 +68,122 @@ fun DailyHeaderBanner(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f)) {
+            Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
                 Text(
                     text = dateString,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    fontSize = d.label,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1
                 )
-                Spacer(modifier = Modifier.height(2.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "Hey $greetingName",
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = MaterialTheme.colorScheme.onSurface
+                    fontSize = d.title,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
-                Text(
-                    text = "What will you crush today?",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                if (!d.isCompact) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "What will you finish today?",
+                        fontSize = d.caption,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
 
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(if (d.isCompact) 8.dp else 12.dp)
             ) {
-                Box(
-                    modifier = Modifier
-                        .testTag("focus_mode_button")
-                        .clip(PixiPillShape)
-                        .background(MaterialTheme.colorScheme.primaryContainer)
-                        .clickable { onOpenFocusMode() }
-                        .padding(horizontal = 12.dp, vertical = 10.dp)
+                PixiPopClickable(
+                    onClick = onOpenFocusMode,
+                    modifier = Modifier.testTag("focus_mode_button")
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Filled.LocalFireDepartment,
-                            contentDescription = "Focus Mode",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "Focus",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                    Box(
+                        modifier = Modifier
+                            .clip(PixiPillShape)
+                            .background(MaterialTheme.colorScheme.primaryContainer)
+                            .padding(
+                                horizontal = if (d.isCompact) 12.dp else 14.dp,
+                                vertical = if (d.isCompact) 9.dp else 11.dp
+                            )
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Filled.LocalFireDepartment,
+                                contentDescription = "Focus Mode",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(d.iconSm)
+                            )
+                            if (!d.isCompact) {
+                                Spacer(modifier = Modifier.width(5.dp))
+                                Text(
+                                    text = "Focus",
+                                    fontSize = d.caption,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
+                        }
                     }
                 }
 
-                Box(
-                    modifier = Modifier
-                        .testTag("profile_avatar_button")
-                        .size(48.dp)
-                        .clip(CircleShape)
-                        .border(2.5.dp, MaterialTheme.colorScheme.primary, CircleShape)
-                        .clickable { onOpenProfile() }
-                        .background(
-                            Brush.linearGradient(
-                                listOf(
-                                    MaterialTheme.colorScheme.primary,
-                                    MaterialTheme.colorScheme.secondary
-                                )
-                            )
-                        ),
-                    contentAlignment = Alignment.Center
+                PixiPopClickable(
+                    onClick = onOpenProfile,
+                    modifier = Modifier.testTag("profile_avatar_button")
                 ) {
-                    if (profile.avatarUri.isNotBlank()) {
-                        AsyncImage(
-                            model = profile.avatarUri,
-                            contentDescription = "Profile",
-                            modifier = Modifier
-                                .size(48.dp)
-                                .clip(CircleShape),
-                            contentScale = ContentScale.Crop
-                        )
-                    } else if (profile.displayName.isNotBlank()) {
-                        Text(
-                            text = profile.displayName.take(1).uppercase(),
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Black,
-                            color = MaterialTheme.colorScheme.onPrimary
-                        )
-                    } else {
-                        Icon(
-                            imageVector = Icons.Filled.Person,
-                            contentDescription = "Profile",
-                            tint = MaterialTheme.colorScheme.onPrimary,
-                            modifier = Modifier.size(24.dp)
-                        )
+                    Box(
+                        modifier = Modifier
+                            .size(d.avatar)
+                            .clip(CircleShape)
+                            .border(2.5.dp, MaterialTheme.colorScheme.primary, CircleShape)
+                            .background(
+                                Brush.linearGradient(
+                                    listOf(
+                                        MaterialTheme.colorScheme.primary,
+                                        MaterialTheme.colorScheme.primaryContainer
+                                    )
+                                )
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (profile.avatarUri.isNotBlank()) {
+                            AsyncImage(
+                                model = profile.avatarUri,
+                                contentDescription = "Profile",
+                                modifier = Modifier
+                                    .size(d.avatar)
+                                    .clip(CircleShape),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else if (profile.displayName.isNotBlank()) {
+                            Text(
+                                text = profile.displayName.take(1).uppercase(),
+                                fontSize = if (d.isCompact) 16.sp else 18.sp,
+                                fontWeight = FontWeight.Black,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Filled.Person,
+                                contentDescription = "Profile",
+                                tint = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.size(d.iconMd)
+                            )
+                        }
                     }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(d.listGap))
 
-        // GitHub-style contributions at the top of Tasks
         ContributionHeatmap(activity = activity)
     }
 }

@@ -43,6 +43,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.example.R
 import com.example.data.Currencies
 import com.example.data.GoalEntity
 import com.example.ui.components.PixiBadge
@@ -54,6 +55,8 @@ import com.example.ui.components.PixiFieldShape
 import com.example.ui.components.PixiPillShape
 import com.example.ui.components.PixiPrimaryButton
 import com.example.ui.components.PixiSectionLabel
+import com.example.ui.theme.rememberPixiDimens
+import androidx.compose.ui.text.style.TextOverflow
 
 @Composable
 fun GoalsScreen(
@@ -64,6 +67,7 @@ fun GoalsScreen(
     onOpenAddGoal: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val d = rememberPixiDimens()
     val completedCount = goals.count { it.isCompleted }
     val totalCount = goals.size
     val currencySymbol = Currencies.symbolOf(currencyCode)
@@ -78,8 +82,11 @@ fun GoalsScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 20.dp),
-            contentPadding = PaddingValues(bottom = 24.dp, top = 16.dp)
+                .padding(horizontal = d.screenHorizontal),
+            contentPadding = PaddingValues(
+                bottom = d.screenVertical + 8.dp,
+                top = d.screenVertical
+            )
         ) {
             item {
                 PixiCard(
@@ -99,21 +106,25 @@ fun GoalsScreen(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = "Goals",
-                                style = MaterialTheme.typography.headlineMedium,
-                                color = MaterialTheme.colorScheme.onSurface
+                                fontSize = d.title,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 text = if (totalCount == 0) "Start with your first milestone"
                                 else "$completedCount of $totalCount completed · $currencyCode",
-                                fontSize = 13.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                fontSize = d.caption,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
 
                         Box(
                             modifier = Modifier
-                                .size(56.dp)
+                                .size(if (d.isCompact) 48.dp else 56.dp)
                                 .clip(CircleShape)
                                 .background(MaterialTheme.colorScheme.primary),
                             contentAlignment = Alignment.Center
@@ -122,12 +133,12 @@ fun GoalsScreen(
                                 imageVector = Icons.Filled.EmojiEvents,
                                 contentDescription = "Trophy",
                                 tint = MaterialTheme.colorScheme.onPrimary,
-                                modifier = Modifier.size(28.dp)
+                                modifier = Modifier.size(if (d.isCompact) 24.dp else 28.dp)
                             )
                         }
                     }
                 }
-                Spacer(modifier = Modifier.height(18.dp))
+                Spacer(modifier = Modifier.height(d.sectionGap))
             }
 
             item {
@@ -140,6 +151,7 @@ fun GoalsScreen(
                     PixiEmptyState(
                         title = "No goals yet",
                         subtitle = "Tap the yellow + to set your first milestone",
+                        doodleRes = R.drawable.doodle_goals,
                         actionLabel = "Add a goal",
                         onAction = onOpenAddGoal
                     )
@@ -230,7 +242,9 @@ fun GoalCardItem(
                 text = goal.title,
                 fontSize = 17.sp,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
             )
 
             Spacer(modifier = Modifier.height(12.dp))

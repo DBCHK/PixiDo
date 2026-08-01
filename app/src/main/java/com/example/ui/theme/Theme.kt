@@ -38,7 +38,11 @@ private val PixiDoLightScheme = lightColorScheme(
     error = PixiCoral,
     onError = Color.White,
     errorContainer = Color(0xFFFFE4E8),
-    onErrorContainer = Color(0xFF8B1E2D)
+    onErrorContainer = Color(0xFF8B1E2D),
+    inverseSurface = Color(0xFF2A2436),
+    inverseOnSurface = Color(0xFFF5F3FA),
+    inversePrimary = PixiLavenderSoft,
+    surfaceTint = PixiLavender
 )
 
 /** Soft Lilac dark — same language, night surfaces. */
@@ -60,7 +64,8 @@ private val PixiDoDarkScheme = darkColorScheme(
     onSurface = PixiDarkOnBg,
     onSurfaceVariant = PixiDarkMuted,
     outline = PixiDarkBorder,
-    error = PixiCoral
+    error = PixiCoral,
+    surfaceTint = PixiLavender
 )
 
 private val OceanScheme = darkColorScheme(

@@ -58,10 +58,11 @@ Track todos, accounts & spending, calendar blocks, and life goals — all in one
 - Milestone tracking that stays empty until you create
 
 ### 👤 You, personalized
-- Profile name, bio, email, location  
-- Profile picture  
+- Simple profile · display name · avatar  
+- **Google Sign-In (SSO)** · cloud restore after reinstall  
+- **Cloud backup** every 24 hours **or** never  
 - **8 themes** including **Material You**  
-- Sound, haptics & reduce-motion toggles  
+- Sound & haptics toggles  
 - Quick notes with pin + colors
 
     </td>
@@ -69,7 +70,7 @@ Track todos, accounts & spending, calendar blocks, and life goals — all in one
 </table>
 
 ### 🔊 Sound design
-Every interaction has its **own** procedural sound — tabs, completes, deletes, FABs, focus sessions, theme changes, and more. No two actions share the same chime.
+Every interaction has its **own** soft procedural tone — subtle, sweet, slow, and low. Pure sine recipes for taps, completes, deletes, FABs, focus sessions, theme changes, and more. No retro beeps.
 
 ### 📊 Momentum
 - Stats strip: **Pending · Done · Today · Streak**  
@@ -189,8 +190,16 @@ PixiDo/
 │  focus timer │   │  cashflow    │   │              │   │              │
 └──────┬───────┘   └──────────────┘   └──────────────┘   └──────────────┘
        │
-       └── Profile  →  avatar · details · themes · sound / haptics
+       └── Profile  →  Google SSO · backup · themes · sound / haptics
 ```
+
+### Google account & backup setup
+1. Add `app/google-services.json` from your Firebase project (package `com.aistudio.aura.lifeorganizer.v1`).
+2. Enable **Authentication → Google** and **Cloud Firestore** in Firebase Console.
+3. Optionally set `GOOGLE_WEB_CLIENT_ID` in `.env` (Web client OAuth ID).
+4. On first Google sign-in, existing cloud data is restored; otherwise a first backup is uploaded.
+5. Choose **Every 24 hours** or **Don't backup** in Profile.
+
 
 ---
 

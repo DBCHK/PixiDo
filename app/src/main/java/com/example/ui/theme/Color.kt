@@ -4,29 +4,31 @@ import androidx.compose.ui.graphics.Color
 
 // ─────────────────────────────────────────────────────────────
 // Soft Lilac design system — 1:1 with idea2 reference screenshots
-// Clean white surfaces · pastel lavender primary · yellow FAB · pink accents
+// Pure white surfaces · pastel lavender primary · yellow FAB · pink accents
+// Clean, airy, friendly — no harsh neo-brutalist edges
 // ─────────────────────────────────────────────────────────────
 
-// Brand accents
-val PixiLavender = Color(0xFFC4A8F5)
-val PixiLavenderDeep = Color(0xFF9B7AE8)
-val PixiLavenderSoft = Color(0xFFEDE4FF)
-val PixiLavenderMist = Color(0xFFF5F0FF)
-val PixiPink = Color(0xFFFF6BA8)
+// Brand accents (sampled from idea2)
+val PixiLavender = Color(0xFFC4A8F5)       // Primary CTA fill
+val PixiLavenderDeep = Color(0xFF9B7AE8)   // Emphasis / selected text
+val PixiLavenderMid = Color(0xFFD4C4F8)    // Soft secondary buttons
+val PixiLavenderSoft = Color(0xFFEDE4FF)   // Primary containers / chips unselected
+val PixiLavenderMist = Color(0xFFF7F3FF)   // Soft tinted backgrounds
+val PixiPink = Color(0xFFFF6BA8)           // Selected list highlight
 val PixiPinkSoft = Color(0xFFFFE0EE)
-val PixiYellow = Color(0xFFFFE566)
+val PixiYellow = Color(0xFFFFE566)         // Center FAB
 val PixiYellowDeep = Color(0xFFFFD84D)
 val PixiMint = Color(0xFF6EE7B7)
 val PixiCoral = Color(0xFFFF7A8A)
 
-// Light surfaces (reference default)
-val PixiLightBg = Color(0xFFF7F7F8)
+// Light surfaces (reference default — pure white, airy)
+val PixiLightBg = Color(0xFFFFFFFF)
 val PixiLightSurface = Color(0xFFFFFFFF)
-val PixiLightSurfaceVariant = Color(0xFFF0EEF5)
-val PixiLightBorder = Color(0xFFEBEBEF)
+val PixiLightSurfaceVariant = Color(0xFFF3F1F7)
+val PixiLightBorder = Color(0xFFEDEBF2)
 val PixiLightOnBg = Color(0xFF1C1C1E)
 val PixiLightMuted = Color(0xFF8E8E9A)
-val PixiLightChip = Color(0xFFF2F1F6)
+val PixiLightChip = Color(0xFFF0EDF6)
 val PixiLightSearch = Color(0xFFF3F3F6)
 
 // Dark surfaces (soft dark companion of the same language)
@@ -76,7 +78,7 @@ val HeatmapL2 = Color(0xFF6B4FA8)
 val HeatmapL3 = Color(0xFF9B7AE8)
 val HeatmapL4 = Color(0xFFC4A8F5)
 
-val HeatmapEmptyLight = Color(0xFFF0EEF5)
+val HeatmapEmptyLight = Color(0xFFF3F1F7)
 val HeatmapL1Light = Color(0xFFEDE4FF)
 val HeatmapL2Light = Color(0xFFD4C4F5)
 val HeatmapL3Light = Color(0xFFB8A0F0)

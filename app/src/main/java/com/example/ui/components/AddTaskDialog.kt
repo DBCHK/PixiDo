@@ -1,6 +1,5 @@
 package com.example.ui.components
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -23,9 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -99,6 +96,7 @@ fun AddTaskDialog(
                     Text(
                         text = "New Task",
                         style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     PixiCloseButton(
@@ -107,15 +105,22 @@ fun AddTaskDialog(
                     )
                 }
 
-                Image(
-                    painter = painterResource(id = R.drawable.doodle_add_task),
-                    contentDescription = null,
+                PixiDoodle3D(
+                    resId = R.drawable.doodle_tasks,
+                    size = 110.dp,
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(110.dp)
-                        .padding(vertical = 8.dp)
+                        .padding(vertical = 10.dp)
                         .align(Alignment.CenterHorizontally),
-                    contentScale = ContentScale.Fit
+                    orbitSeconds = 8
+                )
+
+                Text(
+                    text = "What do you want to get done?",
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .padding(bottom = 12.dp)
+                        .align(Alignment.CenterHorizontally)
                 )
 
                 OutlinedTextField(
@@ -264,6 +269,7 @@ fun AddTaskDialog(
 
                             val displayTime = ReminderScheduler.formatTime(dueMillis)
                             val dayLabel = dayPresets.find { it.first == dayOffset }?.second ?: "Today"
+                            // Keep a short, single-line friendly label for task cards
                             val dueLabel = "$dayLabel · $displayTime"
 
                             onAddTask(

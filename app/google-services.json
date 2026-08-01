@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "485997818239",
+    "project_id": "pixido-a-todo-app",
+    "storage_bucket": "pixido-a-todo-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:485997818239:android:b92c8fcf74b85b1bb46a4a",
+        "android_client_info": {
+          "package_name": "com.aistudio.aura.lifeorganizer.v1"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "485997818239-2afqgavvg56c03601qpa5vcqdk4m8472.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCh4WTRTuuy7UFmzQUlu6R6Osf7Joo-7Zc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "485997818239-2afqgavvg56c03601qpa5vcqdk4m8472.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

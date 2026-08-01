@@ -37,6 +37,36 @@ class AuraRepository(private val dao: AuraDao) {
     suspend fun updateNote(note: NoteEntity) = dao.updateNote(note)
     suspend fun deleteNote(noteId: Int) = dao.deleteNoteById(noteId)
 
+    /** Snapshot of all Room tables for cloud backup. */
+    suspend fun exportSnapshot(): AppDataSnapshot = AppDataSnapshot(
+        tasks = dao.getTasksOnce(),
+        budgetItems = dao.getBudgetItemsOnce(),
+        calendarEvents = dao.getCalendarEventsOnce(),
+        goals = dao.getGoalsOnce(),
+        accounts = dao.getAccountsOnce(),
+        dailyActivity = dao.getDailyActivityOnce(),
+        notes = dao.getNotesOnce()
+    )
+
+    /** Replace local Room data with a cloud snapshot (full restore). */
+    suspend fun importSnapshot(snapshot: AppDataSnapshot) {
+        dao.clearTasks()
+        dao.clearBudgetItems()
+        dao.clearCalendarEvents()
+        dao.clearGoals()
+        dao.clearAccounts()
+        dao.clearDailyActivity()
+        dao.clearNotes()
+
+        if (snapshot.tasks.isNotEmpty()) dao.insertTasks(snapshot.tasks)
+        if (snapshot.budgetItems.isNotEmpty()) dao.insertBudgetItems(snapshot.budgetItems)
+        if (snapshot.calendarEvents.isNotEmpty()) dao.insertCalendarEvents(snapshot.calendarEvents)
+        if (snapshot.goals.isNotEmpty()) dao.insertGoals(snapshot.goals)
+        if (snapshot.accounts.isNotEmpty()) dao.insertAccounts(snapshot.accounts)
+        if (snapshot.dailyActivity.isNotEmpty()) dao.insertDailyActivities(snapshot.dailyActivity)
+        if (snapshot.notes.isNotEmpty()) dao.insertNotes(snapshot.notes)
+    }
+
     /**
      * Record a completed task toward the GitHub-style contribution heatmap.
      */
@@ -67,3 +97,14 @@ class AuraRepository(private val dao: AuraDao) {
         }
     }
 }
+
+/** Portable dump of all user-generated Room data. */
+data class AppDataSnapshot(
+    val tasks: List<TaskEntity> = emptyList(),
+    val budgetItems: List<BudgetItemEntity> = emptyList(),
+    val calendarEvents: List<CalendarEventEntity> = emptyList(),
+    val goals: List<GoalEntity> = emptyList(),
+    val accounts: List<AccountEntity> = emptyList(),
+    val dailyActivity: List<DailyActivityEntity> = emptyList(),
+    val notes: List<NoteEntity> = emptyList()
+)

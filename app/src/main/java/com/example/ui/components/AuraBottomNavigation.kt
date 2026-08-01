@@ -1,9 +1,7 @@
 package com.example.ui.components
 
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -37,12 +35,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.ui.theme.rememberPixiDimens
 
 data class NavigationTab(
     val title: String,
@@ -62,8 +62,9 @@ val pixiDoTabs = listOf(
 val auraTabs = pixiDoTabs
 
 /**
- * Soft Lilac bottom bar matching the reference:
- *  [Tasks] [Budget]  [yellow +]  [Calendar] [Goals]
+ * Soft Lilac bottom bar matching idea2:
+ *  floating soft bar · [Tasks] [Budget]  [yellow +]  [Calendar] [Goals]
+ *  selected tab = lavender circle, unselected = muted outline icons
  */
 @Composable
 fun AuraBottomNavigation(
@@ -72,52 +73,75 @@ fun AuraBottomNavigation(
     onCenterAdd: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val d = rememberPixiDimens()
+    val iconCircle = if (d.isCompact) 36.dp else 42.dp
+    val iconSize = if (d.isCompact) 18.dp else 22.dp
+    val labelSize = if (d.isCompact) 9.sp else 10.sp
+    val fabSize = d.fab
+
     Surface(
         modifier = modifier
             .fillMaxWidth()
             .navigationBarsPadding(),
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 0.dp,
-        shadowElevation = 12.dp,
+        shadowElevation = 16.dp,
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 10.dp),
+                .padding(
+                    horizontal = if (d.isCompact) 6.dp else 10.dp,
+                    vertical = if (d.isCompact) 8.dp else 12.dp
+                ),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Left pair: Tasks (0), Budget (1)
             NavItem(
                 tab = pixiDoTabs[0],
                 selected = selectedTab == 0,
-                onClick = { onTabSelected(0) }
+                onClick = { onTabSelected(0) },
+                iconCircle = iconCircle,
+                iconSize = iconSize,
+                labelSize = labelSize,
+                compact = d.isCompact
             )
             NavItem(
                 tab = pixiDoTabs[1],
                 selected = selectedTab == 1,
-                onClick = { onTabSelected(1) }
+                onClick = { onTabSelected(1) },
+                iconCircle = iconCircle,
+                iconSize = iconSize,
+                labelSize = labelSize,
+                compact = d.isCompact
             )
 
-            // Center yellow + FAB
             PixiYellowFab(
                 onClick = onCenterAdd,
+                size = fabSize,
                 modifier = Modifier
                     .padding(horizontal = 4.dp)
                     .testTag("center_add_fab")
             )
 
-            // Right pair: Calendar (2), Goals (3)
             NavItem(
                 tab = pixiDoTabs[2],
                 selected = selectedTab == 2,
-                onClick = { onTabSelected(2) }
+                onClick = { onTabSelected(2) },
+                iconCircle = iconCircle,
+                iconSize = iconSize,
+                labelSize = labelSize,
+                compact = d.isCompact
             )
             NavItem(
                 tab = pixiDoTabs[3],
                 selected = selectedTab == 3,
-                onClick = { onTabSelected(3) }
+                onClick = { onTabSelected(3) },
+                iconCircle = iconCircle,
+                iconSize = iconSize,
+                labelSize = labelSize,
+                compact = d.isCompact
             )
         }
     }
@@ -127,14 +151,23 @@ fun AuraBottomNavigation(
 private fun NavItem(
     tab: NavigationTab,
     selected: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    iconCircle: androidx.compose.ui.unit.Dp,
+    iconSize: androidx.compose.ui.unit.Dp,
+    labelSize: androidx.compose.ui.unit.TextUnit,
+    compact: Boolean
 ) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.9f else 1f,
-        animationSpec = spring(stiffness = Spring.StiffnessHigh),
+        targetValue = if (pressed) 0.90f else 1f,
+        animationSpec = PixiSnappySpring,
         label = "tabScale"
+    )
+    val selectBoost by animateFloatAsState(
+        targetValue = if (selected) 1.05f else 1f,
+        animationSpec = PixiSnappySpring,
+        label = "tabSelectBoost"
     )
     val iconColor by animateColorAsState(
         targetValue = if (selected) MaterialTheme.colorScheme.onPrimary
@@ -146,43 +179,54 @@ private fun NavItem(
         else MaterialTheme.colorScheme.onSurfaceVariant,
         label = "tabLabelColor"
     )
+    val circleBg by animateColorAsState(
+        targetValue = if (selected) MaterialTheme.colorScheme.primary
+        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0f),
+        label = "tabCircleBg"
+    )
 
     Column(
         modifier = Modifier
             .testTag(tab.testTag)
-            .scale(scale)
-            .clip(RoundedCornerShape(16.dp))
+            .graphicsLayer {
+                val s = scale * selectBoost
+                scaleX = s
+                scaleY = s
+            }
+            .clip(RoundedCornerShape(18.dp))
             .clickable(
                 interactionSource = interaction,
                 indication = null,
                 onClick = onClick
             )
-            .padding(horizontal = 8.dp, vertical = 4.dp),
+            .padding(
+                horizontal = if (compact) 4.dp else 8.dp,
+                vertical = 4.dp
+            ),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(
             modifier = Modifier
-                .size(40.dp)
+                .size(iconCircle)
                 .clip(CircleShape)
-                .background(
-                    if (selected) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0f)
-                ),
+                .background(circleBg),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = if (selected) tab.selectedIcon else tab.unselectedIcon,
                 contentDescription = tab.title,
                 tint = iconColor,
-                modifier = Modifier.size(22.dp)
+                modifier = Modifier.size(iconSize)
             )
         }
         Text(
             text = tab.title,
-            fontSize = 10.sp,
+            fontSize = labelSize,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
             color = labelColor,
-            modifier = Modifier.padding(top = 2.dp)
+            maxLines = 1,
+            overflow = TextOverflow.Clip,
+            modifier = Modifier.padding(top = 3.dp)
         )
     }
 }

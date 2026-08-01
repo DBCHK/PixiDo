@@ -18,16 +18,21 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.CloudDone
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -40,10 +45,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -52,32 +59,49 @@ import coil.compose.AsyncImage
 import com.example.audio.LocalSoundEngine
 import com.example.audio.Sfx
 import com.example.data.AppThemeOption
+import com.example.data.BackupFrequency
 import com.example.data.UserProfile
 import com.example.ui.components.PixiCard
 import com.example.ui.components.PixiCardShapeSm
 import com.example.ui.components.PixiCloseButton
 import com.example.ui.components.PixiFieldShape
+import com.example.ui.components.PixiOutlineButton
+import com.example.ui.components.PixiPillShape
 import com.example.ui.components.PixiPrimaryButton
-import com.example.ui.theme.description
+import com.example.ui.components.PixiSecondaryButton
 import com.example.ui.theme.displayName
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
+/**
+ * Simplified profile sheet:
+ *  - Avatar + display name
+ *  - Google SSO (restore on reinstall)
+ *  - Cloud backup: every 24h OR never
+ *  - Sound / haptics
+ *  - Compact theme picker
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ProfileDialog(
     profile: UserProfile,
+    authBusy: Boolean = false,
+    backupBusy: Boolean = false,
     onDismiss: () -> Unit,
-    onSaveProfile: (name: String, bio: String, email: String, location: String) -> Unit,
+    onSaveName: (name: String) -> Unit,
     onAvatarPicked: (String) -> Unit,
     onThemeSelected: (AppThemeOption) -> Unit,
     onSoundToggle: (Boolean) -> Unit = {},
     onHapticsToggle: (Boolean) -> Unit = {},
-    onReduceMotionToggle: (Boolean) -> Unit = {}
+    onGoogleSignIn: () -> Unit = {},
+    onGoogleSignOut: () -> Unit = {},
+    onBackupFrequencyChange: (BackupFrequency) -> Unit = {},
+    onBackupNow: () -> Unit = {},
+    onRestoreNow: () -> Unit = {}
 ) {
     val sound = LocalSoundEngine.current
     var name by remember(profile.displayName) { mutableStateOf(profile.displayName) }
-    var bio by remember(profile.bio) { mutableStateOf(profile.bio) }
-    var email by remember(profile.email) { mutableStateOf(profile.email) }
-    var location by remember(profile.location) { mutableStateOf(profile.location) }
 
     val context = LocalContext.current
     val imagePicker = rememberLauncherForActivityResult(
@@ -101,6 +125,13 @@ fun ProfileDialog(
         unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
     )
 
+    val avatarModel = profile.avatarUri.ifBlank { profile.googlePhotoUrl }
+    val lastBackupLabel = remember(profile.lastBackupAt) {
+        if (profile.lastBackupAt <= 0L) "Never"
+        else SimpleDateFormat("MMM d · h:mm a", Locale.getDefault())
+            .format(Date(profile.lastBackupAt))
+    }
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -114,16 +145,18 @@ fun ProfileDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
-                    .padding(24.dp)
+                    .padding(22.dp)
             ) {
+                // Header
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Your Profile",
+                        text = "Profile",
                         style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     PixiCloseButton(
@@ -138,27 +171,27 @@ fun ProfileDialog(
                 Box(
                     modifier = Modifier
                         .align(Alignment.CenterHorizontally)
-                        .size(100.dp)
+                        .size(88.dp)
                         .clip(CircleShape)
-                        .border(3.dp, MaterialTheme.colorScheme.primary, CircleShape)
+                        .border(2.5.dp, MaterialTheme.colorScheme.primary, CircleShape)
                         .clickable { imagePicker.launch(arrayOf("image/*")) }
                         .background(
                             Brush.linearGradient(
                                 listOf(
                                     MaterialTheme.colorScheme.primary,
-                                    MaterialTheme.colorScheme.secondary
+                                    MaterialTheme.colorScheme.primaryContainer
                                 )
                             )
                         )
                         .testTag("profile_avatar_picker"),
                     contentAlignment = Alignment.Center
                 ) {
-                    if (profile.avatarUri.isNotBlank()) {
+                    if (avatarModel.isNotBlank()) {
                         AsyncImage(
-                            model = profile.avatarUri,
+                            model = avatarModel,
                             contentDescription = "Avatar",
                             modifier = Modifier
-                                .size(100.dp)
+                                .size(88.dp)
                                 .clip(CircleShape),
                             contentScale = ContentScale.Crop
                         )
@@ -167,37 +200,12 @@ fun ProfileDialog(
                             imageVector = Icons.Filled.Person,
                             contentDescription = "Avatar",
                             tint = MaterialTheme.colorScheme.onPrimary,
-                            modifier = Modifier.size(48.dp)
-                        )
-                    }
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .size(30.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primary)
-                            .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.CameraAlt,
-                            contentDescription = "Change photo",
-                            tint = MaterialTheme.colorScheme.onPrimary,
-                            modifier = Modifier.size(14.dp)
+                            modifier = Modifier.size(40.dp)
                         )
                     }
                 }
 
-                Text(
-                    text = "Tap to set profile picture",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier
-                        .align(Alignment.CenterHorizontally)
-                        .padding(top = 8.dp)
-                )
-
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
                 OutlinedTextField(
                     value = name,
@@ -212,102 +220,189 @@ fun ProfileDialog(
                     colors = fieldColors
                 )
 
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(18.dp))
 
-                OutlinedTextField(
-                    value = bio,
-                    onValueChange = { bio = it },
-                    label = { Text("Bio") },
-                    placeholder = { Text("Short intro about you") },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("input_profile_bio"),
-                    minLines = 2,
-                    shape = PixiFieldShape,
-                    colors = fieldColors
-                )
+                // ── Google account ───────────────────────────────────
+                SectionLabel("Google account")
+                Spacer(modifier = Modifier.height(8.dp))
 
-                Spacer(modifier = Modifier.height(10.dp))
+                if (profile.isSignedIn) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(PixiCardShapeSm)
+                            .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f))
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primary),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (profile.googlePhotoUrl.isNotBlank()) {
+                                AsyncImage(
+                                    model = profile.googlePhotoUrl,
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(CircleShape),
+                                    contentScale = ContentScale.Crop
+                                )
+                            } else {
+                                Text(
+                                    text = (profile.googleEmail.ifBlank { "G" })
+                                        .take(1)
+                                        .uppercase(),
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimary
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Signed in",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = profile.googleEmail.ifBlank { profile.email },
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                    PixiOutlineButton(
+                        text = if (authBusy) "Signing out…" else "Sign out",
+                        onClick = {
+                            if (!authBusy) {
+                                sound.play(Sfx.SETTINGS_CHANGE)
+                                onGoogleSignOut()
+                            }
+                        },
+                        modifier = Modifier.testTag("google_sign_out_btn")
+                    )
+                } else {
+                    Text(
+                        text = "Sign in so tasks, budget, calendar & goals restore after reinstall.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    GoogleSignInButton(
+                        busy = authBusy,
+                        onClick = {
+                            sound.play(Sfx.TAP_CONFIRM)
+                            onGoogleSignIn()
+                        }
+                    )
+                }
 
-                OutlinedTextField(
-                    value = email,
-                    onValueChange = { email = it },
-                    label = { Text("Email") },
-                    placeholder = { Text("you@email.com") },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("input_profile_email"),
-                    singleLine = true,
-                    shape = PixiFieldShape,
-                    colors = fieldColors
-                )
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                OutlinedTextField(
-                    value = location,
-                    onValueChange = { location = it },
-                    label = { Text("Location") },
-                    placeholder = { Text("City, Country") },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("input_profile_location"),
-                    singleLine = true,
-                    shape = PixiFieldShape,
-                    colors = fieldColors
-                )
-
-                Spacer(modifier = Modifier.height(22.dp))
-
+                // ── Cloud backup ─────────────────────────────────────
+                Spacer(modifier = Modifier.height(20.dp))
+                SectionLabel("Cloud backup")
+                Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = "Feedback",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = "Unique sounds for every action · optional haptics",
-                    style = MaterialTheme.typography.bodySmall,
+                    text = if (profile.isSignedIn) {
+                        "Last backup · $lastBackupLabel"
+                    } else {
+                        "Sign in with Google to enable cloud backup"
+                    },
+                    fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.height(8.dp))
 
+                BackupOptionRow(
+                    selected = profile.backupFrequency == BackupFrequency.EVERY_24_HOURS,
+                    enabled = profile.isSignedIn,
+                    icon = Icons.Filled.CloudDone,
+                    title = "Every 24 hours",
+                    subtitle = "Auto-upload when online",
+                    onClick = {
+                        if (profile.isSignedIn) {
+                            sound.play(Sfx.SETTINGS_CHANGE)
+                            onBackupFrequencyChange(BackupFrequency.EVERY_24_HOURS)
+                        }
+                    }
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                BackupOptionRow(
+                    selected = profile.backupFrequency == BackupFrequency.NEVER,
+                    enabled = profile.isSignedIn,
+                    icon = Icons.Filled.CloudOff,
+                    title = "Don't backup",
+                    subtitle = "Keep data only on this device",
+                    onClick = {
+                        if (profile.isSignedIn) {
+                            sound.play(Sfx.SETTINGS_CHANGE)
+                            onBackupFrequencyChange(BackupFrequency.NEVER)
+                        }
+                    }
+                )
+
+                if (profile.isSignedIn) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Box(modifier = Modifier.weight(1f)) {
+                            PixiSecondaryButton(
+                                text = if (backupBusy) "…" else "Backup now",
+                                onClick = {
+                                    if (!backupBusy) {
+                                        sound.play(Sfx.TAP_CONFIRM)
+                                        onBackupNow()
+                                    }
+                                },
+                                enabled = !backupBusy
+                            )
+                        }
+                        Box(modifier = Modifier.weight(1f)) {
+                            PixiOutlineButton(
+                                text = if (backupBusy) "…" else "Restore",
+                                onClick = {
+                                    if (!backupBusy) {
+                                        sound.play(Sfx.TAP_CONFIRM)
+                                        onRestoreNow()
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
+
+                // ── Feedback ─────────────────────────────────────────
+                Spacer(modifier = Modifier.height(20.dp))
+                SectionLabel("Preferences")
+                Spacer(modifier = Modifier.height(4.dp))
                 PreferenceSwitchRow(
-                    title = "Sound effects",
-                    subtitle = "Distinct chimes for taps, saves, deletes…",
+                    title = "Sound",
+                    subtitle = "Soft interaction tones",
                     checked = profile.soundEnabled,
                     onCheckedChange = onSoundToggle,
                     testTag = "toggle_sound"
                 )
                 PreferenceSwitchRow(
                     title = "Haptics",
-                    subtitle = "Light vibration with interactions",
+                    subtitle = "Light vibration",
                     checked = profile.hapticsEnabled,
                     onCheckedChange = onHapticsToggle,
                     testTag = "toggle_haptics"
                 )
-                PreferenceSwitchRow(
-                    title = "Reduce motion",
-                    subtitle = "Simpler tab transitions",
-                    checked = profile.reduceMotion,
-                    onCheckedChange = onReduceMotionToggle,
-                    testTag = "toggle_reduce_motion"
-                )
 
+                // ── Theme ────────────────────────────────────────────
                 Spacer(modifier = Modifier.height(16.dp))
-
-                Text(
-                    text = "Theme",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = "Soft Lilac by default · wallpaper colors optional",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Spacer(modifier = Modifier.height(10.dp))
-
+                SectionLabel("Theme")
+                Spacer(modifier = Modifier.height(8.dp))
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -316,7 +411,7 @@ fun ProfileDialog(
                         val selected = profile.themeOption == option
                         Box(
                             modifier = Modifier
-                                .clip(PixiCardShapeSm)
+                                .clip(PixiPillShape)
                                 .background(
                                     if (selected) MaterialTheme.colorScheme.primary
                                     else MaterialTheme.colorScheme.surfaceVariant
@@ -325,40 +420,137 @@ fun ProfileDialog(
                                     sound.play(Sfx.THEME_CHANGE)
                                     onThemeSelected(option)
                                 }
-                                .padding(horizontal = 14.dp, vertical = 10.dp)
+                                .padding(horizontal = 14.dp, vertical = 9.dp)
                                 .testTag("theme_${option.name}")
                         ) {
-                            Column {
-                                Text(
-                                    text = option.displayName(),
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (selected) MaterialTheme.colorScheme.onPrimary
-                                    else MaterialTheme.colorScheme.onSurface
-                                )
-                                Text(
-                                    text = option.description(),
-                                    fontSize = 10.sp,
-                                    color = if (selected) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f)
-                                    else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
+                            Text(
+                                text = option.displayName(),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (selected) MaterialTheme.colorScheme.onPrimary
+                                else MaterialTheme.colorScheme.onSurface
+                            )
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(22.dp))
 
                 PixiPrimaryButton(
-                    text = "Save Profile",
+                    text = "Save",
                     onClick = {
                         sound.play(Sfx.PROFILE_SAVE)
-                        onSaveProfile(name.trim(), bio.trim(), email.trim(), location.trim())
+                        onSaveName(name.trim())
                         onDismiss()
                     },
                     modifier = Modifier.testTag("save_profile_btn")
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun SectionLabel(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.onSurface
+    )
+}
+
+@Composable
+private fun GoogleSignInButton(
+    busy: Boolean,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(52.dp)
+            .clip(PixiPillShape)
+            .background(Color(0xFF1C1C1E))
+            .clickable(enabled = !busy, onClick = onClick)
+            .testTag("google_sign_in_btn"),
+        contentAlignment = Alignment.Center
+    ) {
+        if (busy) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(22.dp),
+                strokeWidth = 2.dp,
+                color = Color.White
+            )
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Simple multicolor G mark
+                Text(
+                    text = "G",
+                    fontWeight = FontWeight.Black,
+                    fontSize = 18.sp,
+                    color = Color(0xFF4285F4)
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = "Continue with Google",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp,
+                    color = Color.White
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BackupOptionRow(
+    selected: Boolean,
+    enabled: Boolean,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit
+) {
+    val alpha = if (enabled) 1f else 0.45f
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(PixiCardShapeSm)
+            .background(
+                if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f * alpha)
+                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f * alpha)
+            )
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        RadioButton(
+            selected = selected,
+            onClick = onClick,
+            enabled = enabled,
+            colors = RadioButtonDefaults.colors(
+                selectedColor = MaterialTheme.colorScheme.primary
+            )
+        )
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary.copy(alpha = alpha),
+            modifier = Modifier.size(20.dp)
+        )
+        Spacer(modifier = Modifier.width(10.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 14.sp,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha)
+            )
+            Text(
+                text = subtitle,
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha)
+            )
         }
     }
 }
@@ -374,7 +566,7 @@ private fun PreferenceSwitchRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 6.dp)
+            .padding(vertical = 4.dp)
             .testTag(testTag),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -402,4 +594,27 @@ private fun PreferenceSwitchRow(
             )
         )
     }
+}
+
+/** Backward-compatible overload for older call sites (bio/email/location). */
+@Composable
+fun ProfileDialog(
+    profile: UserProfile,
+    onDismiss: () -> Unit,
+    onSaveProfile: (name: String, bio: String, email: String, location: String) -> Unit,
+    onAvatarPicked: (String) -> Unit,
+    onThemeSelected: (AppThemeOption) -> Unit,
+    onSoundToggle: (Boolean) -> Unit = {},
+    onHapticsToggle: (Boolean) -> Unit = {},
+    onReduceMotionToggle: (Boolean) -> Unit = {}
+) {
+    ProfileDialog(
+        profile = profile,
+        onDismiss = onDismiss,
+        onSaveName = { name -> onSaveProfile(name, profile.bio, profile.email, profile.location) },
+        onAvatarPicked = onAvatarPicked,
+        onThemeSelected = onThemeSelected,
+        onSoundToggle = onSoundToggle,
+        onHapticsToggle = onHapticsToggle
+    )
 }

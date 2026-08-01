@@ -13,12 +13,20 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.PI
+import kotlin.math.exp
+import kotlin.math.pow
 import kotlin.math.sin
 import kotlin.random.Random
 
 /**
- * Low-latency procedural SFX engine.
- * Pre-renders unique PCM buffers per [Sfx] and plays via short [AudioTrack] streams.
+ * Soft Lilac SFX engine — subtle, sweet, slow, low.
+ *
+ * Design principles (replaces the old retro/gamey palette):
+ *  - Pure sine + soft second harmonic only (no square/triangle harshness)
+ *  - Warm low–mid fundamentals (~180–520 Hz)
+ *  - Longer soft attacks and trailing releases
+ *  - Quiet volumes (gentle room presence, never sharp)
+ *  - Feather-light haptics
  */
 class SoundEngine private constructor(context: Context) {
 
@@ -61,10 +69,10 @@ class SoundEngine private constructor(context: Context) {
         hapticFor(sfx)
     }
 
-    /** Distinct tab tones: each tab index gets a unique pitch. */
+    /** Distinct but gentle tab tones — small pitch offsets only. */
     fun playTab(index: Int) {
-        val shifts = floatArrayOf(0.92f, 1.0f, 1.08f, 1.16f)
-        play(Sfx.TAB_SWITCH, shifts.getOrElse(index) { 1f + index * 0.05f })
+        val shifts = floatArrayOf(0.96f, 1.0f, 1.04f, 1.08f)
+        play(Sfx.TAB_SWITCH, shifts.getOrElse(index) { 1f + index * 0.03f })
     }
 
     fun release() {
@@ -76,17 +84,19 @@ class SoundEngine private constructor(context: Context) {
         if (!hapticsEnabled) return
         val vib = vibrator ?: return
         if (!vib.hasVibrator()) return
+        // Soft, short ticks — never punchy
         val ms = when (sfx) {
-            Sfx.TASK_COMPLETE, Sfx.GOAL_COMPLETE, Sfx.FOCUS_COMPLETE, Sfx.SUCCESS -> 28L
-            Sfx.DELETE, Sfx.ERROR -> 18L
-            Sfx.FAB, Sfx.ADD_TASK, Sfx.ADD_BUDGET, Sfx.ADD_EVENT, Sfx.ADD_GOAL -> 16L
-            Sfx.TAB_SWITCH, Sfx.FILTER_SELECT, Sfx.DAY_SELECT -> 10L
-            else -> 8L
+            Sfx.SPLASH_INTRO -> return // silent haptics on splash
+            Sfx.TASK_COMPLETE, Sfx.GOAL_COMPLETE, Sfx.FOCUS_COMPLETE, Sfx.SUCCESS -> 18L
+            Sfx.DELETE, Sfx.ERROR -> 12L
+            Sfx.FAB, Sfx.ADD_TASK, Sfx.ADD_BUDGET, Sfx.ADD_EVENT, Sfx.ADD_GOAL -> 12L
+            Sfx.TAB_SWITCH, Sfx.FILTER_SELECT, Sfx.DAY_SELECT -> 6L
+            else -> 5L
         }
         val amp = when (sfx) {
-            Sfx.TASK_COMPLETE, Sfx.GOAL_COMPLETE -> 180
-            Sfx.DELETE -> 140
-            else -> 90
+            Sfx.TASK_COMPLETE, Sfx.GOAL_COMPLETE -> 90
+            Sfx.DELETE -> 70
+            else -> 45
         }
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -124,9 +134,8 @@ class SoundEngine private constructor(context: Context) {
             track.write(pcm, 0, pcm.size)
             track.setNotificationMarkerPosition(pcm.size)
             track.play()
-            // Let audio finish then release
-            val durationMs = (pcm.size * 1000L / sampleRate) + 40L
-            Thread.sleep(durationMs.coerceAtMost(900L))
+            val durationMs = (pcm.size * 1000L / sampleRate) + 60L
+            Thread.sleep(durationMs.coerceAtMost(1600L))
         } catch (_: Exception) {
             // Swallow audio race conditions
         } finally {
@@ -149,359 +158,381 @@ class SoundEngine private constructor(context: Context) {
         return out
     }
 
-    // region Synthesis recipes — each Sfx is intentionally unique
+    // region Soft synthesis recipes
 
     private fun synthesize(sfx: Sfx): ShortArray = when (sfx) {
-        Sfx.TAP_SOFT -> tone(
-            durationMs = 45,
-            freqs = doubleArrayOf(420.0),
-            wave = Wave.SINE,
-            attack = 0.02,
-            release = 0.7,
-            volume = 0.28
-        )
-
-        Sfx.TAP_CRISP -> tone(
-            durationMs = 38,
-            freqs = doubleArrayOf(980.0, 1460.0),
-            wave = Wave.TRIANGLE,
-            attack = 0.01,
-            release = 0.55,
-            volume = 0.22
-        )
-
-        Sfx.TAP_CONFIRM -> tone(
-            durationMs = 90,
-            freqs = doubleArrayOf(520.0, 780.0),
-            wave = Wave.SINE,
-            attack = 0.05,
-            release = 0.45,
-            volume = 0.32
-        )
-
-        Sfx.DIALOG_OPEN -> sweep(
-            durationMs = 110,
-            startHz = 280.0,
-            endHz = 720.0,
-            wave = Wave.SINE,
-            volume = 0.26
-        )
-
-        Sfx.DIALOG_CLOSE -> sweep(
+        // Soft wooden pillow tap
+        Sfx.TAP_SOFT -> softTone(
             durationMs = 95,
-            startHz = 640.0,
-            endHz = 240.0,
-            wave = Wave.SINE,
-            volume = 0.22
+            freqs = doubleArrayOf(280.0),
+            attack = 0.08,
+            release = 0.78,
+            volume = 0.10,
+            harmonic = 0.12
         )
 
-        Sfx.ADD_TASK -> chord(
-            durationMs = 140,
-            freqs = doubleArrayOf(523.25, 659.25, 783.99), // C major arpeggio-ish
-            staggerMs = 28,
-            wave = Wave.SINE,
-            volume = 0.28
-        )
-
-        Sfx.ADD_BUDGET -> chord(
-            durationMs = 150,
-            freqs = doubleArrayOf(392.0, 493.88), // G + B
-            staggerMs = 40,
-            wave = Wave.TRIANGLE,
-            volume = 0.3
-        )
-
-        Sfx.ADD_EVENT -> chord(
-            durationMs = 160,
-            freqs = doubleArrayOf(440.0, 554.37, 659.25), // A maj
-            staggerMs = 32,
-            wave = Wave.SINE,
-            volume = 0.27
-        )
-
-        Sfx.ADD_GOAL -> chord(
-            durationMs = 180,
-            freqs = doubleArrayOf(349.23, 440.0, 523.25, 698.46),
-            staggerMs = 30,
-            wave = Wave.SINE,
-            volume = 0.26
-        )
-
-        Sfx.ADD_ACCOUNT -> tone(
-            durationMs = 120,
-            freqs = doubleArrayOf(330.0, 495.0, 660.0),
-            wave = Wave.SQUARE_SOFT,
-            attack = 0.04,
-            release = 0.5,
-            volume = 0.18
-        )
-
-        Sfx.TASK_COMPLETE -> chord(
-            durationMs = 220,
-            freqs = doubleArrayOf(523.25, 659.25, 783.99, 1046.5),
-            staggerMs = 35,
-            wave = Wave.SINE,
-            volume = 0.32
-        )
-
-        Sfx.TASK_UNDO -> tone(
+        // Gentle glass click
+        Sfx.TAP_CRISP -> softTone(
             durationMs = 80,
-            freqs = doubleArrayOf(300.0, 220.0),
-            wave = Wave.TRIANGLE,
-            attack = 0.05,
-            release = 0.6,
-            volume = 0.24
+            freqs = doubleArrayOf(420.0, 630.0),
+            attack = 0.06,
+            release = 0.72,
+            volume = 0.08,
+            harmonic = 0.10
         )
 
-        Sfx.SUBTASK_TOGGLE -> tone(
-            durationMs = 50,
-            freqs = doubleArrayOf(880.0),
-            wave = Wave.TRIANGLE,
-            attack = 0.01,
-            release = 0.65,
-            volume = 0.2
-        )
-
-        Sfx.DELETE -> noiseBurst(
-            durationMs = 90,
-            lowPass = 1800.0,
-            volume = 0.22,
-            falloff = true
-        )
-
-        Sfx.FILTER_SELECT -> tone(
-            durationMs = 55,
-            freqs = doubleArrayOf(740.0, 1110.0),
-            wave = Wave.SINE,
-            attack = 0.02,
-            release = 0.5,
-            volume = 0.22
-        )
-
-        Sfx.FAB -> tone(
-            durationMs = 100,
-            freqs = doubleArrayOf(600.0, 900.0, 1200.0),
-            wave = Wave.SINE,
-            attack = 0.02,
-            release = 0.4,
-            volume = 0.28
-        )
-
-        Sfx.TAB_SWITCH -> tone(
-            durationMs = 70,
-            freqs = doubleArrayOf(560.0, 840.0),
-            wave = Wave.TRIANGLE,
-            attack = 0.02,
-            release = 0.55,
-            volume = 0.24
-        )
-
-        Sfx.PROFILE_OPEN -> sweep(
-            durationMs = 130,
-            startHz = 360.0,
-            endHz = 900.0,
-            wave = Wave.TRIANGLE,
-            volume = 0.24
-        )
-
-        Sfx.PROFILE_SAVE -> chord(
+        // Warm confirm hum
+        Sfx.TAP_CONFIRM -> softTone(
             durationMs = 160,
-            freqs = doubleArrayOf(494.0, 622.0, 740.0),
-            staggerMs = 25,
-            wave = Wave.SINE,
-            volume = 0.28
+            freqs = doubleArrayOf(260.0, 390.0),
+            attack = 0.12,
+            release = 0.65,
+            volume = 0.12,
+            harmonic = 0.15
         )
 
-        Sfx.THEME_CHANGE -> chord(
-            durationMs = 170,
-            freqs = doubleArrayOf(415.3, 554.4, 830.6),
-            staggerMs = 38,
-            wave = Wave.SINE,
-            volume = 0.26
+        // Slow airy open breath
+        Sfx.DIALOG_OPEN -> softSweep(
+            durationMs = 220,
+            startHz = 180.0,
+            endHz = 360.0,
+            volume = 0.09
         )
 
-        Sfx.SETTINGS_CHANGE -> tone(
-            durationMs = 85,
-            freqs = doubleArrayOf(640.0, 960.0),
-            wave = Wave.SQUARE_SOFT,
-            attack = 0.03,
-            release = 0.5,
-            volume = 0.16
-        )
-
-        Sfx.FOCUS_START -> sweep(
-            durationMs = 180,
-            startHz = 220.0,
-            endHz = 660.0,
-            wave = Wave.SINE,
-            volume = 0.3
-        )
-
-        Sfx.FOCUS_PAUSE -> tone(
-            durationMs = 100,
-            freqs = doubleArrayOf(480.0, 360.0),
-            wave = Wave.TRIANGLE,
-            attack = 0.05,
-            release = 0.55,
-            volume = 0.26
-        )
-
-        Sfx.FOCUS_RESET -> tone(
-            durationMs = 90,
-            freqs = doubleArrayOf(300.0, 300.0, 200.0),
-            wave = Wave.SINE,
-            attack = 0.04,
-            release = 0.5,
-            volume = 0.24
-        )
-
-        Sfx.FOCUS_COMPLETE -> chord(
-            durationMs = 280,
-            freqs = doubleArrayOf(392.0, 493.88, 587.33, 784.0),
-            staggerMs = 45,
-            wave = Wave.SINE,
-            volume = 0.34
-        )
-
-        Sfx.GOAL_PROGRESS -> tone(
-            durationMs = 95,
-            freqs = doubleArrayOf(698.46, 880.0),
-            wave = Wave.SINE,
-            attack = 0.03,
-            release = 0.45,
-            volume = 0.26
-        )
-
-        Sfx.GOAL_COMPLETE -> chord(
-            durationMs = 260,
-            freqs = doubleArrayOf(523.25, 659.25, 783.99, 987.77, 1174.7),
-            staggerMs = 40,
-            wave = Wave.SINE,
-            volume = 0.32
-        )
-
-        Sfx.DAY_SELECT -> tone(
-            durationMs = 60,
-            freqs = doubleArrayOf(700.0),
-            wave = Wave.TRIANGLE,
-            attack = 0.02,
-            release = 0.6,
-            volume = 0.22
-        )
-
-        Sfx.EVENT_TOGGLE -> tone(
-            durationMs = 75,
-            freqs = doubleArrayOf(540.0, 810.0),
-            wave = Wave.SINE,
-            attack = 0.02,
-            release = 0.5,
-            volume = 0.24
-        )
-
-        Sfx.NOTE_SAVE -> tone(
-            durationMs = 110,
-            freqs = doubleArrayOf(466.16, 587.33),
-            wave = Wave.SINE,
-            attack = 0.04,
-            release = 0.5,
-            volume = 0.26
-        )
-
-        Sfx.SEARCH_FOCUS -> tone(
-            durationMs = 50,
-            freqs = doubleArrayOf(1000.0),
-            wave = Wave.SINE,
-            attack = 0.01,
-            release = 0.7,
-            volume = 0.18
-        )
-
-        Sfx.SUCCESS -> chord(
+        // Soft settle close
+        Sfx.DIALOG_CLOSE -> softSweep(
             durationMs = 200,
-            freqs = doubleArrayOf(587.33, 739.99, 880.0),
-            staggerMs = 30,
-            wave = Wave.SINE,
-            volume = 0.3
+            startHz = 320.0,
+            endHz = 160.0,
+            volume = 0.08
         )
 
-        Sfx.ERROR -> tone(
+        // Sweet rising third — new task
+        Sfx.ADD_TASK -> softChord(
+            durationMs = 320,
+            freqs = doubleArrayOf(261.63, 329.63, 392.00), // C major, lower
+            staggerMs = 55,
+            volume = 0.11
+        )
+
+        // Warm two-tone — budget
+        Sfx.ADD_BUDGET -> softChord(
+            durationMs = 300,
+            freqs = doubleArrayOf(220.0, 277.18), // A + C#
+            staggerMs = 70,
+            volume = 0.11
+        )
+
+        // Gentle event arpeggio
+        Sfx.ADD_EVENT -> softChord(
+            durationMs = 340,
+            freqs = doubleArrayOf(246.94, 311.13, 370.0), // B maj-ish
+            staggerMs = 60,
+            volume = 0.10
+        )
+
+        // Soft sparkle triad — goal
+        Sfx.ADD_GOAL -> softChord(
+            durationMs = 380,
+            freqs = doubleArrayOf(196.0, 246.94, 293.66, 349.23),
+            staggerMs = 55,
+            volume = 0.10
+        )
+
+        // Low bank-soft blip
+        Sfx.ADD_ACCOUNT -> softTone(
+            durationMs = 220,
+            freqs = doubleArrayOf(196.0, 294.0),
+            attack = 0.10,
+            release = 0.68,
+            volume = 0.10,
+            harmonic = 0.12
+        )
+
+        // Satisfying soft major resolve — task done
+        Sfx.TASK_COMPLETE -> softChord(
+            durationMs = 420,
+            freqs = doubleArrayOf(261.63, 329.63, 392.00, 523.25),
+            staggerMs = 65,
+            volume = 0.12
+        )
+
+        // Soft undo sigh
+        Sfx.TASK_UNDO -> softTone(
+            durationMs = 160,
+            freqs = doubleArrayOf(240.0, 180.0),
+            attack = 0.12,
+            release = 0.70,
+            volume = 0.09,
+            harmonic = 0.08
+        )
+
+        // Tiny subtask tick
+        Sfx.SUBTASK_TOGGLE -> softTone(
+            durationMs = 90,
+            freqs = doubleArrayOf(360.0),
+            attack = 0.06,
+            release = 0.75,
+            volume = 0.08,
+            harmonic = 0.10
+        )
+
+        // Soft paper hush (no harsh tear)
+        Sfx.DELETE -> softHush(
+            durationMs = 180,
+            volume = 0.07
+        )
+
+        // Filter select murmur
+        Sfx.FILTER_SELECT -> softTone(
+            durationMs = 110,
+            freqs = doubleArrayOf(300.0, 450.0),
+            attack = 0.08,
+            release = 0.68,
+            volume = 0.09,
+            harmonic = 0.10
+        )
+
+        // Soft FAB bloom
+        Sfx.FAB -> softTone(
+            durationMs = 180,
+            freqs = doubleArrayOf(330.0, 440.0),
+            attack = 0.08,
+            release = 0.62,
+            volume = 0.10,
+            harmonic = 0.14
+        )
+
+        // Tab pad tone
+        Sfx.TAB_SWITCH -> softTone(
+            durationMs = 130,
+            freqs = doubleArrayOf(240.0, 360.0),
+            attack = 0.10,
+            release = 0.70,
+            volume = 0.09,
+            harmonic = 0.10
+        )
+
+        // Profile sheet lift
+        Sfx.PROFILE_OPEN -> softSweep(
+            durationMs = 240,
+            startHz = 200.0,
+            endHz = 380.0,
+            volume = 0.09
+        )
+
+        // Profile save soft chime
+        Sfx.PROFILE_SAVE -> softChord(
+            durationMs = 300,
+            freqs = doubleArrayOf(277.18, 349.23, 415.30),
+            staggerMs = 50,
+            volume = 0.11
+        )
+
+        // Theme change gentle cascade
+        Sfx.THEME_CHANGE -> softChord(
+            durationMs = 340,
+            freqs = doubleArrayOf(233.08, 293.66, 349.23),
+            staggerMs = 70,
+            volume = 0.10
+        )
+
+        // Settings soft tick
+        Sfx.SETTINGS_CHANGE -> softTone(
             durationMs = 140,
-            freqs = doubleArrayOf(180.0, 150.0),
-            wave = Wave.SQUARE_SOFT,
-            attack = 0.05,
-            release = 0.4,
-            volume = 0.2
+            freqs = doubleArrayOf(280.0, 350.0),
+            attack = 0.10,
+            release = 0.68,
+            volume = 0.08,
+            harmonic = 0.08
+        )
+
+        // Focus start — slow breath up
+        Sfx.FOCUS_START -> softSweep(
+            durationMs = 360,
+            startHz = 160.0,
+            endHz = 320.0,
+            volume = 0.11
+        )
+
+        // Focus pause — soft hold
+        Sfx.FOCUS_PAUSE -> softTone(
+            durationMs = 180,
+            freqs = doubleArrayOf(240.0, 200.0),
+            attack = 0.14,
+            release = 0.68,
+            volume = 0.09,
+            harmonic = 0.08
+        )
+
+        // Focus reset — soft settle
+        Sfx.FOCUS_RESET -> softTone(
+            durationMs = 170,
+            freqs = doubleArrayOf(220.0, 180.0),
+            attack = 0.12,
+            release = 0.68,
+            volume = 0.09,
+            harmonic = 0.08
+        )
+
+        // Focus complete — warm resolve
+        Sfx.FOCUS_COMPLETE -> softChord(
+            durationMs = 520,
+            freqs = doubleArrayOf(196.0, 246.94, 293.66, 392.0),
+            staggerMs = 80,
+            volume = 0.12
+        )
+
+        // Goal progress bump
+        Sfx.GOAL_PROGRESS -> softTone(
+            durationMs = 160,
+            freqs = doubleArrayOf(330.0, 415.0),
+            attack = 0.10,
+            release = 0.65,
+            volume = 0.10,
+            harmonic = 0.12
+        )
+
+        // Goal complete — soft fanfare (low)
+        Sfx.GOAL_COMPLETE -> softChord(
+            durationMs = 500,
+            freqs = doubleArrayOf(220.0, 277.18, 329.63, 415.30),
+            staggerMs = 75,
+            volume = 0.12
+        )
+
+        // Day select
+        Sfx.DAY_SELECT -> softTone(
+            durationMs = 110,
+            freqs = doubleArrayOf(300.0),
+            attack = 0.08,
+            release = 0.72,
+            volume = 0.09,
+            harmonic = 0.10
+        )
+
+        // Event toggle
+        Sfx.EVENT_TOGGLE -> softTone(
+            durationMs = 140,
+            freqs = doubleArrayOf(280.0, 350.0),
+            attack = 0.08,
+            release = 0.68,
+            volume = 0.09,
+            harmonic = 0.10
+        )
+
+        // Note save
+        Sfx.NOTE_SAVE -> softTone(
+            durationMs = 200,
+            freqs = doubleArrayOf(246.94, 311.13),
+            attack = 0.12,
+            release = 0.68,
+            volume = 0.10,
+            harmonic = 0.12
+        )
+
+        // Search focus
+        Sfx.SEARCH_FOCUS -> softTone(
+            durationMs = 100,
+            freqs = doubleArrayOf(340.0),
+            attack = 0.08,
+            release = 0.78,
+            volume = 0.07,
+            harmonic = 0.08
+        )
+
+        // Success micro
+        Sfx.SUCCESS -> softChord(
+            durationMs = 360,
+            freqs = doubleArrayOf(293.66, 370.0, 440.0),
+            staggerMs = 55,
+            volume = 0.11
+        )
+
+        // Soft error murmur (low, not buzzy)
+        Sfx.ERROR -> softTone(
+            durationMs = 240,
+            freqs = doubleArrayOf(160.0, 140.0),
+            attack = 0.14,
+            release = 0.60,
+            volume = 0.09,
+            harmonic = 0.05
+        )
+
+        // Slow sweet splash intro — soft rising pad
+        Sfx.SPLASH_INTRO -> softChord(
+            durationMs = 900,
+            freqs = doubleArrayOf(196.0, 246.94, 293.66, 392.0), // G minor-ish warm
+            staggerMs = 140,
+            volume = 0.09
         )
     }
 
-    private enum class Wave { SINE, TRIANGLE, SQUARE_SOFT }
-
-    private fun sampleWave(wave: Wave, phase: Double): Double = when (wave) {
-        Wave.SINE -> sin(phase)
-        Wave.TRIANGLE -> {
-            // phase 0..2π → triangle -1..1
-            val t = (phase / (2 * PI)) % 1.0
-            if (t < 0.5) 4 * t - 1 else 3 - 4 * t
-        }
-        Wave.SQUARE_SOFT -> {
-            val s = sin(phase)
-            // Soft square via tanh-ish
-            (s * 3.0).coerceIn(-1.0, 1.0) * 0.7
-        }
-    }
-
-    private fun tone(
+    /**
+     * Soft multi-partial sine tone.
+     * [harmonic] = relative amplitude of second harmonic for sweetness.
+     */
+    private fun softTone(
         durationMs: Int,
         freqs: DoubleArray,
-        wave: Wave,
         attack: Double,
         release: Double,
-        volume: Double
+        volume: Double,
+        harmonic: Double
     ): ShortArray {
         val n = (sampleRate * durationMs / 1000.0).toInt().coerceAtLeast(1)
         val out = ShortArray(n)
         val phases = DoubleArray(freqs.size)
+        val harmPhases = DoubleArray(freqs.size)
         val inc = DoubleArray(freqs.size) { i -> 2 * PI * freqs[i] / sampleRate }
+        val harmInc = DoubleArray(freqs.size) { i -> 2 * PI * freqs[i] * 2.0 / sampleRate }
+
         for (i in 0 until n) {
             val t = i.toDouble() / n
-            val env = envelope(t, attack, release)
+            val env = softEnvelope(t, attack, release)
             var sample = 0.0
             for (f in freqs.indices) {
-                sample += sampleWave(wave, phases[f])
+                val fund = sin(phases[f])
+                val harm = sin(harmPhases[f]) * harmonic
+                sample += fund + harm
                 phases[f] += inc[f]
+                harmPhases[f] += harmInc[f]
             }
+            // Mild low-pass smoothness via neighbor blend is approximated by soft env
             sample = (sample / freqs.size) * env * volume
-            out[i] = (sample * Short.MAX_VALUE).toInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
+            out[i] = toShort(sample)
         }
         return out
     }
 
-    private fun sweep(
+    private fun softSweep(
         durationMs: Int,
         startHz: Double,
         endHz: Double,
-        wave: Wave,
         volume: Double
     ): ShortArray {
         val n = (sampleRate * durationMs / 1000.0).toInt().coerceAtLeast(1)
         val out = ShortArray(n)
         var phase = 0.0
+        var harmPhase = 0.0
         for (i in 0 until n) {
             val t = i.toDouble() / (n - 1).coerceAtLeast(1)
-            val hz = startHz + (endHz - startHz) * t
-            val env = envelope(t, 0.05, 0.55)
-            val sample = sampleWave(wave, phase) * env * volume
-            out[i] = (sample * Short.MAX_VALUE).toInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
+            // Ease-in-out curve for slower, sweeter glide
+            val eased = t * t * (3.0 - 2.0 * t)
+            val hz = startHz + (endHz - startHz) * eased
+            val env = softEnvelope(t, 0.12, 0.62)
+            val sample = (sin(phase) + 0.12 * sin(harmPhase)) * env * volume
+            out[i] = toShort(sample)
             phase += 2 * PI * hz / sampleRate
+            harmPhase += 2 * PI * hz * 2.0 / sampleRate
         }
         return out
     }
 
-    private fun chord(
+    private fun softChord(
         durationMs: Int,
         freqs: DoubleArray,
         staggerMs: Int,
-        wave: Wave,
         volume: Double
     ): ShortArray {
         val n = (sampleRate * durationMs / 1000.0).toInt().coerceAtLeast(1)
@@ -510,51 +541,79 @@ class SoundEngine private constructor(context: Context) {
         freqs.forEachIndexed { idx, hz ->
             val start = idx * stagger
             var phase = 0.0
+            var harmPhase = 0.0
             val inc = 2 * PI * hz / sampleRate
+            val harmInc = 2 * PI * hz * 2.0 / sampleRate
             for (i in start until n) {
                 val localT = (i - start).toDouble() / (n - start).coerceAtLeast(1)
-                val env = envelope(localT, 0.04, 0.5)
-                out[i] += sampleWave(wave, phase) * env
+                val env = softEnvelope(localT, 0.10, 0.62)
+                out[i] += (sin(phase) + 0.12 * sin(harmPhase)) * env
                 phase += inc
+                harmPhase += harmInc
             }
         }
         val maxAbs = out.maxOf { kotlin.math.abs(it) }.coerceAtLeast(1e-6)
         return ShortArray(n) { i ->
-            val s = (out[i] / maxAbs) * volume
-            (s * Short.MAX_VALUE).toInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
+            toShort((out[i] / maxAbs) * volume)
         }
     }
 
-    private fun noiseBurst(
-        durationMs: Int,
-        lowPass: Double,
-        volume: Double,
-        falloff: Boolean
-    ): ShortArray {
+    /** Soft filtered hush for delete — quiet pink-ish air, never a tear. */
+    private fun softHush(durationMs: Int, volume: Double): ShortArray {
         val n = (sampleRate * durationMs / 1000.0).toInt().coerceAtLeast(1)
         val out = ShortArray(n)
-        var prev = 0.0
-        val alpha = lowPass / (lowPass + sampleRate)
-        val rnd = Random(42)
+        var b0 = 0.0
+        var b1 = 0.0
+        var b2 = 0.0
+        val rnd = Random(7)
+        // Soft low sine bed under the hush
+        var phase = 0.0
+        val bedInc = 2 * PI * 140.0 / sampleRate
         for (i in 0 until n) {
             val t = i.toDouble() / n
-            val env = if (falloff) (1.0 - t) * (1.0 - t) else envelope(t, 0.02, 0.5)
+            val env = (1.0 - t).pow(1.6) * softEnvelope(t, 0.08, 0.55)
             val white = rnd.nextDouble(-1.0, 1.0)
-            prev = prev + alpha * (white - prev)
-            val sample = prev * env * volume
-            out[i] = (sample * Short.MAX_VALUE).toInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
+            // Very soft pink-ish filter
+            b0 = 0.99765 * b0 + white * 0.0990460
+            b1 = 0.96300 * b1 + white * 0.2965164
+            b2 = 0.57000 * b2 + white * 1.0526913
+            val pink = (b0 + b1 + b2 + white * 0.1848) * 0.05
+            val bed = sin(phase) * 0.35
+            phase += bedInc
+            out[i] = toShort((pink + bed) * env * volume)
         }
         return out
     }
 
-    private fun envelope(t: Double, attack: Double, release: Double): Double {
-        val a = attack.coerceIn(0.01, 0.4)
-        val r = release.coerceIn(0.1, 0.9)
-        return when {
-            t < a -> (t / a)
-            t > 1.0 - r -> ((1.0 - t) / r).coerceAtLeast(0.0)
+    /**
+     * Soft ADS-like envelope with rounded attack and long tail.
+     * Attack and release are fractions of total duration.
+     */
+    private fun softEnvelope(t: Double, attack: Double, release: Double): Double {
+        val a = attack.coerceIn(0.04, 0.45)
+        val r = release.coerceIn(0.25, 0.9)
+        val raw = when {
+            t < a -> {
+                // Smoothstep attack
+                val x = (t / a).coerceIn(0.0, 1.0)
+                x * x * (3.0 - 2.0 * x)
+            }
+            t > 1.0 - r -> {
+                // Exponential-ish soft release
+                val x = ((1.0 - t) / r).coerceAtLeast(0.0)
+                x * x
+            }
             else -> 1.0
-        }.coerceIn(0.0, 1.0)
+        }
+        // Gentle overall contour so peaks never feel spiky
+        return (raw * exp(-0.15 * t)).coerceIn(0.0, 1.0)
+    }
+
+    private fun toShort(sample: Double): Short {
+        val clamped = sample.coerceIn(-1.0, 1.0)
+        return (clamped * Short.MAX_VALUE).toInt()
+            .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
+            .toShort()
     }
 
     // endregion
