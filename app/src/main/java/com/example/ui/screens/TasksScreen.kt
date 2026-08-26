@@ -35,6 +35,9 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.outlined.PushPin
+import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
@@ -106,6 +109,8 @@ fun TasksScreen(
     onDeleteTask: (Int) -> Unit,
     onEditTask: (TaskEntity) -> Unit,
     onSnoozeTask: (TaskEntity) -> Unit = {},
+    onPinTask: (TaskEntity) -> Unit = {},
+    onSkipRepeat: (TaskEntity) -> Unit = {},
     onOpenAddTask: () -> Unit,
     /** Quick-create a todo with the given title (from search). */
     onQuickAddTask: (title: String) -> Unit = {},
@@ -146,15 +151,19 @@ fun TasksScreen(
                 "TODAY" -> tasks.filter {
                     !it.isCompleted && tDueDay(it) in todayStart until tomorrowStart
                 }
+                "REPEATING" -> tasks.filter { it.isRepeating && !it.isCompleted }
+                "PINNED" -> tasks.filter { it.isPinned && !it.isCompleted }
                 else -> tasks
             }
             val searched = if (query.isBlank()) base
             else base.filter {
                 it.title.contains(query, ignoreCase = true) ||
-                    it.category.contains(query, ignoreCase = true)
+                    it.category.contains(query, ignoreCase = true) ||
+                    it.notes.contains(query, ignoreCase = true)
             }
             searched.sortedWith(
                 compareBy<TaskEntity> { it.isCompleted }
+                    .thenByDescending { it.isPinned }
                     .thenBy { tDueDay(it) }
                     .thenByDescending {
                         when (it.priority) {
@@ -170,19 +179,23 @@ fun TasksScreen(
 
     // Smart sections when viewing ALL without search
     val useSections = selectedFilter == "ALL" && query.isBlank()
+    val pinnedTasks = remember(filteredTasks, useSections) {
+        if (!useSections) emptyList()
+        else filteredTasks.filter { it.isPinned && !it.isCompleted }
+    }
     val overdueTasks = remember(filteredTasks, todayStart, useSections) {
         if (!useSections) emptyList()
-        else filteredTasks.filter { !it.isCompleted && tDueDay(it) < todayStart }
+        else filteredTasks.filter { !it.isCompleted && !it.isPinned && tDueDay(it) < todayStart }
     }
     val todayTasks = remember(filteredTasks, todayStart, tomorrowStart, useSections) {
         if (!useSections) emptyList()
         else filteredTasks.filter {
-            !it.isCompleted && tDueDay(it) in todayStart until tomorrowStart
+            !it.isCompleted && !it.isPinned && tDueDay(it) in todayStart until tomorrowStart
         }
     }
     val upcomingTasks = remember(filteredTasks, tomorrowStart, useSections) {
         if (!useSections) emptyList()
-        else filteredTasks.filter { !it.isCompleted && tDueDay(it) >= tomorrowStart }
+        else filteredTasks.filter { !it.isCompleted && !it.isPinned && tDueDay(it) >= tomorrowStart }
     }
     val completedTasks = remember(filteredTasks, useSections) {
         if (!useSections) emptyList()
@@ -273,6 +286,8 @@ fun TasksScreen(
                         "ALL" to "All",
                         "TODAY" to "Today",
                         "OVERDUE" to "Overdue",
+                        "PINNED" to "Pinned",
+                        "REPEATING" to "Repeating",
                         "PENDING" to "To Do",
                         "HIGH_FIRE" to "High",
                         "QUICK_WIN" to "Quick",
@@ -318,6 +333,8 @@ fun TasksScreen(
                                 tasks.isEmpty() -> "Tap the yellow + to create your first task"
                                 selectedFilter == "OVERDUE" -> "You’re all caught up — no overdue tasks"
                                 selectedFilter == "TODAY" -> "Nothing due today. Plan ahead on the calendar."
+                                selectedFilter == "REPEATING" -> "No repeating tasks yet. Edit a task and set Repeat."
+                                selectedFilter == "PINNED" -> "Pin important tasks to keep them at the top."
                                 else -> "Try another filter or add a new task"
                             },
                             doodleRes = if (tasks.isEmpty()) R.drawable.doodle_tasks else null,
@@ -327,6 +344,38 @@ fun TasksScreen(
                     }
                 }
             } else if (useSections) {
+                if (pinnedTasks.isNotEmpty()) {
+                    item {
+                        SectionHeader(title = "Pinned", count = pinnedTasks.size)
+                    }
+                    itemsIndexed(pinnedTasks, key = { _, t -> "pin_${t.id}" }) { index, task ->
+                        TaskCardBlock(
+                            index = index,
+                            task = task,
+                            linkedGoal = goals.find { it.id == task.linkedGoalId },
+                            isOverdue = tDueDay(task) < todayStart,
+                            onToggleTask = { onToggleTask(task) },
+                            onToggleSubtask = { sub ->
+                                sound.play(Sfx.SUBTASK_TOGGLE)
+                                onToggleSubtask(task, sub)
+                            },
+                            onDeleteTask = {
+                                sound.play(Sfx.DELETE)
+                                onDeleteTask(task.id)
+                            },
+                            onEditTask = {
+                                sound.play(Sfx.DIALOG_OPEN)
+                                onEditTask(task)
+                            },
+                            onSnoozeTask = {
+                                sound.play(Sfx.SNOOZE)
+                                onSnoozeTask(task)
+                            },
+                            onPinTask = { onPinTask(task) },
+                            onSkipRepeat = { onSkipRepeat(task) }
+                        )
+                    }
+                }
                 if (overdueTasks.isNotEmpty()) {
                     item {
                         SectionHeader(title = "Overdue", count = overdueTasks.size, danger = true)
@@ -353,7 +402,9 @@ fun TasksScreen(
                             onSnoozeTask = {
                                 sound.play(Sfx.SNOOZE)
                                 onSnoozeTask(task)
-                            }
+                            },
+                            onPinTask = { onPinTask(task) },
+                            onSkipRepeat = { onSkipRepeat(task) }
                         )
                     }
                 }
@@ -383,7 +434,9 @@ fun TasksScreen(
                             onSnoozeTask = {
                                 sound.play(Sfx.SNOOZE)
                                 onSnoozeTask(task)
-                            }
+                            },
+                            onPinTask = { onPinTask(task) },
+                            onSkipRepeat = { onSkipRepeat(task) }
                         )
                     }
                 }
@@ -413,7 +466,9 @@ fun TasksScreen(
                             onSnoozeTask = {
                                 sound.play(Sfx.SNOOZE)
                                 onSnoozeTask(task)
-                            }
+                            },
+                            onPinTask = { onPinTask(task) },
+                            onSkipRepeat = { onSkipRepeat(task) }
                         )
                     }
                 }
@@ -451,7 +506,9 @@ fun TasksScreen(
                             onSnoozeTask = {
                                 sound.play(Sfx.SNOOZE)
                                 onSnoozeTask(task)
-                            }
+                            },
+                            onPinTask = { onPinTask(task) },
+                            onSkipRepeat = { onSkipRepeat(task) }
                         )
                     }
                 }
@@ -478,7 +535,9 @@ fun TasksScreen(
                         onSnoozeTask = {
                             sound.play(Sfx.SNOOZE)
                             onSnoozeTask(task)
-                        }
+                        },
+                        onPinTask = { onPinTask(task) },
+                        onSkipRepeat = { onSkipRepeat(task) }
                     )
                 }
             }
@@ -541,7 +600,9 @@ private fun LazyItemScope.TaskCardBlock(
     onToggleSubtask: (String) -> Unit,
     onDeleteTask: () -> Unit,
     onEditTask: () -> Unit,
-    onSnoozeTask: () -> Unit
+    onSnoozeTask: () -> Unit,
+    onPinTask: () -> Unit = {},
+    onSkipRepeat: () -> Unit = {}
 ) {
     // animateItem keeps the card sliding smoothly when completed items reorder to the bottom
     Column(
@@ -560,7 +621,9 @@ private fun LazyItemScope.TaskCardBlock(
                 onToggleSubtask = onToggleSubtask,
                 onDeleteTask = onDeleteTask,
                 onEditTask = onEditTask,
-                onSnoozeTask = onSnoozeTask
+                onSnoozeTask = onSnoozeTask,
+                onPinTask = onPinTask,
+                onSkipRepeat = onSkipRepeat
             )
         }
         Spacer(modifier = Modifier.height(10.dp))
@@ -635,6 +698,8 @@ fun TaskCardItem(
     onDeleteTask: () -> Unit,
     onEditTask: () -> Unit = {},
     onSnoozeTask: () -> Unit = {},
+    onPinTask: () -> Unit = {},
+    onSkipRepeat: () -> Unit = {},
     isOverdue: Boolean = false
 ) {
     var expandedSubtasks by remember { mutableStateOf(false) }
@@ -841,6 +906,20 @@ fun TaskCardItem(
                             containerColor = priorityColor.copy(alpha = 0.15f),
                             contentColor = priorityColor
                         )
+                        if (task.isRepeating) {
+                            PixiBadge(
+                                text = task.repeat.shortLabel,
+                                containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                contentColor = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        if (task.isPinned) {
+                            PixiBadge(
+                                text = "Pinned",
+                                containerColor = Color(0xFFFBBF24).copy(alpha = 0.18f),
+                                contentColor = Color(0xFFB45309)
+                            )
+                        }
                         if (isOverdue && !showAsDone) {
                             PixiBadge(
                                 text = "Overdue",
@@ -855,6 +934,17 @@ fun TaskCardItem(
                                 contentColor = Color(0xFFB45309)
                             )
                         }
+                    }
+
+                    if (task.notes.isNotBlank()) {
+                        Text(
+                            text = task.notes,
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(top = 6.dp)
+                        )
                     }
 
                     if (dueLabel.isNotBlank()) {
@@ -897,21 +987,38 @@ fun TaskCardItem(
                 Spacer(modifier = Modifier.width(6.dp))
 
                 Column(horizontalAlignment = Alignment.End) {
-                    Box(
+                    IconButton(
+                        onClick = onPinTask,
                         modifier = Modifier
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primaryContainer)
-                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                            .size(32.dp)
+                            .testTag("pin_task_${task.id}")
                     ) {
-                        Text(
-                            text = "+${task.xpReward}",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        Icon(
+                            imageVector = if (task.isPinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
+                            contentDescription = if (task.isPinned) "Unpin" else "Pin",
+                            tint = if (task.isPinned) Color(0xFFD97706)
+                            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            modifier = Modifier.size(18.dp)
                         )
                     }
 
                     Row {
+                        if (!task.isCompleted && task.isRepeating) {
+                            IconButton(
+                                onClick = onSkipRepeat,
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .padding(top = 4.dp)
+                                    .testTag("skip_task_${task.id}")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Repeat,
+                                    contentDescription = "Skip to next",
+                                    tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
                         if (!task.isCompleted) {
                             IconButton(
                                 onClick = onSnoozeTask,

@@ -175,7 +175,10 @@ private fun TaskEntity.toMap() = mapOf(
     "subtasks" to subtasks,
     "completedSubtasks" to completedSubtasks,
     "linkedGoalId" to linkedGoalId,
-    "xpReward" to xpReward
+    "xpReward" to xpReward,
+    "repeatRule" to repeatRule,
+    "isPinned" to isPinned,
+    "notes" to notes
 )
 
 private fun BudgetItemEntity.toMap() = mapOf(
@@ -266,7 +269,10 @@ private fun mapToTask(raw: Any?): TaskEntity? {
         subtasks = m["subtasks"] as? String ?: "",
         completedSubtasks = m["completedSubtasks"] as? String ?: "",
         linkedGoalId = (m["linkedGoalId"] as? Number)?.toInt(),
-        xpReward = (m["xpReward"] as? Number)?.toInt() ?: 20
+        xpReward = (m["xpReward"] as? Number)?.toInt() ?: 20,
+        repeatRule = m["repeatRule"] as? String ?: RepeatRule.NONE.name,
+        isPinned = m["isPinned"] as? Boolean ?: false,
+        notes = m["notes"] as? String ?: ""
     )
 }
 

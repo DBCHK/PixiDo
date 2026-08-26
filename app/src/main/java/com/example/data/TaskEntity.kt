@@ -17,5 +17,12 @@ data class TaskEntity(
     val subtasks: String = "",
     val completedSubtasks: String = "",
     val linkedGoalId: Int? = null,
-    val xpReward: Int = 20
-)
+    val xpReward: Int = 20,
+    /** NONE | DAILY | WEEKDAYS | WEEKLY */
+    val repeatRule: String = RepeatRule.NONE.name,
+    val isPinned: Boolean = false,
+    val notes: String = ""
+) {
+    val repeat: RepeatRule get() = RepeatRule.from(repeatRule)
+    val isRepeating: Boolean get() = repeat != RepeatRule.NONE
+}

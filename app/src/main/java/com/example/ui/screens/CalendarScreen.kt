@@ -593,7 +593,7 @@ private fun CalendarTaskRow(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     PixiBadge(
-                        text = "Task",
+                        text = if (task.isRepeating) task.repeat.shortLabel else "Task",
                         containerColor = accent.copy(alpha = 0.15f),
                         contentColor = accent
                     )

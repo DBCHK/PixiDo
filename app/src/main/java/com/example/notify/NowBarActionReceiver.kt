@@ -71,14 +71,29 @@ class NowBarActionReceiver : BroadcastReceiver() {
         val task = tasks.find { it.id == taskId } ?: return
         if (task.isCompleted) return
         val now = System.currentTimeMillis()
-        dao.updateTask(
-            task.copy(
-                isCompleted = true,
-                streakCount = task.streakCount + 1,
-                completedAtMillis = now
+        if (task.isRepeating) {
+            val rolled = com.example.data.TaskRepeat.rollForward(task, now)
+            dao.updateTask(rolled)
+            ReminderScheduler.cancelTaskReminders(context, taskId)
+            if (rolled.dueDateMillis > now) {
+                ReminderScheduler.scheduleTaskReminders(
+                    context = context,
+                    itemId = taskId,
+                    dueAtMillis = rolled.dueDateMillis,
+                    title = rolled.title,
+                    body = "It's time for “${rolled.title}” (${rolled.dueTimeStr})"
+                )
+            }
+        } else {
+            dao.updateTask(
+                task.copy(
+                    isCompleted = true,
+                    streakCount = task.streakCount + 1,
+                    completedAtMillis = now
+                )
             )
-        )
-        ReminderScheduler.cancelTaskReminders(context, taskId)
+            ReminderScheduler.cancelTaskReminders(context, taskId)
+        }
         runCatching {
             UserPreferencesRepository(context).addXp(task.xpReward)
         }

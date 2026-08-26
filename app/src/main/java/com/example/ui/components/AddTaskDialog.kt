@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.example.R
 import com.example.data.GoalEntity
+import com.example.data.RepeatRule
 import com.example.data.TaskEntity
 import com.example.notify.ReminderScheduler
 import java.text.SimpleDateFormat
@@ -53,7 +54,10 @@ fun AddTaskDialog(
         dueTimeStr: String,
         dueDateMillis: Long,
         subtasks: String,
-        linkedGoalId: Int?
+        linkedGoalId: Int?,
+        repeatRule: String,
+        isPinned: Boolean,
+        notes: String
     ) -> Unit,
     /** When non-null, dialog is in edit mode. */
     existingTask: TaskEntity? = null,
@@ -65,8 +69,11 @@ fun AddTaskDialog(
         dueTimeStr: String,
         dueDateMillis: Long,
         subtasks: String,
-        linkedGoalId: Int?
-    ) -> Unit = { _, _, _, _, _, _, _, _ -> },
+        linkedGoalId: Int?,
+        repeatRule: String,
+        isPinned: Boolean,
+        notes: String
+    ) -> Unit = { _, _, _, _, _, _, _, _, _, _, _ -> },
     /** Pre-select a due day (e.g. from calendar). Ignored when editing. */
     initialDueDateMillis: Long? = null,
     goals: List<GoalEntity> = emptyList()
@@ -111,6 +118,15 @@ fun AddTaskDialog(
     }
     var linkedGoalId by remember(existingTask?.id) {
         mutableStateOf(existingTask?.linkedGoalId)
+    }
+    var selectedRepeat by remember(existingTask?.id) {
+        mutableStateOf(existingTask?.repeat ?: RepeatRule.NONE)
+    }
+    var isPinned by remember(existingTask?.id) {
+        mutableStateOf(existingTask?.isPinned ?: false)
+    }
+    var notes by remember(existingTask?.id) {
+        mutableStateOf(existingTask?.notes.orEmpty())
     }
     var showDatePicker by remember { mutableStateOf(false) }
 
@@ -361,6 +377,69 @@ fun AddTaskDialog(
                     }
                 }
 
+                Spacer(modifier = Modifier.height(14.dp))
+
+                Text(
+                    text = "Repeat",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    RepeatRule.entries.forEach { rule ->
+                        PixiChip(
+                            label = rule.displayName,
+                            selected = selectedRepeat == rule,
+                            onClick = { selectedRepeat = rule },
+                            modifier = Modifier.testTag("repeat_${rule.name}")
+                        )
+                    }
+                }
+                if (selectedRepeat != RepeatRule.NONE) {
+                    Text(
+                        text = when (selectedRepeat) {
+                            RepeatRule.DAILY -> "Completing it schedules the next day at the same time."
+                            RepeatRule.WEEKDAYS -> "Skips Saturday and Sunday."
+                            RepeatRule.WEEKLY -> "Comes back on the same weekday."
+                            RepeatRule.NONE -> ""
+                        },
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 6.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    PixiChip(
+                        label = if (isPinned) "Pinned" else "Pin to top",
+                        selected = isPinned,
+                        onClick = { isPinned = !isPinned }
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = notes,
+                    onValueChange = { notes = it },
+                    label = { Text("Notes") },
+                    placeholder = { Text("Optional details") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("input_task_notes"),
+                    minLines = 2,
+                    maxLines = 4,
+                    shape = PixiFieldShape,
+                    colors = fieldColors
+                )
+
                 Spacer(modifier = Modifier.height(12.dp))
 
                 OutlinedTextField(
@@ -398,7 +477,10 @@ fun AddTaskDialog(
                                     dueLabel,
                                     dueMillis,
                                     subtasks,
-                                    linkedGoalId
+                                    linkedGoalId,
+                                    selectedRepeat.name,
+                                    isPinned,
+                                    notes.trim()
                                 )
                             } else {
                                 onAddTask(
@@ -408,7 +490,10 @@ fun AddTaskDialog(
                                     dueLabel,
                                     dueMillis,
                                     subtasks,
-                                    linkedGoalId
+                                    linkedGoalId,
+                                    selectedRepeat.name,
+                                    isPinned,
+                                    notes.trim()
                                 )
                             }
                             onDismiss()

@@ -493,6 +493,8 @@ fun PixiDoApp(
                             showAddTaskDialog = true
                         },
                         onSnoozeTask = { viewModel.snoozeTask(it) },
+                        onPinTask = { viewModel.toggleTaskPinned(it) },
+                        onSkipRepeat = { viewModel.skipRepeatOccurrence(it) },
                         onOpenAddTask = {
                             sound.play(Sfx.DIALOG_OPEN)
                             editingTask = null
@@ -679,16 +681,18 @@ fun PixiDoApp(
             existingTask = editingTask,
             initialDueDateMillis = addTaskForDate,
             goals = goals,
-            onAddTask = { title, category, priority, dueTimeStr, dueDateMillis, subtasks, linkedGoalId ->
+            onAddTask = { title, category, priority, dueTimeStr, dueDateMillis, subtasks, linkedGoalId, repeatRule, isPinned, notes ->
                 sound.play(Sfx.ADD_TASK)
                 viewModel.addTask(
-                    title, category, priority, dueTimeStr, dueDateMillis, subtasks, linkedGoalId
+                    title, category, priority, dueTimeStr, dueDateMillis, subtasks, linkedGoalId,
+                    repeatRule, isPinned, notes
                 )
             },
-            onUpdateTask = { id, title, category, priority, dueTimeStr, dueDateMillis, subtasks, linkedGoalId ->
+            onUpdateTask = { id, title, category, priority, dueTimeStr, dueDateMillis, subtasks, linkedGoalId, repeatRule, isPinned, notes ->
                 sound.play(Sfx.ADD_TASK)
                 viewModel.updateTask(
-                    id, title, category, priority, dueTimeStr, dueDateMillis, subtasks, linkedGoalId
+                    id, title, category, priority, dueTimeStr, dueDateMillis, subtasks, linkedGoalId,
+                    repeatRule, isPinned, notes
                 )
             }
         )

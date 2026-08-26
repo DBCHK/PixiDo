@@ -26,7 +26,9 @@ import com.example.data.GoalEntity
 import com.example.data.NoteEntity
 import com.example.data.NotificationSoundOption
 import com.example.data.PendingSmsTransactionEntity
+import com.example.data.RepeatRule
 import com.example.data.TaskEntity
+import com.example.data.TaskRepeat
 import com.example.data.TransactionType
 import com.example.data.UserPreferencesRepository
 import com.example.data.UserProfile
@@ -573,6 +575,28 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val newCompleted = !task.isCompleted
             val now = System.currentTimeMillis()
+
+            if (newCompleted && task.isRepeating) {
+                val rolled = TaskRepeat.rollForward(task, now)
+                repository.updateTask(rolled)
+                ReminderScheduler.cancelTaskReminders(appContext(), task.id)
+                NowBarHelper.clearTaskEta(appContext(), task.id)
+                if (rolled.dueDateMillis > now) {
+                    ReminderScheduler.scheduleTaskReminders(
+                        context = appContext(),
+                        itemId = task.id,
+                        dueAtMillis = rolled.dueDateMillis,
+                        title = rolled.title,
+                        body = "It's time for “${rolled.title}” (${rolled.dueTimeStr})"
+                    )
+                }
+                preferences.addXp(task.xpReward)
+                bumpLinkedGoal(task, now)
+                _snackbarMessage.value = "Done · next ${rolled.dueTimeStr}"
+                refreshWidgets()
+                return@launch
+            }
+
             val newStreak = if (newCompleted) task.streakCount + 1 else maxOf(1, task.streakCount - 1)
             val updated = task.copy(
                 isCompleted = newCompleted,
@@ -582,22 +606,61 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
             repository.updateTask(updated)
 
             if (newCompleted) {
-                // No more reminder once completed
                 ReminderScheduler.cancelTaskReminders(appContext(), task.id)
                 NowBarHelper.clearTaskEta(appContext(), task.id)
                 preferences.addXp(task.xpReward)
-                // Completing a task can bump a linked goal — contribution lives on Goals
-                task.linkedGoalId?.let { goalId ->
-                    goals.value.find { it.id == goalId }?.let { targetGoal ->
-                        val updatedGoal = targetGoal.copy(
-                            currentAmount = targetGoal.currentAmount + 1.0,
-                            isCompleted = (targetGoal.currentAmount + 1.0) >= targetGoal.targetAmount
-                        )
-                        repository.updateGoal(updatedGoal)
-                        repository.recordGoalProgress(goalId, xpEarned = 10, timestamp = now)
-                    }
-                }
+                bumpLinkedGoal(task, now)
             }
+            refreshWidgets()
+        }
+    }
+
+    private suspend fun bumpLinkedGoal(task: TaskEntity, now: Long) {
+        task.linkedGoalId?.let { goalId ->
+            goals.value.find { it.id == goalId }?.let { targetGoal ->
+                val updatedGoal = targetGoal.copy(
+                    currentAmount = targetGoal.currentAmount + 1.0,
+                    isCompleted = (targetGoal.currentAmount + 1.0) >= targetGoal.targetAmount
+                )
+                repository.updateGoal(updatedGoal)
+                repository.recordGoalProgress(goalId, xpEarned = 10, timestamp = now)
+            }
+        }
+    }
+
+    fun toggleTaskPinned(task: TaskEntity) {
+        viewModelScope.launch {
+            repository.updateTask(task.copy(isPinned = !task.isPinned))
+            refreshWidgets()
+        }
+    }
+
+    /** Skip this occurrence of a repeating task (no streak / XP). */
+    fun skipRepeatOccurrence(task: TaskEntity) {
+        viewModelScope.launch {
+            if (!task.isRepeating || task.isCompleted) return@launch
+            val next = TaskRepeat.nextDue(
+                task.dueDateMillis,
+                task.repeat,
+                System.currentTimeMillis()
+            )
+            val updated = task.copy(
+                dueDateMillis = next,
+                dueTimeStr = TaskRepeat.dueLabel(next)
+            )
+            repository.updateTask(updated)
+            ReminderScheduler.cancelTaskReminders(appContext(), task.id)
+            NowBarHelper.clearTaskEta(appContext(), task.id)
+            if (next > System.currentTimeMillis()) {
+                ReminderScheduler.scheduleTaskReminders(
+                    context = appContext(),
+                    itemId = task.id,
+                    dueAtMillis = next,
+                    title = updated.title,
+                    body = "It's time for “${updated.title}” (${updated.dueTimeStr})"
+                )
+            }
+            _snackbarMessage.value = "Skipped · next ${updated.dueTimeStr}"
             refreshWidgets()
         }
     }
@@ -626,7 +689,10 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
         dueTimeStr: String,
         dueDateMillis: Long,
         subtasks: String,
-        linkedGoalId: Int?
+        linkedGoalId: Int?,
+        repeatRule: String = RepeatRule.NONE.name,
+        isPinned: Boolean = false,
+        notes: String = ""
     ) {
         viewModelScope.launch {
             val task = TaskEntity(
@@ -641,7 +707,10 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
                     "HIGH_FIRE" -> 40
                     "CORE_GOAL" -> 30
                     else -> 20
-                }
+                },
+                repeatRule = RepeatRule.from(repeatRule).name,
+                isPinned = isPinned,
+                notes = notes.trim()
             )
             val newId = repository.addTask(task).toInt()
             if (task.dueDateMillis > System.currentTimeMillis()) {
@@ -666,7 +735,10 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
         dueTimeStr: String,
         dueDateMillis: Long,
         subtasks: String,
-        linkedGoalId: Int?
+        linkedGoalId: Int?,
+        repeatRule: String = RepeatRule.NONE.name,
+        isPinned: Boolean = false,
+        notes: String = ""
     ) {
         viewModelScope.launch {
             val existing = tasks.value.find { it.id == taskId } ?: return@launch
@@ -682,7 +754,10 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
                     "HIGH_FIRE" -> 40
                     "CORE_GOAL" -> 30
                     else -> 20
-                }
+                },
+                repeatRule = RepeatRule.from(repeatRule).name,
+                isPinned = isPinned,
+                notes = notes.trim()
             )
             repository.updateTask(updated)
             ReminderScheduler.cancelTaskReminders(appContext(), taskId)
