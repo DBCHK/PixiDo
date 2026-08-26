@@ -321,14 +321,14 @@ fun TasksScreen(
                                 else -> "Nothing here"
                             },
                             subtitle = when {
-                                tasks.isEmpty() -> "Tap the yellow + to create your first task"
+                                tasks.isEmpty() -> "Tap + to add one"
                                 selectedFilter == "OVERDUE" -> "You’re all caught up — no overdue tasks"
                                 selectedFilter == "TODAY" -> "Nothing due today. Plan ahead on the calendar."
                                 selectedFilter == "REPEATING" -> "No repeating tasks yet. Edit a task and set Repeat."
                                 selectedFilter == "PINNED" -> "Pin important tasks to keep them at the top."
                                 else -> "Try another filter or add a new task"
                             },
-                            doodleRes = if (tasks.isEmpty()) R.drawable.doodle_tasks else null,
+                            doodleRes = null,
                             actionLabel = if (tasks.isEmpty()) "Add a task" else null,
                             onAction = if (tasks.isEmpty()) onOpenAddTask else null
                         )
@@ -841,8 +841,8 @@ fun TaskCardItem(
                     Box(modifier = Modifier.fillMaxWidth()) {
                         Text(
                             text = task.title,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Normal,
                             color = if (showAsDone) MaterialTheme.colorScheme.onSurfaceVariant
                             else MaterialTheme.colorScheme.onSurface,
                             // Soft system line-through after animation settles; live slash draws below
@@ -874,96 +874,36 @@ fun TaskCardItem(
                         }
                     }
 
-                    FlowRow(
-                        modifier = Modifier.padding(top = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        PixiBadge(
-                            text = task.category,
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        PixiBadge(
-                            text = priorityLabel,
-                            containerColor = priorityColor.copy(alpha = 0.15f),
-                            contentColor = priorityColor
-                        )
-                        if (task.isRepeating) {
-                            PixiBadge(
-                                text = task.repeat.shortLabel,
-                                containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                                contentColor = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                        if (task.isPinned) {
-                            PixiBadge(
-                                text = "Pinned",
-                                containerColor = Color(0xFFFBBF24).copy(alpha = 0.18f),
-                                contentColor = Color(0xFFB45309)
-                            )
-                        }
-                        if (isOverdue && !showAsDone) {
-                            PixiBadge(
-                                text = "Overdue",
-                                containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.15f),
-                                contentColor = MaterialTheme.colorScheme.error
-                            )
-                        }
-                        if (task.streakCount > 1) {
-                            PixiBadge(
-                                text = "🔥 ${task.streakCount}d",
-                                containerColor = Color(0xFFFBBF24).copy(alpha = 0.18f),
-                                contentColor = Color(0xFFB45309)
-                            )
-                        }
-                    }
-
                     if (task.notes.isNotBlank()) {
                         Text(
                             text = task.notes,
                             fontSize = 13.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2,
+                            maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(top = 6.dp)
+                            modifier = Modifier.padding(top = 4.dp)
                         )
                     }
 
-                    if (dueLabel.isNotBlank()) {
-                        Row(
-                            modifier = Modifier
-                                .padding(top = 8.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    if (isOverdue && !task.isCompleted)
-                                        MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.65f)
-                                    else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f)
-                                )
-                                .padding(horizontal = 10.dp, vertical = 5.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Schedule,
-                                contentDescription = "Due",
-                                tint = if (isOverdue && !task.isCompleted)
-                                    MaterialTheme.colorScheme.error
-                                else MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(13.dp)
-                            )
-                            Spacer(modifier = Modifier.width(5.dp))
-                            Text(
-                                text = dueLabel,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = if (isOverdue && !task.isCompleted)
-                                    MaterialTheme.colorScheme.onErrorContainer
-                                else MaterialTheme.colorScheme.onPrimaryContainer,
-                                maxLines = 1,
-                                softWrap = false,
-                                overflow = TextOverflow.Ellipsis
-                            )
+                    val meta = buildString {
+                        if (isOverdue && !showAsDone) append("Overdue")
+                        else if (dueLabel.isNotBlank()) append(dueLabel)
+                        if (task.isRepeating) {
+                            if (isNotEmpty()) append("  ·  ")
+                            append(task.repeat.shortLabel)
                         }
+                    }
+                    if (meta.isNotBlank()) {
+                        Text(
+                            text = meta,
+                            fontSize = 13.sp,
+                            color = if (isOverdue && !showAsDone)
+                                MaterialTheme.colorScheme.error
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
                     }
                 }
 

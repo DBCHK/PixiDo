@@ -191,18 +191,7 @@ fun AddTaskDialog(
                     )
                 }
 
-                if (!isEdit) {
-                    PixiDoodle3D(
-                        resId = R.drawable.doodle_tasks,
-                        size = 110.dp,
-                        modifier = Modifier
-                            .padding(vertical = 10.dp)
-                            .align(Alignment.CenterHorizontally),
-                        orbitSeconds = 8
-                    )
-                } else {
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
+                Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
                     text = if (isEdit) "Update details — calendar stays in sync"

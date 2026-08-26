@@ -530,7 +530,7 @@ fun BudgetScreen(
                     PixiEmptyState(
                         title = "No transactions yet",
                         subtitle = "Tap the yellow + to log expense, income, lent, or borrow in $symbol",
-                        doodleRes = R.drawable.doodle_budget
+                        doodleRes = null
                     )
                 }
             } else {

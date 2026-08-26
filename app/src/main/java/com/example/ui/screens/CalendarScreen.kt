@@ -360,12 +360,6 @@ fun CalendarScreen(
                                 .padding(d.cardPadding),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            PixiDoodle3D(
-                                resId = R.drawable.doodle_calendar,
-                                size = if (d.isCompact) 120.dp else 150.dp,
-                                modifier = Modifier.padding(bottom = 8.dp),
-                                orbitSeconds = 8
-                            )
                             Text(
                                 text = "Free day",
                                 fontSize = d.headline,

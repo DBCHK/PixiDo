@@ -183,7 +183,7 @@ fun GoalsScreen(
                     PixiEmptyState(
                         title = "No goals yet",
                         subtitle = "Tap the yellow + to set your first milestone",
-                        doodleRes = R.drawable.doodle_goals,
+                        doodleRes = null,
                         actionLabel = "Add a goal",
                         onAction = onOpenAddGoal
                     )

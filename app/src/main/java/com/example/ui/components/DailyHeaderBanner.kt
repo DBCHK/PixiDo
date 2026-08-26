@@ -145,13 +145,7 @@ fun DailyHeaderBanner(
             }
         }
 
-        Spacer(modifier = Modifier.height(18.dp))
-        Text(
-            text = hello,
-            fontSize = 15.sp,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        Spacer(modifier = Modifier.height(12.dp))
         Text(
             text = greetingName.replaceFirstChar { it.titlecase(Locale.getDefault()) },
             fontSize = greetingSize,
@@ -162,25 +156,18 @@ fun DailyHeaderBanner(
             lineHeight = (greetingSize.value + 4f).sp,
             modifier = Modifier.fillMaxWidth()
         )
-        Spacer(modifier = Modifier.height(6.dp))
         Text(
             text = when {
-                overdueCount > 0 -> "$overdueCount overdue · $openCount open"
-                openCount + doneToday == 0 -> "Nothing planned yet"
-                doneToday == 0 -> "$openCount to do today"
-                openCount == 0 -> "All done for today"
-                else -> "$doneToday of ${openCount + doneToday} done today"
+                overdueCount > 0 -> "$overdueCount overdue"
+                openCount + doneToday == 0 -> hello
+                doneToday == 0 -> "$openCount open"
+                openCount == 0 -> "All done"
+                else -> "$doneToday of ${openCount + doneToday} done"
             },
             fontSize = 15.sp,
+            fontWeight = FontWeight.Normal,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1
-        )
-
-        Spacer(modifier = Modifier.height(18.dp))
-        TaskDayStatsStrip(
-            openCount = openCount,
-            doneToday = doneToday,
-            overdueCount = overdueCount
         )
     }
 }

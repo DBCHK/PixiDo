@@ -13,59 +13,59 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import com.example.data.AppThemeOption
 
-/** Soft Lilac light — primary look matching idea2 reference. */
+/** Default light — ink on paper. */
 private val PixiDoLightScheme = lightColorScheme(
-    primary = PixiLavender,
+    primary = Color(0xFF1C1C1E),
     onPrimary = Color.White,
-    primaryContainer = PixiLavenderSoft,
-    onPrimaryContainer = PixiLavenderDeep,
-    secondary = PixiPink,
+    primaryContainer = Color(0xFFEEEEF0),
+    onPrimaryContainer = Color(0xFF1C1C1E),
+    secondary = Color(0xFF8E8E93),
     onSecondary = Color.White,
-    secondaryContainer = PixiPinkSoft,
-    onSecondaryContainer = Color(0xFF9B2D5C),
-    tertiary = PixiYellowDeep,
-    onTertiary = Color(0xFF1C1C1E),
-    tertiaryContainer = Color(0xFFFFF6C8),
-    onTertiaryContainer = Color(0xFF5C4A00),
-    background = PixiLightBg,
-    surface = PixiLightSurface,
-    surfaceVariant = PixiLightSurfaceVariant,
-    onBackground = PixiLightOnBg,
-    onSurface = PixiLightOnBg,
-    onSurfaceVariant = PixiLightMuted,
-    outline = PixiLightBorder,
-    outlineVariant = PixiLightChip,
-    error = PixiCoral,
+    secondaryContainer = Color(0xFFF2F2F7),
+    onSecondaryContainer = Color(0xFF3A3A3C),
+    tertiary = Color(0xFF636366),
+    onTertiary = Color.White,
+    tertiaryContainer = Color(0xFFF2F2F7),
+    onTertiaryContainer = Color(0xFF1C1C1E),
+    background = Color(0xFFF5F5F7),
+    surface = Color(0xFFFFFFFF),
+    surfaceVariant = Color(0xFFEEEEF0),
+    onBackground = Color(0xFF1C1C1E),
+    onSurface = Color(0xFF1C1C1E),
+    onSurfaceVariant = Color(0xFF8E8E93),
+    outline = Color(0xFFE5E5EA),
+    outlineVariant = Color(0xFFE5E5EA),
+    error = Color(0xFFFF3B30),
     onError = Color.White,
-    errorContainer = Color(0xFFFFE4E8),
+    errorContainer = Color(0xFFFFE5E3),
     onErrorContainer = Color(0xFF8B1E2D),
-    inverseSurface = Color(0xFF2A2436),
-    inverseOnSurface = Color(0xFFF5F3FA),
-    inversePrimary = PixiLavenderSoft,
-    surfaceTint = PixiLavender
+    inverseSurface = Color(0xFF1C1C1E),
+    inverseOnSurface = Color(0xFFF5F5F7),
+    inversePrimary = Color(0xFFF5F5F7),
+    surfaceTint = Color.Transparent
 )
 
-/** Soft Lilac dark — same language, night surfaces. */
+/** Default dark — paper on ink. */
 private val PixiDoDarkScheme = darkColorScheme(
-    primary = PixiLavender,
-    onPrimary = Color(0xFF1C1C1E),
-    primaryContainer = Color(0xFF3D2F5C),
-    onPrimaryContainer = PixiLavenderSoft,
-    secondary = PixiPink,
+    primary = Color(0xFFF5F5F7),
+    onPrimary = Color(0xFF000000),
+    primaryContainer = Color(0xFF2C2C2E),
+    onPrimaryContainer = Color(0xFFF5F5F7),
+    secondary = Color(0xFF8E8E93),
     onSecondary = Color.White,
-    secondaryContainer = Color(0xFF5C1F3A),
-    onSecondaryContainer = PixiPinkSoft,
-    tertiary = PixiYellow,
-    onTertiary = Color(0xFF1C1C1E),
-    background = PixiDarkBg,
-    surface = PixiDarkSurface,
-    surfaceVariant = PixiDarkSurfaceVariant,
-    onBackground = PixiDarkOnBg,
-    onSurface = PixiDarkOnBg,
-    onSurfaceVariant = PixiDarkMuted,
-    outline = PixiDarkBorder,
-    error = PixiCoral,
-    surfaceTint = PixiLavender
+    secondaryContainer = Color(0xFF2C2C2E),
+    onSecondaryContainer = Color(0xFFF5F5F7),
+    tertiary = Color(0xFF8E8E93),
+    onTertiary = Color.Black,
+    background = Color(0xFF000000),
+    surface = Color(0xFF1C1C1E),
+    surfaceVariant = Color(0xFF2C2C2E),
+    onBackground = Color(0xFFF5F5F7),
+    onSurface = Color(0xFFF5F5F7),
+    onSurfaceVariant = Color(0xFF8E8E93),
+    outline = Color(0xFF3A3A3C),
+    error = Color(0xFFFF453A),
+    surfaceTint = Color.Transparent
 )
 
 private val OceanScheme = darkColorScheme(
@@ -351,8 +351,8 @@ fun resolveColorScheme(
 fun AppThemeOption.displayName(): String = when (this) {
     AppThemeOption.MATERIAL_YOU -> "Material You"
     AppThemeOption.SYSTEM -> "System"
-    AppThemeOption.PIXIDO_DARK -> "Soft Night"
-    AppThemeOption.PIXIDO_LIGHT -> "Soft Lilac"
+    AppThemeOption.PIXIDO_DARK -> "Ink"
+    AppThemeOption.PIXIDO_LIGHT -> "Paper"
     AppThemeOption.OCEAN -> "Ocean"
     AppThemeOption.SUNSET -> "Sunset"
     AppThemeOption.FOREST -> "Forest"
@@ -370,8 +370,8 @@ fun AppThemeOption.displayName(): String = when (this) {
 fun AppThemeOption.description(): String = when (this) {
     AppThemeOption.MATERIAL_YOU -> "Wallpaper colors (Android 12+)"
     AppThemeOption.SYSTEM -> "Follow device light/dark"
-    AppThemeOption.PIXIDO_DARK -> "Soft lilac on night surfaces"
-    AppThemeOption.PIXIDO_LIGHT -> "Clean pastel workspace"
+    AppThemeOption.PIXIDO_DARK -> "Black paper"
+    AppThemeOption.PIXIDO_LIGHT -> "Quiet light"
     AppThemeOption.OCEAN -> "Deep teal focus"
     AppThemeOption.SUNSET -> "Warm orange glow"
     AppThemeOption.FOREST -> "Calm green productivity"

@@ -55,13 +55,13 @@ import com.example.ui.theme.PixiYellow
 import com.example.ui.theme.rememberPixiDimens
 
 // Soft, round iOS shape language — capsules and squircle cards, never boxy
-val PixiCardShape = RoundedCornerShape(24.dp)
-val PixiCardShapeSm = RoundedCornerShape(18.dp)
+val PixiCardShape = RoundedCornerShape(16.dp)
+val PixiCardShapeSm = RoundedCornerShape(12.dp)
 val PixiPillShape = RoundedCornerShape(50)
 val PixiChipShape = RoundedCornerShape(50)
-val PixiFieldShape = RoundedCornerShape(18.dp)
-val PixiSheetShape = RoundedCornerShape(28.dp, 28.dp, 0.dp, 0.dp)
-val PixiIslandShape = RoundedCornerShape(34.dp)
+val PixiFieldShape = RoundedCornerShape(12.dp)
+val PixiSheetShape = RoundedCornerShape(20.dp, 20.dp, 0.dp, 0.dp)
+val PixiIslandShape = RoundedCornerShape(28.dp)
 
 /** iOS-style white card — subtle shadow, rounded corners. */
 @Composable
@@ -106,7 +106,7 @@ fun PixiSoftCard(
         shape = PixiCardShape,
         colors = CardDefaults.cardColors(containerColor = containerColor),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+        border = null
     ) {
         content()
     }
@@ -213,31 +213,27 @@ fun PixiChip(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val bg = if (selected) MaterialTheme.colorScheme.primary
-    else MaterialTheme.colorScheme.surface
-    val fg = if (selected) MaterialTheme.colorScheme.onPrimary
-    else MaterialTheme.colorScheme.onSurface
-    val selectPop = rememberPopScale(selected)
+    val bg = if (selected) MaterialTheme.colorScheme.onSurface
+    else Color.Transparent
+    val fg = if (selected) MaterialTheme.colorScheme.background
+    else MaterialTheme.colorScheme.onSurfaceVariant
 
     PixiPopClickable(
         onClick = onClick,
-        modifier = modifier.graphicsLayer {
-            scaleX = if (selected) selectPop else 1f
-            scaleY = if (selected) selectPop else 1f
-        },
-        pressedScale = 0.92f
+        modifier = modifier,
+        pressedScale = 0.96f
     ) {
         Box(
             modifier = Modifier
                 .clip(PixiChipShape)
                 .background(bg)
-                .padding(horizontal = 16.dp, vertical = 10.dp),
+                .padding(horizontal = 12.dp, vertical = 6.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = label,
-                fontSize = 15.sp,
-                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                fontSize = 13.sp,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                 color = fg,
                 maxLines = 1
             )

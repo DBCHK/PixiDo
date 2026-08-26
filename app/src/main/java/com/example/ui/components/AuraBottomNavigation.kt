@@ -90,7 +90,7 @@ fun AuraBottomNavigation(
             shape = PixiIslandShape,
             color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
             tonalElevation = 0.dp,
-            shadowElevation = 12.dp
+            shadowElevation = 4.dp
         ) {
             Row(
                 modifier = Modifier
@@ -167,7 +167,7 @@ private fun NavItem(
         label = "tabLabelColor"
     )
     val bubble by animateColorAsState(
-        targetValue = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+        targetValue = if (selected) MaterialTheme.colorScheme.surfaceVariant
         else androidx.compose.ui.graphics.Color.Transparent,
         label = "tabBubble"
     )
