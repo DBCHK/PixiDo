@@ -80,6 +80,12 @@ class SmsTransactionParserTest {
     }
 
     @Test
+    fun ignoresLoanSms() {
+        val body = "Dear Customer, your EMI of Rs. 15,000 for Loan XX123 is due on 10-Aug-24."
+        assertNull(SmsTransactionParser.parse(body, "VM-HDFCBK"))
+    }
+
+    @Test
     fun looksLikeTransactionRequiresMoneyHint() {
         assertFalse(SmsTransactionParser.looksLikeTransactionSms("Hello friend", "VM-HDFCBK"))
         assertTrue(

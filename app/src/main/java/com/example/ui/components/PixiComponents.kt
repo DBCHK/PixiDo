@@ -12,6 +12,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -30,11 +34,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
+
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
@@ -49,21 +54,21 @@ import com.example.ui.theme.PixiLightSearch
 import com.example.ui.theme.PixiYellow
 import com.example.ui.theme.rememberPixiDimens
 
-// Shared shape language from the reference screenshots
-val PixiCardShape = RoundedCornerShape(24.dp)
-val PixiCardShapeSm = RoundedCornerShape(18.dp)
-val PixiPillShape = RoundedCornerShape(50)
+// iOS-inspired shape language
+val PixiCardShape = RoundedCornerShape(14.dp)
+val PixiCardShapeSm = RoundedCornerShape(10.dp)
+val PixiPillShape = RoundedCornerShape(12.dp) // iOS buttons are usually rounded rects
 val PixiChipShape = RoundedCornerShape(50)
-val PixiFieldShape = RoundedCornerShape(18.dp)
-val PixiSheetShape = RoundedCornerShape(28.dp)
+val PixiFieldShape = RoundedCornerShape(10.dp)
+val PixiSheetShape = RoundedCornerShape(14.dp, 14.dp, 0.dp, 0.dp)
 
-/** Soft white card — hairline border, zero elevation (reference list cards). */
+/** iOS-style white card — subtle shadow, rounded corners. */
 @Composable
 fun PixiCard(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
     containerColor: Color = MaterialTheme.colorScheme.surface,
-    borderColor: Color = MaterialTheme.colorScheme.outline.copy(alpha = 0.85f),
+    borderColor: Color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f),
     content: @Composable () -> Unit
 ) {
     val shape = PixiCardShape
@@ -81,7 +86,7 @@ fun PixiCard(
         },
         shape = shape,
         colors = CardDefaults.cardColors(containerColor = containerColor),
-        border = BorderStroke(1.dp, borderColor),
+        border = BorderStroke(0.5.dp, borderColor),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         content()
@@ -106,7 +111,7 @@ fun PixiSoftCard(
     }
 }
 
-/** Full-width capsule primary CTA — solid lavender (idea2). */
+/** Full-width capsule primary CTA — iOS-style rounded rect. */
 @Composable
 fun PixiPrimaryButton(
     text: String,
@@ -130,18 +135,23 @@ fun PixiPrimaryButton(
             disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
             disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant
         ),
-        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
+        elevation = ButtonDefaults.buttonElevation(
+            defaultElevation = 0.dp,
+            pressedElevation = 0.dp,
+            hoveredElevation = 0.dp,
+            focusedElevation = 0.dp
+        )
     ) {
         Text(
             text = text,
             fontWeight = FontWeight.Bold,
-            fontSize = d.body,
+            fontSize = 17.sp, // iOS standard button size
             maxLines = 1
         )
     }
 }
 
-/** Soft filled secondary capsule — light lavender (idea2 secondary CTAs). */
+/** Soft filled secondary capsule — iOS-style secondary. */
 @Composable
 fun PixiSecondaryButton(
     text: String,
@@ -158,12 +168,12 @@ fun PixiSecondaryButton(
             .height(d.buttonHeight),
         shape = PixiPillShape,
         colors = ButtonDefaults.buttonColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
-            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f),
+            contentColor = MaterialTheme.colorScheme.primary
         ),
         elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
     ) {
-        Text(text = text, fontWeight = FontWeight.Bold, fontSize = d.body)
+        Text(text = text, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
     }
 }
 
@@ -181,12 +191,12 @@ fun PixiOutlineButton(
             .fillMaxWidth()
             .height(d.buttonHeight),
         shape = PixiPillShape,
-        border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.outline),
+        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)),
         colors = ButtonDefaults.outlinedButtonColors(
-            contentColor = MaterialTheme.colorScheme.onSurface
+            contentColor = MaterialTheme.colorScheme.primary
         )
     ) {
-        Text(text = text, fontWeight = FontWeight.SemiBold, fontSize = d.body)
+        Text(text = text, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
     }
 }
 
@@ -326,36 +336,95 @@ fun PixiCloseButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
     }
 }
 
-/** Yellow circular + FAB matching reference bottom nav — press pops. */
+/**
+ * Brand toggle — squircle track and thumb with a tiny inner dash.
+ * Distinct from iOS green pills.
+ */
+@Composable
+fun PixiToggle(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true
+) {
+    val trackW = 50.dp
+    val trackH = 30.dp
+    val thumb = 22.dp
+    val inset = 4.dp
+    val travel = trackW - thumb - inset * 2
+    val offsetX by animateDpAsState(
+        targetValue = if (checked) travel else 0.dp,
+        animationSpec = spring(dampingRatio = 0.78f, stiffness = 420f),
+        label = "pixiToggleThumb"
+    )
+    val trackColor by animateColorAsState(
+        targetValue = when {
+            !enabled -> MaterialTheme.colorScheme.surfaceVariant
+            checked -> MaterialTheme.colorScheme.primary
+            else -> MaterialTheme.colorScheme.outline.copy(alpha = 0.38f)
+        },
+        label = "pixiToggleTrack"
+    )
+    Box(
+        modifier = modifier
+            .size(width = trackW, height = trackH)
+            .clip(RoundedCornerShape(9.dp))
+            .background(trackColor)
+            .clickable(
+                enabled = enabled,
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = { onCheckedChange(!checked) }
+            )
+            .padding(inset)
+    ) {
+        Box(
+            modifier = Modifier
+                .offset(x = offsetX)
+                .size(thumb)
+                .clip(RoundedCornerShape(7.dp))
+                .background(Color.White)
+        ) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .width(if (checked) 10.dp else 7.dp)
+                    .height(2.5.dp)
+                    .clip(RoundedCornerShape(1.dp))
+                    .background(
+                        if (checked) MaterialTheme.colorScheme.primary.copy(alpha = 0.9f)
+                        else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                    )
+            )
+        }
+    }
+}
+
+/** iOS-style + control for the tab bar — rounded square, tinted primary. */
 @Composable
 fun PixiYellowFab(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    size: Dp = 56.dp
+    size: Dp = 44.dp
 ) {
+    val shape = RoundedCornerShape(12.dp)
     PixiPopClickable(
         onClick = onClick,
         modifier = modifier.size(size),
-        pressedScale = 0.90f
+        pressedScale = 0.92f
     ) {
         Box(
             modifier = Modifier
                 .size(size)
-                .shadow(
-                    elevation = 6.dp,
-                    shape = CircleShape,
-                    ambientColor = PixiYellow.copy(alpha = 0.35f),
-                    spotColor = PixiYellow.copy(alpha = 0.45f)
-                )
-                .clip(CircleShape)
-                .background(PixiYellow),
+                .clip(shape)
+                .background(MaterialTheme.colorScheme.primary),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = Icons.Filled.Add,
                 contentDescription = "Add",
-                tint = Color(0xFF1C1C1E),
-                modifier = Modifier.size(size * 0.48f)
+                tint = MaterialTheme.colorScheme.onPrimary,
+                modifier = Modifier.size(size * 0.52f)
             )
         }
     }
@@ -412,7 +481,7 @@ fun PixiEmptyState(
     }
 }
 
-/** Screen title block — large bold headline + optional subtitle. */
+/** iOS large-title block — 34pt bold + optional subtitle. */
 @Composable
 fun PixiScreenHeader(
     title: String,
@@ -429,6 +498,7 @@ fun PixiScreenHeader(
         Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
             Text(
                 text = title,
+                style = MaterialTheme.typography.displayLarge,
                 fontSize = d.title,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,

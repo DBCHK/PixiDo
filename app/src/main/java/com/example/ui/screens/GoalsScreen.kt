@@ -118,6 +118,7 @@ fun GoalsScreen(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = "Goals",
+                                style = MaterialTheme.typography.displayLarge,
                                 fontSize = d.title,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface,

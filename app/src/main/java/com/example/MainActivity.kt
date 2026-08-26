@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -38,6 +39,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -54,6 +56,7 @@ import com.example.audio.ProvideSoundEngine
 import com.example.audio.Sfx
 import com.example.notify.NotificationHelper
 import com.example.notify.ReminderScheduler
+import com.example.sms.AppForegroundState
 import com.example.sms.SmsInboxScanner
 import com.example.ui.AuraViewModel
 import com.example.ui.components.AddBudgetDialog
@@ -88,6 +91,7 @@ class MainActivity : ComponentActivity() {
 
     private var pendingWidgetAction by mutableStateOf<String?>(null)
     private var pendingEtaAlert by mutableStateOf<PendingEtaAlert?>(null)
+    private var pendingSmsOpen by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -96,6 +100,7 @@ class MainActivity : ComponentActivity() {
         NotificationHelper.ensureChannels(this)
         pendingWidgetAction = intent?.getStringExtra(com.example.widget.WidgetActions.EXTRA_ACTION)
         pendingEtaAlert = intent?.toEtaAlert()
+        pendingSmsOpen = intent?.getBooleanExtra(NotificationHelper.EXTRA_SMS_PROMPT, false) == true
         setContent {
             val viewModel: AuraViewModel = viewModel()
             val profile by viewModel.userProfile.collectAsStateWithLifecycle()
@@ -112,11 +117,23 @@ class MainActivity : ComponentActivity() {
                         pendingWidgetAction = pendingWidgetAction,
                         onWidgetActionConsumed = { pendingWidgetAction = null },
                         pendingEtaAlert = pendingEtaAlert,
-                        onEtaAlertConsumed = { pendingEtaAlert = null }
+                        onEtaAlertConsumed = { pendingEtaAlert = null },
+                        pendingSmsOpen = pendingSmsOpen,
+                        onSmsOpenConsumed = { pendingSmsOpen = false }
                     )
                 }
             }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        AppForegroundState.isResumed = true
+    }
+
+    override fun onStop() {
+        AppForegroundState.isResumed = false
+        super.onStop()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -124,6 +141,9 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         pendingWidgetAction = intent.getStringExtra(com.example.widget.WidgetActions.EXTRA_ACTION)
         intent.toEtaAlert()?.let { pendingEtaAlert = it }
+        if (intent.getBooleanExtra(NotificationHelper.EXTRA_SMS_PROMPT, false)) {
+            pendingSmsOpen = true
+        }
     }
 
     private fun Intent.toEtaAlert(): PendingEtaAlert? {
@@ -175,7 +195,9 @@ fun PixiDoApp(
     pendingWidgetAction: String? = null,
     onWidgetActionConsumed: () -> Unit = {},
     pendingEtaAlert: PendingEtaAlert? = null,
-    onEtaAlertConsumed: () -> Unit = {}
+    onEtaAlertConsumed: () -> Unit = {},
+    pendingSmsOpen: Boolean = false,
+    onSmsOpenConsumed: () -> Unit = {}
 ) {
     val sound = LocalSoundEngine.current
     val context = LocalContext.current
@@ -229,6 +251,13 @@ fun PixiDoApp(
             else -> { /* open app only */ }
         }
         onWidgetActionConsumed()
+    }
+
+    LaunchedEffect(pendingSmsOpen) {
+        if (!pendingSmsOpen) return@LaunchedEffect
+        showSplash = false
+        viewModel.refreshSmsImports()
+        onSmsOpenConsumed()
     }
 
     // Task ETA full-screen / notification deep link → show popup immediately
@@ -452,7 +481,6 @@ fun PixiDoApp(
                         tasks = tasks,
                         goals = goals,
                         notes = notes,
-                        userXp = profile.userXp,
                         profile = profile,
                         onToggleTask = { viewModel.toggleTaskCompletion(it) },
                         onToggleSubtask = { task, subtask ->
@@ -610,6 +638,33 @@ fun PixiDoApp(
         if (showSplash) {
             StartupSplash(onFinished = { showSplash = false })
         }
+
+        // In-app iOS-style banner for debit/credit SMS — closeable, non-blocking
+        val smsPrompt = activeSmsPrompt
+        if (!showSplash && smsPrompt != null && !showProfile) {
+            val remaining = (pendingSmsTransactions.size - 1).coerceAtLeast(0)
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .windowInsetsPadding(WindowInsets.statusBars)
+            ) {
+                SmsImportDialog(
+                    item = smsPrompt,
+                    accounts = accounts,
+                    currencyCode = profile.currencyCode.ifBlank { "INR" },
+                    remainingCount = remaining,
+                    lastAccountId = profile.lastSmsAccountId.takeIf { it > 0 },
+                    onAccept = { manualId ->
+                        sound.play(Sfx.IMPORT)
+                        viewModel.acceptSmsTransaction(smsPrompt, manualId)
+                    },
+                    onDismiss = {
+                        sound.play(Sfx.DIALOG_CLOSE)
+                        viewModel.dismissSmsTransaction(smsPrompt)
+                    }
+                )
+            }
+        }
     }
 
     if (showAddTaskDialog) {
@@ -651,25 +706,6 @@ fun PixiDoApp(
                 viewModel.addBudgetItem(
                     title, amount, isExpense, category, note, accountId, transactionType
                 )
-            }
-        )
-    }
-
-    // Bank SMS → Budget import prompt (after splash, one at a time)
-    val smsPrompt = activeSmsPrompt
-    if (!showSplash && smsPrompt != null && !showProfile) {
-        val remaining = (pendingSmsTransactions.size - 1).coerceAtLeast(0)
-        SmsImportDialog(
-            item = smsPrompt,
-            currencyCode = profile.currencyCode.ifBlank { "INR" },
-            remainingCount = remaining,
-            onAccept = {
-                sound.play(Sfx.ADD_BUDGET)
-                viewModel.acceptSmsTransaction(smsPrompt)
-            },
-            onDismiss = {
-                sound.play(Sfx.DIALOG_CLOSE)
-                viewModel.dismissSmsTransaction(smsPrompt)
             }
         )
     }
@@ -745,7 +781,7 @@ fun PixiDoApp(
                 activeEta = null
             },
             onSnooze = {
-                sound.play(Sfx.TAP_SOFT)
+                sound.play(Sfx.SNOOZE)
                 if (eta.type == ReminderScheduler.TYPE_TASK && eta.itemId > 0) {
                     tasks.find { it.id == eta.itemId }?.let { viewModel.snoozeTaskMinutes(it, 10) }
                 }

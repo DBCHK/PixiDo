@@ -204,7 +204,7 @@ fun FocusTimerModal(
                 Spacer(modifier = Modifier.height(14.dp))
 
                 Text(
-                    text = "Finish a session to earn +50 XP",
+                    text = "Stay with the timer until it rings",
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

@@ -1,7 +1,7 @@
 package com.example.ui.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -9,186 +9,286 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.TrendingDown
 import androidx.compose.material.icons.automirrored.outlined.TrendingUp
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.AccountBalance
+import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
+import com.example.data.AccountEntity
 import com.example.data.Currencies
 import com.example.data.PendingSmsTransactionEntity
+import com.example.sms.SmsAccountMatcher
 
 /**
- * Prompt shown on app open when a bank / UPI SMS was detected.
- * User can add the amount to Budget or skip.
+ * In-app notification panel for a detected debit/credit SMS.
+ *
+ * Close (X and Close button) dismisses it.
+ * "Choose account" opens a picker; picking an account assigns the amount.
+ * By default the matching bank / last-used / primary account is pre-selected.
  */
 @Composable
 fun SmsImportDialog(
     item: PendingSmsTransactionEntity,
+    accounts: List<AccountEntity>,
     currencyCode: String = "INR",
     remainingCount: Int = 0,
-    onAccept: () -> Unit,
+    lastAccountId: Int? = null,
+    onAccept: (Int?) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val symbol = Currencies.symbolOf(currencyCode)
-    val amountLabel = Currencies.format(item.amount, currencyCode)
-    val kindLabel = if (item.isExpense) "Debit · Expense" else "Credit · Income"
-    val kindColor = if (item.isExpense) {
-        MaterialTheme.colorScheme.error
-    } else {
-        MaterialTheme.colorScheme.primary
+    var showAccountPicker by remember(item.id) { mutableStateOf(false) }
+    var selectedAccount by remember(item.id, accounts, lastAccountId) {
+        mutableStateOf(
+            SmsAccountMatcher.defaultAccount(accounts, item.bankName, lastAccountId)
+        )
     }
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(dismissOnClickOutside = false)
+    val amountLabel = Currencies.format(item.amount, currencyCode)
+    val kindLabel = if (item.isExpense) "Amount deducted" else "Amount credited"
+    val kindColor = if (item.isExpense) {
+        Color(0xFFFF3B30)
+    } else {
+        Color(0xFF34C759)
+    }
+    val defaultName = selectedAccount?.name
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .shadow(
+                elevation = 18.dp,
+                shape = RoundedCornerShape(16.dp),
+                ambientColor = Color.Black.copy(alpha = 0.18f),
+                spotColor = Color.Black.copy(alpha = 0.22f)
+            )
+            .testTag("sms_import_dialog"),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 0.dp
     ) {
-        PixiCard(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .testTag("sms_import_dialog")
+                .padding(horizontal = 16.dp, vertical = 14.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(22.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
+                Box(
                     modifier = Modifier
-                        .size(56.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f)),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
+                        .size(32.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.primary),
+                    contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.AccountBalance,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(28.dp)
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(18.dp)
                     )
                 }
+                Spacer(modifier = Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Transaction detected",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = kindLabel,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = kindColor
+                    )
+                }
+                PixiCircleIconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.testTag("sms_import_close"),
+                    size = 44.dp,
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Close notification",
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
 
-                Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = if (item.isExpense) {
+                        Icons.AutoMirrored.Outlined.TrendingDown
+                    } else {
+                        Icons.AutoMirrored.Outlined.TrendingUp
+                    },
+                    contentDescription = null,
+                    tint = kindColor,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = "Bank SMS detected",
-                    fontSize = 18.sp,
+                    text = amountLabel,
+                    style = MaterialTheme.typography.displayMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
-                    textAlign = TextAlign.Center
+                    modifier = Modifier.testTag("sms_import_amount")
                 )
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = "Add this transaction to your Budget?",
-                    fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
-                )
+            }
 
-                Spacer(modifier = Modifier.height(18.dp))
+            val subtitle = buildString {
+                append(item.bankName)
+                if (item.merchantOrInfo.isNotBlank()) {
+                    append(" · ")
+                    append(item.merchantOrInfo)
+                }
+            }
+            Text(
+                text = subtitle,
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 4.dp)
+            )
 
-                PixiSoftCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+            Spacer(modifier = Modifier.height(14.dp))
+
+            Surface(
+                onClick = { showAccountPicker = true },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("sms_choose_account"),
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(
+                    val accountColor = selectedAccount?.let {
+                        runCatching { Color(android.graphics.Color.parseColor(it.colorHex)) }
+                            .getOrDefault(MaterialTheme.colorScheme.primary)
+                    } ?: MaterialTheme.colorScheme.primary
+                    Box(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
+                            .size(12.dp)
+                            .clip(CircleShape)
+                            .background(accountColor)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = amountLabel.ifBlank { "$symbol${"%.2f".format(item.amount)}" },
-                            fontSize = 28.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.testTag("sms_import_amount")
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = item.bankName,
+                            text = if (defaultName != null) {
+                                "By default: $defaultName"
+                            } else {
+                                "Choose which account"
+                            },
                             fontSize = 15.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.testTag("sms_import_bank")
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
-                        if (item.merchantOrInfo.isNotBlank()) {
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = item.merchantOrInfo,
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center,
-                                maxLines = 2
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Icon(
-                                imageVector = if (item.isExpense) {
-                                    Icons.AutoMirrored.Outlined.TrendingDown
-                                } else {
-                                    Icons.AutoMirrored.Outlined.TrendingUp
-                                },
-                                contentDescription = null,
-                                tint = kindColor,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Text(
-                                text = kindLabel,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = kindColor
-                            )
-                        }
+                        Text(
+                            text = if (item.isExpense) {
+                                "Amount will be deducted from this account"
+                            } else {
+                                "Amount will be credited to this account"
+                            },
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2
+                        )
                     }
-                }
-
-                if (remainingCount > 0) {
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Text(
-                        text = "+$remainingCount more waiting",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    Icon(
+                        imageVector = Icons.Outlined.ChevronRight,
+                        contentDescription = "Choose account",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
                     )
                 }
+            }
 
-                Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-                PixiPrimaryButton(
-                    text = "Add to Budget",
-                    onClick = onAccept,
+            PixiPrimaryButton(
+                text = "Choose account",
+                onClick = { showAccountPicker = true },
+                modifier = Modifier.testTag("sms_choose_account_btn")
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            PixiSecondaryButton(
+                text = if (defaultName != null) "Add to $defaultName" else "Add to Budget",
+                onClick = { onAccept(selectedAccount?.id) },
+                modifier = Modifier.testTag("sms_import_accept")
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            PixiOutlineButton(
+                text = "Close",
+                onClick = onDismiss,
+                modifier = Modifier.testTag("sms_import_skip")
+            )
+
+            if (remainingCount > 0) {
+                Text(
+                    text = "+$remainingCount more pending",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("sms_import_accept")
-                )
-                Spacer(modifier = Modifier.height(10.dp))
-                PixiOutlineButton(
-                    text = "Skip",
-                    onClick = onDismiss,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("sms_import_skip")
+                        .align(Alignment.CenterHorizontally)
+                        .padding(top = 8.dp)
                 )
             }
         }
+    }
+
+    if (showAccountPicker) {
+        AccountSelectionDialog(
+            accounts = accounts,
+            selectedAccountId = selectedAccount?.id,
+            onAccountSelected = { account ->
+                selectedAccount = account
+                showAccountPicker = false
+                onAccept(account.id)
+            },
+            onDismiss = { showAccountPicker = false }
+        )
     }
 }

@@ -560,7 +560,7 @@ fun BudgetScreen(
             accounts = accounts,
             onDismiss = { showTransfer = false },
             onTransfer = { from, to, amount, note ->
-                sound.play(Sfx.ADD_BUDGET)
+                sound.play(Sfx.TRANSFER)
                 onTransfer(from, to, amount, note)
                 showTransfer = false
             }

@@ -38,13 +38,11 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * Soft Lilac tasks header:
- * greeting + Focus chip + circular avatar.
- * (Contribution heatmaps live on the Goals tab, per goal.)
+ * Tasks header: date + focus/profile on the first row, greeting on its own
+ * full-width line so long names never get clipped by the avatar.
  */
 @Composable
 fun DailyHeaderBanner(
-    userXp: Int,
     profile: UserProfile,
     onOpenFocusMode: () -> Unit,
     onOpenProfile: () -> Unit,
@@ -60,43 +58,28 @@ fun DailyHeaderBanner(
     )
     val dateString = dateFormat.format(Date())
     val greetingName = profile.displayName.ifBlank { "there" }
+    val greetingSize = when {
+        greetingName.length > 18 -> if (d.isCompact) 22.sp else 24.sp
+        greetingName.length > 12 -> if (d.isCompact) 24.sp else 28.sp
+        else -> d.title
+    }
 
     Column(modifier = modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 8.dp),
+                .padding(vertical = 4.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
-                Text(
-                    text = dateString,
-                    fontSize = d.label,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "Hey $greetingName",
-                    fontSize = d.title,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                if (!d.isCompact) {
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "What will you finish today?",
-                        fontSize = d.caption,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
+            Text(
+                text = dateString,
+                fontSize = d.label,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                modifier = Modifier.weight(1f)
+            )
 
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -183,13 +166,33 @@ fun DailyHeaderBanner(
             }
         }
 
-        // Compact day stats — designer-led snapshot of task health
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = "Hey $greetingName",
+            fontSize = greetingSize,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            lineHeight = (greetingSize.value + 6f).sp,
+            modifier = Modifier.fillMaxWidth()
+        )
+        if (!d.isCompact) {
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = "What will you finish today?",
+                fontSize = d.caption,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+
         Spacer(modifier = Modifier.height(d.listGap))
         TaskDayStatsStrip(
             openCount = openCount,
             doneToday = doneToday,
-            overdueCount = overdueCount,
-            userXp = userXp
+            overdueCount = overdueCount
         )
     }
 }
@@ -199,7 +202,6 @@ fun TaskDayStatsStrip(
     openCount: Int,
     doneToday: Int,
     overdueCount: Int,
-    userXp: Int,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -219,8 +221,8 @@ fun TaskDayStatsStrip(
             highlight = doneToday > 0
         )
         StatChip(
-            label = if (overdueCount > 0) "Overdue" else "XP",
-            value = if (overdueCount > 0) overdueCount.toString() else userXp.toString(),
+            label = "Overdue",
+            value = overdueCount.toString(),
             modifier = Modifier.weight(1f),
             highlight = overdueCount > 0,
             danger = overdueCount > 0

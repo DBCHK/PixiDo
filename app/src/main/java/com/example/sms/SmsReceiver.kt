@@ -6,8 +6,10 @@ import android.content.Intent
 import android.provider.Telephony
 import android.util.Log
 import com.example.data.AuraDatabase
+import com.example.data.Currencies
 import com.example.data.PendingSmsTransactionEntity
 import com.example.data.UserPreferencesRepository
+import com.example.notify.NotificationHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -59,6 +61,17 @@ class SmsReceiver : BroadcastReceiver() {
                         )
                     )
                     Log.d(TAG, "Queued SMS txn: ${parsed.bankName} ${parsed.amount} expense=${parsed.isExpense}")
+                    if (!AppForegroundState.isResumed) {
+                        val currency = prefs.currentProfile().currencyCode.ifBlank { "INR" }
+                        NotificationHelper.showSmsTransaction(
+                            context = appContext,
+                            amountLabel = Currencies.format(parsed.amount, currency),
+                            isExpense = parsed.isExpense,
+                            bankName = parsed.bankName,
+                            merchant = parsed.merchantOrInfo,
+                            smsHash = hash
+                        )
+                    }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to process SMS", e)

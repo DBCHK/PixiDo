@@ -8,25 +8,22 @@ import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
-import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.PI
+import kotlin.math.cos
 import kotlin.math.exp
 import kotlin.math.pow
 import kotlin.math.sin
+import kotlin.math.sqrt
 import kotlin.random.Random
 
 /**
- * Soft Lilac SFX engine — sweet, calm, never retro or gamey.
+ * Calm piano SFX — additive felt-piano notes with a unique voicing every play.
  *
- * Design principles:
- *  - Pure sine + soft second harmonic only (no square/saw harshness)
- *  - Warm low–mid fundamentals (~160–420 Hz)
- *  - Long soft attacks and trailing releases
- *  - Quiet volumes (gentle presence, never bleepy)
- *  - Feather-light haptics
+ * Each gesture is a short, quiet piano figure (single notes, dyads, arpeggios)
+ * with random velocity, cents detune, and inversion so it never feels looped
+ * or retro/chiptune.
  */
 class SoundEngine private constructor(context: Context) {
 
@@ -37,10 +34,8 @@ class SoundEngine private constructor(context: Context) {
     var hapticsEnabled: Boolean = true
 
     private val appContext = context.applicationContext
-    private val sampleRate = 22050
-    private val buffers = ConcurrentHashMap<Sfx, ShortArray>()
+    private val sampleRate = 44100
     private val executor: ExecutorService = Executors.newFixedThreadPool(3)
-    private val ready = AtomicBoolean(false)
 
     private val vibrator: Vibrator? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         val vm = appContext.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
@@ -50,53 +45,54 @@ class SoundEngine private constructor(context: Context) {
         appContext.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
     }
 
-    init {
-        executor.execute {
-            Sfx.entries.forEach { sfx ->
-                buffers[sfx] = synthesize(sfx)
-            }
-            ready.set(true)
-        }
-    }
-
     fun play(sfx: Sfx, pitchShift: Float = 1f) {
         if (!enabled) return
         executor.execute {
-            val raw = buffers[sfx] ?: synthesize(sfx).also { buffers[sfx] = it }
-            val data = if (pitchShift == 1f) raw else pitch(raw, pitchShift)
-            playPcm(data)
+            playPcm(pianoGesture(sfx, pitchShift))
         }
         hapticFor(sfx)
     }
 
-    /** Distinct but gentle tab tones — small pitch offsets only. */
     fun playTab(index: Int) {
-        val shifts = floatArrayOf(0.96f, 1.0f, 1.04f, 1.08f)
-        play(Sfx.TAB_SWITCH, shifts.getOrElse(index) { 1f + index * 0.03f })
+        val notes = doubleArrayOf(C4, E4, G4, A4)
+        playPitched(notes.getOrElse(index) { C4 }, durationMs = 520, velocity = 0.28)
     }
 
     fun release() {
         executor.shutdownNow()
-        buffers.clear()
+    }
+
+    private fun playPitched(hz: Double, durationMs: Int, velocity: Double) {
+        if (!enabled) return
+        executor.execute {
+            val rnd = Random.Default
+            playPcm(
+                pianoNote(
+                    hz = hz * centsToRatio(rnd.nextDouble(-7.0, 7.0)),
+                    durationMs = durationMs,
+                    velocity = velocity * rnd.nextDouble(0.88, 1.08)
+                )
+            )
+        }
+        hapticFor(Sfx.TAB_SWITCH)
     }
 
     private fun hapticFor(sfx: Sfx) {
         if (!hapticsEnabled) return
         val vib = vibrator ?: return
         if (!vib.hasVibrator()) return
-        // Soft, short ticks — never punchy
         val ms = when (sfx) {
-            Sfx.SPLASH_INTRO -> return // silent haptics on splash
-            Sfx.TASK_COMPLETE, Sfx.GOAL_COMPLETE, Sfx.FOCUS_COMPLETE, Sfx.SUCCESS -> 18L
-            Sfx.DELETE, Sfx.ERROR -> 12L
-            Sfx.FAB, Sfx.ADD_TASK, Sfx.ADD_BUDGET, Sfx.ADD_EVENT, Sfx.ADD_GOAL -> 12L
-            Sfx.TAB_SWITCH, Sfx.FILTER_SELECT, Sfx.DAY_SELECT -> 6L
-            else -> 5L
+            Sfx.SPLASH_INTRO -> return
+            Sfx.TASK_COMPLETE, Sfx.GOAL_COMPLETE, Sfx.FOCUS_COMPLETE, Sfx.SUCCESS -> 16L
+            Sfx.DELETE, Sfx.ERROR -> 10L
+            Sfx.FAB, Sfx.ADD_TASK, Sfx.ADD_BUDGET, Sfx.ADD_EVENT, Sfx.ADD_GOAL -> 10L
+            Sfx.TAB_SWITCH, Sfx.FILTER_SELECT, Sfx.DAY_SELECT -> 5L
+            else -> 4L
         }
         val amp = when (sfx) {
-            Sfx.TASK_COMPLETE, Sfx.GOAL_COMPLETE -> 90
-            Sfx.DELETE -> 70
-            else -> 45
+            Sfx.TASK_COMPLETE, Sfx.GOAL_COMPLETE -> 70
+            Sfx.DELETE -> 55
+            else -> 32
         }
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -106,7 +102,6 @@ class SoundEngine private constructor(context: Context) {
                 vib.vibrate(ms)
             }
         } catch (_: Exception) {
-            // Ignore devices without vibration permission / support
         }
     }
 
@@ -132,493 +127,460 @@ class SoundEngine private constructor(context: Context) {
 
         try {
             track.write(pcm, 0, pcm.size)
-            track.setNotificationMarkerPosition(pcm.size)
             track.play()
-            val durationMs = (pcm.size * 1000L / sampleRate) + 60L
-            Thread.sleep(durationMs.coerceAtMost(1600L))
+            val durationMs = (pcm.size * 1000L / sampleRate) + 80L
+            Thread.sleep(durationMs.coerceAtMost(2800L))
         } catch (_: Exception) {
-            // Swallow audio race conditions
         } finally {
             try {
-                track.stop()
+                track.pause()
             } catch (_: Exception) {
             }
             track.release()
         }
     }
 
-    private fun pitch(src: ShortArray, factor: Float): ShortArray {
-        if (factor == 1f) return src
-        val outLen = (src.size / factor).toInt().coerceAtLeast(1)
-        val out = ShortArray(outLen)
-        for (i in out.indices) {
-            val srcIndex = (i * factor).toInt().coerceIn(0, src.lastIndex)
-            out[i] = src[srcIndex]
+    // region Piano gestures
+
+    private fun pianoGesture(sfx: Sfx, pitchShift: Float): ShortArray {
+        val rnd = Random.Default
+        val detune = centsToRatio(rnd.nextDouble(-6.0, 6.0)) * pitchShift
+        val vel = rnd.nextDouble(0.34, 0.48)
+        val invert = rnd.nextInt(3)
+
+        return when (sfx) {
+            Sfx.TAP_SOFT -> pianoNote(vary(E5, rnd) * detune, 480, vel * 0.7)
+            Sfx.TAP_CRISP -> pianoNote(vary(G5, rnd) * detune, 460, vel * 0.66)
+            Sfx.TAP_CONFIRM -> pianoChord(
+                voicing(doubleArrayOf(C4, G4), invert),
+                durationMs = 620,
+                staggerMs = 28,
+                velocity = vel,
+                detune = detune,
+                rnd = rnd
+            )
+            Sfx.DIALOG_OPEN -> pianoArp(
+                doubleArrayOf(C4, E4, G4),
+                durationMs = 620,
+                staggerMs = 70,
+                velocity = vel,
+                detune = detune,
+                rnd = rnd
+            )
+            Sfx.DIALOG_CLOSE -> pianoArp(
+                doubleArrayOf(G4, E4, C4),
+                durationMs = 540,
+                staggerMs = 65,
+                velocity = vel * 0.9,
+                detune = detune,
+                rnd = rnd
+            )
+            Sfx.ADD_TASK -> pianoArp(
+                voicing(doubleArrayOf(C4, E4, G4, C5), invert),
+                durationMs = 780,
+                staggerMs = 85,
+                velocity = vel,
+                detune = detune,
+                rnd = rnd
+            )
+            Sfx.ADD_BUDGET -> pianoChord(
+                voicing(doubleArrayOf(A3, E4), invert),
+                durationMs = 520,
+                staggerMs = 40,
+                velocity = vel,
+                detune = detune,
+                rnd = rnd
+            )
+            Sfx.ADD_EVENT -> pianoArp(
+                voicing(doubleArrayOf(D4, F4, A4), invert),
+                durationMs = 700,
+                staggerMs = 80,
+                velocity = vel,
+                detune = detune,
+                rnd = rnd
+            )
+            Sfx.ADD_GOAL -> pianoArp(
+                voicing(doubleArrayOf(G3, C4, E4, G4), invert),
+                durationMs = 860,
+                staggerMs = 90,
+                velocity = vel,
+                detune = detune,
+                rnd = rnd
+            )
+            Sfx.ADD_ACCOUNT -> pianoChord(
+                voicing(doubleArrayOf(F3, C4), invert),
+                durationMs = 500,
+                staggerMs = 36,
+                velocity = vel,
+                detune = detune,
+                rnd = rnd
+            )
+            Sfx.TASK_COMPLETE -> pianoArp(
+                voicing(doubleArrayOf(C4, E4, G4, C5), invert),
+                durationMs = 980,
+                staggerMs = 95,
+                velocity = vel * 1.05,
+                detune = detune,
+                rnd = rnd
+            )
+            Sfx.TASK_UNDO -> pianoChord(
+                doubleArrayOf(E4, C4),
+                durationMs = 420,
+                staggerMs = 40,
+                velocity = vel * 0.85,
+                detune = detune,
+                rnd = rnd
+            )
+            Sfx.SUBTASK_TOGGLE -> pianoNote(vary(C5, rnd) * detune, 420, vel * 0.58)
+            Sfx.DELETE -> pianoChord(
+                doubleArrayOf(A3, E3),
+                durationMs = 480,
+                staggerMs = 30,
+                velocity = vel * 0.7,
+                detune = detune,
+                rnd = rnd
+            )
+            Sfx.FILTER_SELECT -> pianoNote(vary(D5, rnd) * detune, 460, vel * 0.6)
+            Sfx.FAB -> pianoChord(
+                voicing(doubleArrayOf(C4, E4), invert),
+                durationMs = 440,
+                staggerMs = 32,
+                velocity = vel,
+                detune = detune,
+                rnd = rnd
+            )
+            Sfx.TAB_SWITCH -> pianoNote(vary(E4, rnd) * detune, 500, vel * 0.55)
+            Sfx.PROFILE_OPEN -> pianoArp(
+                doubleArrayOf(E4, G4, C5),
+                durationMs = 640,
+                staggerMs = 75,
+                velocity = vel,
+                detune = detune,
+                rnd = rnd
+            )
+            Sfx.PROFILE_SAVE -> pianoChord(
+                voicing(doubleArrayOf(C4, G4, E5), invert),
+                durationMs = 640,
+                staggerMs = 45,
+                velocity = vel,
+                detune = detune,
+                rnd = rnd
+            )
+            Sfx.THEME_CHANGE -> pianoArp(
+                voicing(doubleArrayOf(A3, E4, A4), invert),
+                durationMs = 720,
+                staggerMs = 80,
+                velocity = vel,
+                detune = detune,
+                rnd = rnd
+            )
+            Sfx.SETTINGS_CHANGE -> pianoNote(vary(G4, rnd) * detune, 480, vel * 0.58)
+            Sfx.FOCUS_START -> pianoArp(
+                doubleArrayOf(C3, G3, C4),
+                durationMs = 900,
+                staggerMs = 110,
+                velocity = vel * 0.9,
+                detune = detune,
+                rnd = rnd
+            )
+            Sfx.FOCUS_PAUSE -> pianoNote(G3 * detune, 420, vel * 0.7)
+            Sfx.FOCUS_RESET -> pianoChord(
+                doubleArrayOf(E3, C4),
+                durationMs = 480,
+                staggerMs = 36,
+                velocity = vel * 0.75,
+                detune = detune,
+                rnd = rnd
+            )
+            Sfx.FOCUS_COMPLETE -> pianoArp(
+                voicing(doubleArrayOf(C3, G3, C4, E4, G4), invert),
+                durationMs = 1200,
+                staggerMs = 100,
+                velocity = vel,
+                detune = detune,
+                rnd = rnd
+            )
+            Sfx.GOAL_PROGRESS -> pianoChord(
+                voicing(doubleArrayOf(G4, C5), invert),
+                durationMs = 460,
+                staggerMs = 30,
+                velocity = vel,
+                detune = detune,
+                rnd = rnd
+            )
+            Sfx.GOAL_COMPLETE -> pianoArp(
+                voicing(doubleArrayOf(C4, E4, G4, C5, E5), invert),
+                durationMs = 1200,
+                staggerMs = 95,
+                velocity = vel,
+                detune = detune,
+                rnd = rnd
+            )
+            Sfx.DAY_SELECT -> pianoNote(vary(A4, rnd) * detune, 480, vel * 0.58)
+            Sfx.EVENT_TOGGLE -> pianoChord(
+                voicing(doubleArrayOf(E4, G4), invert),
+                durationMs = 400,
+                staggerMs = 28,
+                velocity = vel * 0.75,
+                detune = detune,
+                rnd = rnd
+            )
+            Sfx.NOTE_SAVE -> pianoChord(
+                voicing(doubleArrayOf(D4, A4), invert),
+                durationMs = 480,
+                staggerMs = 34,
+                velocity = vel,
+                detune = detune,
+                rnd = rnd
+            )
+            Sfx.SEARCH_FOCUS -> pianoNote(vary(F5, rnd) * detune, 440, vel * 0.48)
+            Sfx.SUCCESS -> pianoArp(
+                voicing(doubleArrayOf(E4, G4, C5), invert),
+                durationMs = 760,
+                staggerMs = 80,
+                velocity = vel,
+                detune = detune,
+                rnd = rnd
+            )
+            Sfx.ERROR -> pianoChord(
+                doubleArrayOf(D3, A3),
+                durationMs = 560,
+                staggerMs = 40,
+                velocity = vel * 0.7,
+                detune = detune,
+                rnd = rnd
+            )
+            Sfx.SPLASH_INTRO -> pianoArp(
+                voicing(doubleArrayOf(C3, G3, C4, E4, G4), invert),
+                durationMs = 1700,
+                staggerMs = 140,
+                velocity = vel * 0.8,
+                detune = detune,
+                rnd = rnd
+            )
+            Sfx.TOGGLE_ON -> pianoChord(
+                voicing(doubleArrayOf(E4, B4, E5), invert),
+                durationMs = 560,
+                staggerMs = 36,
+                velocity = vel * 0.9,
+                detune = detune,
+                rnd = rnd
+            )
+            Sfx.TOGGLE_OFF -> pianoChord(
+                voicing(doubleArrayOf(E5, B4, E4), invert),
+                durationMs = 520,
+                staggerMs = 40,
+                velocity = vel * 0.82,
+                detune = detune,
+                rnd = rnd
+            )
+            Sfx.SNOOZE -> pianoArp(
+                doubleArrayOf(G4, E4, C4),
+                durationMs = 640,
+                staggerMs = 70,
+                velocity = vel * 0.85,
+                detune = detune,
+                rnd = rnd
+            )
+            Sfx.TRANSFER -> pianoArp(
+                voicing(doubleArrayOf(D4, A4, D5), invert),
+                durationMs = 700,
+                staggerMs = 75,
+                velocity = vel,
+                detune = detune,
+                rnd = rnd
+            )
+            Sfx.IMPORT -> pianoArp(
+                voicing(doubleArrayOf(C4, G4, C5), invert),
+                durationMs = 720,
+                staggerMs = 80,
+                velocity = vel,
+                detune = detune,
+                rnd = rnd
+            )
+            Sfx.PICK -> pianoChord(
+                voicing(doubleArrayOf(A4, E5), invert),
+                durationMs = 480,
+                staggerMs = 28,
+                velocity = vel * 0.85,
+                detune = detune,
+                rnd = rnd
+            )
         }
-        return out
-    }
-
-    // region Soft synthesis recipes
-
-    private fun synthesize(sfx: Sfx): ShortArray = when (sfx) {
-        // Soft pillow tap
-        Sfx.TAP_SOFT -> softTone(
-            durationMs = 110,
-            freqs = doubleArrayOf(240.0),
-            attack = 0.12,
-            release = 0.80,
-            volume = 0.07,
-            harmonic = 0.08
-        )
-
-        // Gentle glass murmur
-        Sfx.TAP_CRISP -> softTone(
-            durationMs = 100,
-            freqs = doubleArrayOf(320.0, 400.0),
-            attack = 0.10,
-            release = 0.76,
-            volume = 0.06,
-            harmonic = 0.08
-        )
-
-        // Warm confirm hum
-        Sfx.TAP_CONFIRM -> softTone(
-            durationMs = 190,
-            freqs = doubleArrayOf(220.0, 330.0),
-            attack = 0.14,
-            release = 0.70,
-            volume = 0.08,
-            harmonic = 0.10
-        )
-
-        // Slow airy open breath
-        Sfx.DIALOG_OPEN -> softSweep(
-            durationMs = 260,
-            startHz = 160.0,
-            endHz = 300.0,
-            volume = 0.07
-        )
-
-        // Soft settle close
-        Sfx.DIALOG_CLOSE -> softSweep(
-            durationMs = 230,
-            startHz = 280.0,
-            endHz = 150.0,
-            volume = 0.06
-        )
-
-        // Sweet rising third — new task
-        Sfx.ADD_TASK -> softChord(
-            durationMs = 380,
-            freqs = doubleArrayOf(220.0, 277.18, 329.63),
-            staggerMs = 70,
-            volume = 0.08
-        )
-
-        // Warm two-tone — budget
-        Sfx.ADD_BUDGET -> softChord(
-            durationMs = 340,
-            freqs = doubleArrayOf(196.0, 246.94),
-            staggerMs = 80,
-            volume = 0.08
-        )
-
-        // Gentle event arpeggio
-        Sfx.ADD_EVENT -> softChord(
-            durationMs = 380,
-            freqs = doubleArrayOf(207.65, 261.63, 311.13),
-            staggerMs = 75,
-            volume = 0.07
-        )
-
-        // Soft sparkle triad — goal
-        Sfx.ADD_GOAL -> softChord(
-            durationMs = 420,
-            freqs = doubleArrayOf(174.61, 220.0, 261.63, 329.63),
-            staggerMs = 70,
-            volume = 0.07
-        )
-
-        // Low bank-soft blip
-        Sfx.ADD_ACCOUNT -> softTone(
-            durationMs = 240,
-            freqs = doubleArrayOf(174.61, 261.63),
-            attack = 0.12,
-            release = 0.72,
-            volume = 0.07,
-            harmonic = 0.08
-        )
-
-        // Soft major resolve — task done (matches slow slash animation)
-        Sfx.TASK_COMPLETE -> softChord(
-            durationMs = 560,
-            freqs = doubleArrayOf(196.0, 246.94, 293.66, 349.23),
-            staggerMs = 90,
-            volume = 0.09
-        )
-
-        // Soft undo sigh
-        Sfx.TASK_UNDO -> softTone(
-            durationMs = 200,
-            freqs = doubleArrayOf(220.0, 174.61),
-            attack = 0.14,
-            release = 0.74,
-            volume = 0.07,
-            harmonic = 0.06
-        )
-
-        // Tiny subtask tick
-        Sfx.SUBTASK_TOGGLE -> softTone(
-            durationMs = 100,
-            freqs = doubleArrayOf(280.0),
-            attack = 0.10,
-            release = 0.78,
-            volume = 0.06,
-            harmonic = 0.08
-        )
-
-        // Soft paper hush (no harsh tear)
-        Sfx.DELETE -> softHush(
-            durationMs = 220,
-            volume = 0.05
-        )
-
-        // Filter select murmur
-        Sfx.FILTER_SELECT -> softTone(
-            durationMs = 130,
-            freqs = doubleArrayOf(250.0, 320.0),
-            attack = 0.12,
-            release = 0.72,
-            volume = 0.06,
-            harmonic = 0.08
-        )
-
-        // Soft FAB bloom
-        Sfx.FAB -> softTone(
-            durationMs = 210,
-            freqs = doubleArrayOf(261.63, 329.63),
-            attack = 0.12,
-            release = 0.70,
-            volume = 0.07,
-            harmonic = 0.10
-        )
-
-        // Tab pad tone
-        Sfx.TAB_SWITCH -> softTone(
-            durationMs = 150,
-            freqs = doubleArrayOf(210.0, 280.0),
-            attack = 0.12,
-            release = 0.74,
-            volume = 0.06,
-            harmonic = 0.08
-        )
-
-        // Profile sheet lift
-        Sfx.PROFILE_OPEN -> softSweep(
-            durationMs = 280,
-            startHz = 170.0,
-            endHz = 300.0,
-            volume = 0.07
-        )
-
-        // Profile save soft chime
-        Sfx.PROFILE_SAVE -> softChord(
-            durationMs = 340,
-            freqs = doubleArrayOf(220.0, 277.18, 329.63),
-            staggerMs = 65,
-            volume = 0.08
-        )
-
-        // Theme change gentle cascade
-        Sfx.THEME_CHANGE -> softChord(
-            durationMs = 400,
-            freqs = doubleArrayOf(196.0, 246.94, 293.66),
-            staggerMs = 85,
-            volume = 0.07
-        )
-
-        // Settings soft tick
-        Sfx.SETTINGS_CHANGE -> softTone(
-            durationMs = 160,
-            freqs = doubleArrayOf(240.0, 300.0),
-            attack = 0.12,
-            release = 0.72,
-            volume = 0.06,
-            harmonic = 0.06
-        )
-
-        // Focus start — slow breath up
-        Sfx.FOCUS_START -> softSweep(
-            durationMs = 420,
-            startHz = 140.0,
-            endHz = 260.0,
-            volume = 0.08
-        )
-
-        // Focus pause — soft hold
-        Sfx.FOCUS_PAUSE -> softTone(
-            durationMs = 210,
-            freqs = doubleArrayOf(210.0, 180.0),
-            attack = 0.16,
-            release = 0.72,
-            volume = 0.07,
-            harmonic = 0.06
-        )
-
-        // Focus reset — soft settle
-        Sfx.FOCUS_RESET -> softTone(
-            durationMs = 200,
-            freqs = doubleArrayOf(200.0, 160.0),
-            attack = 0.14,
-            release = 0.72,
-            volume = 0.07,
-            harmonic = 0.06
-        )
-
-        // Focus complete — warm resolve
-        Sfx.FOCUS_COMPLETE -> softChord(
-            durationMs = 640,
-            freqs = doubleArrayOf(174.61, 220.0, 261.63, 329.63),
-            staggerMs = 100,
-            volume = 0.09
-        )
-
-        // Goal progress bump
-        Sfx.GOAL_PROGRESS -> softTone(
-            durationMs = 190,
-            freqs = doubleArrayOf(261.63, 329.63),
-            attack = 0.12,
-            release = 0.70,
-            volume = 0.07,
-            harmonic = 0.08
-        )
-
-        // Goal complete — soft fanfare (low)
-        Sfx.GOAL_COMPLETE -> softChord(
-            durationMs = 600,
-            freqs = doubleArrayOf(174.61, 220.0, 261.63, 329.63),
-            staggerMs = 95,
-            volume = 0.09
-        )
-
-        // Day select
-        Sfx.DAY_SELECT -> softTone(
-            durationMs = 130,
-            freqs = doubleArrayOf(250.0),
-            attack = 0.12,
-            release = 0.76,
-            volume = 0.06,
-            harmonic = 0.08
-        )
-
-        // Event toggle
-        Sfx.EVENT_TOGGLE -> softTone(
-            durationMs = 160,
-            freqs = doubleArrayOf(240.0, 300.0),
-            attack = 0.12,
-            release = 0.72,
-            volume = 0.06,
-            harmonic = 0.08
-        )
-
-        // Note save
-        Sfx.NOTE_SAVE -> softTone(
-            durationMs = 230,
-            freqs = doubleArrayOf(220.0, 277.18),
-            attack = 0.14,
-            release = 0.72,
-            volume = 0.07,
-            harmonic = 0.08
-        )
-
-        // Search focus
-        Sfx.SEARCH_FOCUS -> softTone(
-            durationMs = 120,
-            freqs = doubleArrayOf(280.0),
-            attack = 0.12,
-            release = 0.80,
-            volume = 0.05,
-            harmonic = 0.06
-        )
-
-        // Success micro
-        Sfx.SUCCESS -> softChord(
-            durationMs = 420,
-            freqs = doubleArrayOf(220.0, 277.18, 329.63),
-            staggerMs = 70,
-            volume = 0.08
-        )
-
-        // Soft error murmur (low, not buzzy)
-        Sfx.ERROR -> softTone(
-            durationMs = 280,
-            freqs = doubleArrayOf(150.0, 130.0),
-            attack = 0.16,
-            release = 0.65,
-            volume = 0.07,
-            harmonic = 0.04
-        )
-
-        // Slow sweet splash intro — soft rising pad
-        Sfx.SPLASH_INTRO -> softChord(
-            durationMs = 1100,
-            freqs = doubleArrayOf(174.61, 220.0, 261.63, 329.63),
-            staggerMs = 170,
-            volume = 0.07
-        )
     }
 
     /**
-     * Soft multi-partial sine tone.
-     * [harmonic] = relative amplitude of second harmonic for sweetness.
+     * Felt-piano additive note: inharmonic partials, faster decay up the spectrum,
+     * a few milliseconds of hammer dust, long quiet tail.
      */
-    private fun softTone(
+    private fun pianoNote(
+        hz: Double,
         durationMs: Int,
-        freqs: DoubleArray,
-        attack: Double,
-        release: Double,
-        volume: Double,
-        harmonic: Double
+        velocity: Double,
+        delayMs: Int = 0
     ): ShortArray {
-        val n = (sampleRate * durationMs / 1000.0).toInt().coerceAtLeast(1)
-        val out = ShortArray(n)
-        val phases = DoubleArray(freqs.size)
-        val harmPhases = DoubleArray(freqs.size)
-        val inc = DoubleArray(freqs.size) { i -> 2 * PI * freqs[i] / sampleRate }
-        val harmInc = DoubleArray(freqs.size) { i -> 2 * PI * freqs[i] * 2.0 / sampleRate }
-
-        for (i in 0 until n) {
-            val t = i.toDouble() / n
-            val env = softEnvelope(t, attack, release)
-            var sample = 0.0
-            for (f in freqs.indices) {
-                val fund = sin(phases[f])
-                val harm = sin(harmPhases[f]) * harmonic
-                sample += fund + harm
-                phases[f] += inc[f]
-                harmPhases[f] += harmInc[f]
-            }
-            // Mild low-pass smoothness via neighbor blend is approximated by soft env
-            sample = (sample / freqs.size) * env * volume
-            out[i] = toShort(sample)
-        }
-        return out
-    }
-
-    private fun softSweep(
-        durationMs: Int,
-        startHz: Double,
-        endHz: Double,
-        volume: Double
-    ): ShortArray {
-        val n = (sampleRate * durationMs / 1000.0).toInt().coerceAtLeast(1)
-        val out = ShortArray(n)
-        var phase = 0.0
-        var harmPhase = 0.0
-        for (i in 0 until n) {
-            val t = i.toDouble() / (n - 1).coerceAtLeast(1)
-            // Ease-in-out curve for slower, sweeter glide
-            val eased = t * t * (3.0 - 2.0 * t)
-            val hz = startHz + (endHz - startHz) * eased
-            val env = softEnvelope(t, 0.12, 0.62)
-            val sample = (sin(phase) + 0.12 * sin(harmPhase)) * env * volume
-            out[i] = toShort(sample)
-            phase += 2 * PI * hz / sampleRate
-            harmPhase += 2 * PI * hz * 2.0 / sampleRate
-        }
-        return out
-    }
-
-    private fun softChord(
-        durationMs: Int,
-        freqs: DoubleArray,
-        staggerMs: Int,
-        volume: Double
-    ): ShortArray {
-        val n = (sampleRate * durationMs / 1000.0).toInt().coerceAtLeast(1)
+        val n = (sampleRate * (durationMs + delayMs) / 1000.0).toInt().coerceAtLeast(1)
         val out = DoubleArray(n)
-        val stagger = (sampleRate * staggerMs / 1000.0).toInt()
-        freqs.forEachIndexed { idx, hz ->
-            val start = idx * stagger
-            var phase = 0.0
-            var harmPhase = 0.0
-            val inc = 2 * PI * hz / sampleRate
-            val harmInc = 2 * PI * hz * 2.0 / sampleRate
-            for (i in start until n) {
-                val localT = (i - start).toDouble() / (n - start).coerceAtLeast(1)
-                val env = softEnvelope(localT, 0.10, 0.62)
-                out[i] += (sin(phase) + 0.12 * sin(harmPhase)) * env
-                phase += inc
-                harmPhase += harmInc
+        val delay = (sampleRate * delayMs / 1000.0).toInt().coerceAtLeast(0)
+        val partials = 9
+        val B = 0.00018 * (C4 / hz).coerceIn(0.4, 2.4)
+        val phases = DoubleArray(partials)
+        val incs = DoubleArray(partials)
+        val amps = DoubleArray(partials)
+        val decays = DoubleArray(partials)
+        for (p in 1..partials) {
+            val i = p - 1
+            val inharm = p * hz * sqrt(1.0 + B * p * p)
+            incs[i] = 2 * PI * inharm / sampleRate
+            amps[i] = velocity / p.toDouble().pow(1.25)
+            decays[i] = 1.6 + p * 0.55
+        }
+
+        var noise = 0.0
+        val rnd = Random(hz.toBits() xor durationMs.toLong())
+        val sounding = n - delay
+        for (i in delay until n) {
+            val t = (i - delay).toDouble() / sampleRate
+            val attack = 1.0 - exp(-t * 70.0)
+            var sample = 0.0
+            for (p in 0 until partials) {
+                val env = attack * exp(-t * decays[p])
+                sample += sin(phases[p]) * amps[p] * env
+                phases[p] += incs[p]
             }
+            if (t < 0.012) {
+                noise = noise * 0.72 + rnd.nextDouble(-1.0, 1.0) * 0.28
+                val hammerEnv = (1.0 - t / 0.012).coerceAtLeast(0.0)
+                sample += noise * 0.03 * velocity * hammerEnv
+            }
+            val local = (i - delay).toDouble() / sounding.coerceAtLeast(1)
+            out[i] = sample * cosineRelease(local, 0.38)
         }
-        val maxAbs = out.maxOf { kotlin.math.abs(it) }.coerceAtLeast(1e-6)
-        return ShortArray(n) { i ->
-            toShort((out[i] / maxAbs) * volume)
-        }
+        return normalize(withSilencePad(out), 0.09)
     }
 
-    /** Soft filtered hush for delete — quiet pink-ish air, never a tear. */
-    private fun softHush(durationMs: Int, volume: Double): ShortArray {
-        val n = (sampleRate * durationMs / 1000.0).toInt().coerceAtLeast(1)
-        val out = ShortArray(n)
-        var b0 = 0.0
-        var b1 = 0.0
-        var b2 = 0.0
-        val rnd = Random(7)
-        // Soft low sine bed under the hush
-        var phase = 0.0
-        val bedInc = 2 * PI * 140.0 / sampleRate
-        for (i in 0 until n) {
-            val t = i.toDouble() / n
-            val env = (1.0 - t).pow(1.6) * softEnvelope(t, 0.08, 0.55)
-            val white = rnd.nextDouble(-1.0, 1.0)
-            // Very soft pink-ish filter
-            b0 = 0.99765 * b0 + white * 0.0990460
-            b1 = 0.96300 * b1 + white * 0.2965164
-            b2 = 0.57000 * b2 + white * 1.0526913
-            val pink = (b0 + b1 + b2 + white * 0.1848) * 0.05
-            val bed = sin(phase) * 0.35
-            phase += bedInc
-            out[i] = toShort((pink + bed) * env * volume)
+    private fun pianoChord(
+        freqs: DoubleArray,
+        durationMs: Int,
+        staggerMs: Int,
+        velocity: Double,
+        detune: Double,
+        rnd: Random
+    ): ShortArray {
+        val notes = freqs.map { hz ->
+            pianoNote(
+                hz = hz * detune * centsToRatio(rnd.nextDouble(-4.0, 4.0)),
+                durationMs = durationMs,
+                velocity = velocity * rnd.nextDouble(0.9, 1.05),
+                delayMs = 0
+            )
         }
+        return mix(notes, staggerMs, rnd)
+    }
+
+    private fun pianoArp(
+        freqs: DoubleArray,
+        durationMs: Int,
+        staggerMs: Int,
+        velocity: Double,
+        detune: Double,
+        rnd: Random
+    ): ShortArray {
+        val notes = freqs.mapIndexed { idx, hz ->
+            pianoNote(
+                hz = hz * detune * centsToRatio(rnd.nextDouble(-5.0, 5.0)),
+                durationMs = (durationMs - idx * staggerMs / 2).coerceAtLeast(220),
+                velocity = velocity * rnd.nextDouble(0.88, 1.06),
+                delayMs = idx * staggerMs
+            )
+        }
+        return mix(notes, 0, rnd)
+    }
+
+    private fun mix(notes: List<ShortArray>, staggerMs: Int, rnd: Random): ShortArray {
+        if (notes.isEmpty()) return ShortArray(0)
+        val stagger = (sampleRate * staggerMs / 1000.0).toInt()
+        val n = notes.mapIndexed { i, arr -> arr.size + i * stagger }.maxOrNull() ?: 0
+        val acc = DoubleArray(n)
+        notes.forEachIndexed { idx, arr ->
+            val start = idx * stagger
+            val wobble = 1.0 + rnd.nextDouble(-0.03, 0.03)
+            for (i in arr.indices) {
+                val dest = start + i
+                if (dest < n) acc[dest] += arr[i] / 32767.0 * wobble
+            }
+        }
+        val faded = DoubleArray(acc.size) { i ->
+            acc[i] * cosineRelease(i.toDouble() / acc.size.coerceAtLeast(1), 0.32)
+        }
+        return normalize(withSilencePad(faded), 0.09)
+    }
+
+    /** Cosine fade over the last [releaseFrac] of the note so it never clips off. */
+    private fun cosineRelease(t: Double, releaseFrac: Double): Double {
+        val start = (1.0 - releaseFrac).coerceIn(0.15, 0.92)
+        if (t <= start) return 1.0
+        val x = ((t - start) / (1.0 - start)).coerceIn(0.0, 1.0)
+        return 0.5 * (1.0 + cos(PI * x))
+    }
+
+    private fun withSilencePad(src: DoubleArray, padMs: Int = 90): DoubleArray {
+        val pad = (sampleRate * padMs / 1000.0).toInt().coerceAtLeast(0)
+        if (pad == 0) return src
+        val out = DoubleArray(src.size + pad)
+        for (i in src.indices) out[i] = src[i]
         return out
     }
 
-    /**
-     * Soft ADS-like envelope with rounded attack and long tail.
-     * Attack and release are fractions of total duration.
-     */
-    private fun softEnvelope(t: Double, attack: Double, release: Double): Double {
-        val a = attack.coerceIn(0.04, 0.45)
-        val r = release.coerceIn(0.25, 0.9)
-        val raw = when {
-            t < a -> {
-                // Smoothstep attack
-                val x = (t / a).coerceIn(0.0, 1.0)
-                x * x * (3.0 - 2.0 * x)
-            }
-            t > 1.0 - r -> {
-                // Exponential-ish soft release
-                val x = ((1.0 - t) / r).coerceAtLeast(0.0)
-                x * x
-            }
-            else -> 1.0
+    private fun normalize(src: DoubleArray, peak: Double): ShortArray {
+        val maxAbs = src.maxOf { kotlin.math.abs(it) }.coerceAtLeast(1e-9)
+        val g = peak / maxAbs
+        return ShortArray(src.size) { i ->
+            val v = (src[i] * g).coerceIn(-1.0, 1.0)
+            (v * Short.MAX_VALUE).toInt().toShort()
         }
-        // Gentle overall contour so peaks never feel spiky
-        return (raw * exp(-0.15 * t)).coerceIn(0.0, 1.0)
     }
 
-    private fun toShort(sample: Double): Short {
-        val clamped = sample.coerceIn(-1.0, 1.0)
-        return (clamped * Short.MAX_VALUE).toInt()
-            .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
-            .toShort()
+    private fun voicing(notes: DoubleArray, invert: Int): DoubleArray {
+        if (notes.isEmpty()) return notes
+        val k = invert.mod(notes.size)
+        if (k == 0) return notes
+        return DoubleArray(notes.size) { i ->
+            val src = notes[(i + k) % notes.size]
+            if (i + k >= notes.size) src / 2.0 else src
+        }
     }
+
+    private fun vary(hz: Double, rnd: Random): Double {
+        val neighbors = doubleArrayOf(hz, hz * 1.12246, hz / 1.12246, hz * 0.8909)
+        return neighbors[rnd.nextInt(neighbors.size)]
+    }
+
+    private fun centsToRatio(cents: Double): Double = 2.0.pow(cents / 1200.0)
 
     // endregion
 
     companion object {
+        // Piano pitches (Hz)
+        private const val C3 = 130.81
+        private const val D3 = 146.83
+        private const val E3 = 164.81
+        private const val F3 = 174.61
+        private const val G3 = 196.00
+        private const val A3 = 220.00
+        private const val C4 = 261.63
+        private const val D4 = 293.66
+        private const val E4 = 329.63
+        private const val F4 = 349.23
+        private const val G4 = 392.00
+        private const val A4 = 440.00
+        private const val B4 = 493.88
+        private const val C5 = 523.25
+        private const val D5 = 587.33
+        private const val E5 = 659.25
+        private const val F5 = 698.46
+        private const val G5 = 783.99
+
         @Volatile
         private var instance: SoundEngine? = null
 

@@ -147,6 +147,7 @@ fun CalendarScreen(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = "Calendar",
+                            style = MaterialTheme.typography.displayLarge,
                             fontSize = d.title,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface,
@@ -472,6 +473,7 @@ fun CalendarScreen(
                 Spacer(modifier = Modifier.height(10.dp))
                 DayHourOverview(
                     dayEvents = dayEvents,
+                    dayTasks = dayTasks,
                     selectedDateMillis = selectedDateMillis
                 )
                 Spacer(modifier = Modifier.height(8.dp))
@@ -794,18 +796,33 @@ private fun TimelineEventRow(
 @Composable
 private fun DayHourOverview(
     dayEvents: List<CalendarEventEntity>,
+    dayTasks: List<TaskEntity>,
     selectedDateMillis: Long
 ) {
-    val hours = (8..20).toList()
-    val busyHours = remember(dayEvents) {
-        dayEvents.mapNotNull { eventHourOf(it) }.toSet()
+    val titlesByHour = remember(dayEvents, dayTasks, selectedDateMillis) {
+        val map = mutableMapOf<Int, MutableList<String>>()
+        dayEvents.forEach { event ->
+            val hour = eventHourOf(event) ?: return@forEach
+            map.getOrPut(hour) { mutableListOf() }.add(event.title)
+        }
+        dayTasks.forEach { task ->
+            val hour = millisHourOf(task.dueDateMillis)
+            map.getOrPut(hour) { mutableListOf() }.add(task.title)
+        }
+        map
+    }
+    val hours = remember(titlesByHour) {
+        val base = (8..20).toMutableSet()
+        base.addAll(titlesByHour.keys)
+        base.sorted()
     }
 
-    PixiCard(modifier = Modifier.fillMaxWidth()) {
+    PixiCard(modifier = Modifier.fillMaxWidth().testTag("day_hour_overview")) {
         Column(modifier = Modifier.padding(vertical = 6.dp)) {
             hours.forEach { hour ->
-                val busy = hour in busyHours
-                val eventAtHour = dayEvents.firstOrNull { eventHourOf(it) == hour }
+                val titles = titlesByHour[hour].orEmpty()
+                val busy = titles.isNotEmpty()
+                val label = if (busy) titles.joinToString(" · ") else "—"
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -813,7 +830,7 @@ private fun DayHourOverview(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = String.format("%d:00", hour),
+                        text = String.format("%02d:00", hour),
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium,
                         color = if (busy) MaterialTheme.colorScheme.primary
@@ -847,7 +864,7 @@ private fun DayHourOverview(
                     }
                     Spacer(modifier = Modifier.width(12.dp))
                     Text(
-                        text = eventAtHour?.title ?: "—",
+                        text = label,
                         fontSize = 13.sp,
                         fontWeight = if (busy) FontWeight.SemiBold else FontWeight.Normal,
                         color = if (busy) MaterialTheme.colorScheme.onSurface
@@ -870,6 +887,9 @@ private fun DayHourOverview(
         }
     }
 }
+
+private fun millisHourOf(millis: Long): Int =
+    Calendar.getInstance().apply { timeInMillis = millis }.get(Calendar.HOUR_OF_DAY)
 
 // ── helpers ──────────────────────────────────────────────────────────
 

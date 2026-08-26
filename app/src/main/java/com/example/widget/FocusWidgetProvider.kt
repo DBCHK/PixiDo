@@ -43,7 +43,7 @@ class FocusWidgetProvider : AppWidgetProvider() {
                 views.setTextViewText(R.id.focus_label, data.label)
                 views.setTextViewText(
                     R.id.focus_stats,
-                    "Today ${data.todayCompletions} tasks · ${data.userXp} XP"
+                    "Today ${data.todayCompletions} tasks"
                 )
                 views.setTextViewText(
                     R.id.focus_hint,

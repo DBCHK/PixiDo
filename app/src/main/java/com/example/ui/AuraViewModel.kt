@@ -34,6 +34,7 @@ import com.example.notify.FocusTimerService
 import com.example.notify.NotificationHelper
 import com.example.notify.NowBarHelper
 import com.example.notify.ReminderScheduler
+import com.example.sms.SmsAccountMatcher
 import com.example.sms.SmsInboxScanner
 import com.example.widget.WidgetActions
 import kotlinx.coroutines.Job
@@ -112,7 +113,7 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
             if (completed) {
                 viewModelScope.launch {
                     preferences.addXp(50)
-                    _snackbarMessage.value = "Focus complete · +50 XP"
+                    _snackbarMessage.value = "Focus complete"
                     refreshWidgets()
                 }
             }
@@ -257,7 +258,7 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** Accept detected SMS → add Budget line (expense or income) and match bank account if possible. */
-    fun acceptSmsTransaction(item: PendingSmsTransactionEntity) {
+    fun acceptSmsTransaction(item: PendingSmsTransactionEntity, manualAccountId: Int? = null) {
         viewModelScope.launch {
             val type = if (item.isExpense) TransactionType.EXPENSE else TransactionType.INCOME
             val category = if (item.isExpense) "Other" else "Other"
@@ -272,7 +273,11 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
                 append("From SMS")
                 if (item.smsSender.isNotBlank()) append(" · ${item.smsSender}")
             }
-            val matchedAccountId = matchAccountForBank(item.bankName)
+            val matchedAccountId = manualAccountId ?: matchAccountForBank(item.bankName)
+            if (matchedAccountId != null && matchedAccountId > 0) {
+                preferences.setLastSmsAccountId(matchedAccountId)
+            }
+            NotificationHelper.cancelSmsNotification(appContext(), item.smsHash)
 
             addBudgetItem(
                 title = title,
@@ -294,6 +299,7 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
 
     fun dismissSmsTransaction(item: PendingSmsTransactionEntity) {
         viewModelScope.launch {
+            NotificationHelper.cancelSmsNotification(appContext(), item.smsHash)
             repository.markSmsDismissed(item.id)
             advanceSmsPrompt(item.id)
         }
@@ -304,18 +310,13 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
         _activeSmsPrompt.value = next
     }
 
-    /** Link SMS bank name to a PixiDo account only when names clearly match. */
+    /** Link SMS bank name to a PixiDo account: bank match → last used → primary → first. */
     private fun matchAccountForBank(bankName: String): Int? {
-        if (bankName.isBlank() || bankName.equals("Bank", ignoreCase = true)) return null
-        val needle = bankName.lowercase()
-        val accounts = accounts.value
-        accounts.firstOrNull { it.name.lowercase().contains(needle) }?.id?.let { return it }
-        // Partial: "HDFC Bank" vs account "HDFC"
-        val tokens = needle.split(' ').filter { it.length >= 3 && it != "bank" }
-        for (token in tokens) {
-            accounts.firstOrNull { it.name.lowercase().contains(token) }?.id?.let { return it }
-        }
-        return null
+        return SmsAccountMatcher.defaultAccount(
+            accounts = accounts.value,
+            bankName = bankName,
+            lastAccountId = userProfile.value.lastSmsAccountId
+        )?.id
     }
 
     private fun startOfDay(millis: Long): Long {

@@ -58,7 +58,7 @@ class TodosWidgetProvider : AppWidgetProvider() {
                 views.setTextViewText(R.id.todo_date, data.todayLabel)
                 views.setTextViewText(
                     R.id.todo_stats,
-                    "${data.doneCount}/${data.totalCount} done · ${data.openCount} open · ${data.userXp} XP"
+                    "${data.doneCount}/${data.totalCount} done · ${data.openCount} open"
                 )
                 lineIds.forEachIndexed { i, id ->
                     val item = data.titles.getOrNull(i)

@@ -78,7 +78,9 @@ data class UserProfile(
      * When true, bank / UPI transaction SMS are detected and offered for Budget import
      * on the next app open (requires READ_SMS + RECEIVE_SMS).
      */
-    val smsImportEnabled: Boolean = true
+    val smsImportEnabled: Boolean = true,
+    /** Last account used when assigning an SMS transaction (0 = none). */
+    val lastSmsAccountId: Int = 0
 ) {
     val isSignedIn: Boolean get() = googleUid.isNotBlank()
     val hasCustomAccent: Boolean get() = accentColorHex.isNotBlank()
@@ -108,6 +110,7 @@ class UserPreferencesRepository(private val context: Context) {
         val BACKUP_FREQUENCY = stringPreferencesKey("backup_frequency")
         val LAST_BACKUP_AT = longPreferencesKey("last_backup_at")
         val SMS_IMPORT = booleanPreferencesKey("sms_import_enabled")
+        val LAST_SMS_ACCOUNT = intPreferencesKey("last_sms_account_id")
     }
 
     val userProfile: Flow<UserProfile> = context.dataStore.data.map { prefs ->
@@ -148,7 +151,8 @@ class UserPreferencesRepository(private val context: Context) {
         }.getOrDefault(BackupFrequency.EVERY_24_HOURS),
         lastBackupAt = this[Keys.LAST_BACKUP_AT] ?: 0L,
         // Default on so bank SMS prompts work once permission is granted
-        smsImportEnabled = this[Keys.SMS_IMPORT] ?: true
+        smsImportEnabled = this[Keys.SMS_IMPORT] ?: true,
+        lastSmsAccountId = this[Keys.LAST_SMS_ACCOUNT] ?: 0
     )
 
     suspend fun updateProfile(
@@ -225,7 +229,8 @@ class UserPreferencesRepository(private val context: Context) {
             "reduceMotion" to p.reduceMotion,
             "notificationSound" to p.notificationSound.name,
             "backupFrequency" to p.backupFrequency.name,
-            "smsImportEnabled" to p.smsImportEnabled
+            "smsImportEnabled" to p.smsImportEnabled,
+            "lastSmsAccountId" to p.lastSmsAccountId
         )
     }
 
@@ -252,6 +257,9 @@ class UserPreferencesRepository(private val context: Context) {
             (map["notificationSound"] as? String)?.let { prefs[Keys.NOTIFICATION_SOUND] = it }
             (map["backupFrequency"] as? String)?.let { prefs[Keys.BACKUP_FREQUENCY] = it }
             (map["smsImportEnabled"] as? Boolean)?.let { prefs[Keys.SMS_IMPORT] = it }
+            when (val v = map["lastSmsAccountId"]) {
+                is Number -> prefs[Keys.LAST_SMS_ACCOUNT] = v.toInt()
+            }
         }
     }
 
@@ -304,6 +312,10 @@ class UserPreferencesRepository(private val context: Context) {
 
     suspend fun setSmsImportEnabled(enabled: Boolean) {
         context.dataStore.edit { it[Keys.SMS_IMPORT] = enabled }
+    }
+
+    suspend fun setLastSmsAccountId(accountId: Int) {
+        context.dataStore.edit { it[Keys.LAST_SMS_ACCOUNT] = accountId }
     }
 }
 

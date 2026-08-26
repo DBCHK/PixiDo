@@ -110,8 +110,16 @@ object SmsTransactionParser {
         "transaction", "vpa", "ref no", "ref:"
     )
 
+    private val loanKeywords = listOf(
+        "loan", "emi", "finance", "repayment", "disbursement", "lending"
+    )
+
     fun looksLikeTransactionSms(body: String, sender: String = ""): Boolean {
         val text = body.lowercase()
+
+        // Filter out loan/EMI related messages
+        if (loanKeywords.any { text.contains(it) }) return false
+
         val hasMoney = text.contains("rs") || text.contains("inr") || text.contains("₹") ||
             text.contains("rupee")
         if (!hasMoney) return false

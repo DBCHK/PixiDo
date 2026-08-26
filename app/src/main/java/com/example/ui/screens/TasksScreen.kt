@@ -95,7 +95,6 @@ fun TasksScreen(
     tasks: List<TaskEntity>,
     goals: List<GoalEntity>,
     notes: List<NoteEntity>,
-    userXp: Int,
     profile: UserProfile,
     onToggleTask: (TaskEntity) -> Unit,
     onToggleSubtask: (TaskEntity, String) -> Unit,
@@ -200,7 +199,6 @@ fun TasksScreen(
         ) {
             item {
                 DailyHeaderBanner(
-                    userXp = userXp,
                     profile = profile,
                     openCount = openCount,
                     doneToday = doneToday,
@@ -347,7 +345,7 @@ fun TasksScreen(
                                 onEditTask(task)
                             },
                             onSnoozeTask = {
-                                sound.play(Sfx.TAP_SOFT)
+                                sound.play(Sfx.SNOOZE)
                                 onSnoozeTask(task)
                             }
                         )
@@ -377,7 +375,7 @@ fun TasksScreen(
                                 onEditTask(task)
                             },
                             onSnoozeTask = {
-                                sound.play(Sfx.TAP_SOFT)
+                                sound.play(Sfx.SNOOZE)
                                 onSnoozeTask(task)
                             }
                         )
@@ -407,7 +405,7 @@ fun TasksScreen(
                                 onEditTask(task)
                             },
                             onSnoozeTask = {
-                                sound.play(Sfx.TAP_SOFT)
+                                sound.play(Sfx.SNOOZE)
                                 onSnoozeTask(task)
                             }
                         )
@@ -437,7 +435,7 @@ fun TasksScreen(
                                 onEditTask(task)
                             },
                             onSnoozeTask = {
-                                sound.play(Sfx.TAP_SOFT)
+                                sound.play(Sfx.SNOOZE)
                                 onSnoozeTask(task)
                             }
                         )
@@ -464,7 +462,7 @@ fun TasksScreen(
                             onEditTask(task)
                         },
                         onSnoozeTask = {
-                            sound.play(Sfx.TAP_SOFT)
+                            sound.play(Sfx.SNOOZE)
                             onSnoozeTask(task)
                         }
                     )

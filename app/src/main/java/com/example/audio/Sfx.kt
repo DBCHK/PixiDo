@@ -105,5 +105,23 @@ enum class Sfx {
     ERROR,
 
     /** Slow sweet startup chime — splash intro */
-    SPLASH_INTRO
+    SPLASH_INTRO,
+
+    /** Switch flipped on */
+    TOGGLE_ON,
+
+    /** Switch flipped off */
+    TOGGLE_OFF,
+
+    /** Snooze a reminder */
+    SNOOZE,
+
+    /** Account-to-account transfer */
+    TRANSFER,
+
+    /** SMS / import accepted */
+    IMPORT,
+
+    /** Picker / account chosen */
+    PICK
 }

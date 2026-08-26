@@ -27,6 +27,10 @@ object NotificationHelper {
     const val EXTRA_ETA_TYPE = "pixido_eta_type"
     const val EXTRA_ETA_ITEM_ID = "pixido_eta_item_id"
 
+    const val EXTRA_SMS_PROMPT = "pixido_sms_prompt"
+    private const val CHANNEL_SMS = "pixido_sms_transactions"
+    private const val SMS_NOTIFICATION_BASE = 71_000
+
     fun channelIdFor(option: NotificationSoundOption): String =
         "${CHANNEL_BASE}_${option.name.lowercase()}_v2"
 
@@ -50,6 +54,20 @@ object NotificationHelper {
 
         if (manager.getNotificationChannel(CHANNEL_ETA) == null) {
             manager.createNotificationChannel(buildEtaChannel(context))
+        }
+
+        if (manager.getNotificationChannel(CHANNEL_SMS) == null) {
+            manager.createNotificationChannel(
+                NotificationChannel(
+                    CHANNEL_SMS,
+                    "Bank SMS transactions",
+                    NotificationManager.IMPORTANCE_HIGH
+                ).apply {
+                    description = "Debit and credit alerts detected from bank SMS"
+                    enableVibration(true)
+                    vibrationPattern = longArrayOf(0, 40, 80, 40)
+                }
+            )
         }
 
         // Clean up legacy channel ids from earlier builds
@@ -218,6 +236,72 @@ object NotificationHelper {
             } catch (_: Exception) {
                 // Full-screen intent / notification will cover locked / restricted cases
             }
+        }
+    }
+
+    fun smsNotificationId(smsHash: String): Int =
+        SMS_NOTIFICATION_BASE + (smsHash.hashCode() and 0x7FFF)
+
+    /**
+     * System tray alert when a debit/credit SMS is detected while PixiDo is
+     * in the background. Tapping opens the in-app assignment banner.
+     */
+    fun showSmsTransaction(
+        context: Context,
+        amountLabel: String,
+        isExpense: Boolean,
+        bankName: String,
+        merchant: String,
+        smsHash: String
+    ) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            ensureChannels(context)
+        }
+        val kind = if (isExpense) "Deducted" else "Credited"
+        val title = "$kind $amountLabel"
+        val body = buildString {
+            append(bankName)
+            if (merchant.isNotBlank()) {
+                append(" · ")
+                append(merchant)
+            }
+            append(" · Tap to choose an account")
+        }
+        val notificationId = smsNotificationId(smsHash)
+        val openIntent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra(EXTRA_SMS_PROMPT, true)
+        }
+        val contentPending = PendingIntent.getActivity(
+            context,
+            notificationId,
+            openIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val notification = NotificationCompat.Builder(context, CHANNEL_SMS)
+            .setSmallIcon(R.drawable.ic_stat_pixido)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setAutoCancel(true)
+            .setContentIntent(contentPending)
+            .build()
+        try {
+            NotificationManagerCompat.from(context).notify(notificationId, notification)
+        } catch (_: SecurityException) {
+            // POST_NOTIFICATIONS not granted on API 33+
+        }
+    }
+
+    fun cancelSmsNotification(context: Context, smsHash: String) {
+        try {
+            NotificationManagerCompat.from(context).cancel(smsNotificationId(smsHash))
+        } catch (_: Exception) {
+            // ignore
         }
     }
 }
