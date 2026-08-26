@@ -125,7 +125,7 @@ fun ContributionHeatmap(
                             Box(
                                 modifier = Modifier
                                     .size(cell)
-                                    .clip(RoundedCornerShape(3.dp))
+                                    .clip(RoundedCornerShape(6.dp))
                                     .background(heatmapColor(count, isDark))
                             )
                         }

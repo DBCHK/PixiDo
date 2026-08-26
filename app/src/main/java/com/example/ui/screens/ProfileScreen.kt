@@ -137,7 +137,7 @@ fun ProfileDialog(
             modifier = Modifier
                 .fillMaxWidth()
                 .fillMaxHeight(0.94f)
-                .clip(RoundedCornerShape(14.dp))
+                .clip(RoundedCornerShape(28.dp))
                 .background(MaterialTheme.colorScheme.background)
                 .statusBarsPadding()
                 .navigationBarsPadding()
@@ -574,7 +574,7 @@ private fun IosSection(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(10.dp))
+                .clip(RoundedCornerShape(18.dp))
                 .background(MaterialTheme.colorScheme.surface)
         ) {
             content()

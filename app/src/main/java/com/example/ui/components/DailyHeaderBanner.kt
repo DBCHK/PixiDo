@@ -177,16 +177,19 @@ fun DailyHeaderBanner(
             lineHeight = (greetingSize.value + 6f).sp,
             modifier = Modifier.fillMaxWidth()
         )
-        if (!d.isCompact) {
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = "What will you finish today?",
-                fontSize = d.caption,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            text = when {
+                openCount + doneToday == 0 -> "What will you finish today?"
+                doneToday == 0 -> "$openCount to do today"
+                openCount == 0 -> "All done for today"
+                else -> "$doneToday of ${openCount + doneToday} done today"
+            },
+            fontSize = d.caption,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
 
         Spacer(modifier = Modifier.height(d.listGap))
         TaskDayStatsStrip(

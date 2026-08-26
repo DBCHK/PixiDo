@@ -1,14 +1,15 @@
 package com.example.ui.components
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -19,43 +20,47 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+
 /**
-
-
- * Scroll-linked bottom bar hide state.
+ * Discrete show/hide for the island tab bar.
  *
- * Hold this in a parent without *reading* [hidePx] so scroll updates only recompose
- * the floating bar — not the whole screen tree (major jank fix).
+ * Scroll down past a threshold → pop out. Scroll up → spring pop back in.
+ * State writes happen here; only [AutoHideBottomNavigation] reads [visible]
+ * so list screens do not recompose on every scroll pixel.
  */
 @Stable
-class ScrollHideBarState(val maxHidePx: Float) {
-    /** 0 = fully visible, [maxHidePx] = fully tucked away. */
-    var hidePx by mutableFloatStateOf(0f)
+class ScrollHideBarState {
+    var visible by mutableStateOf(true)
         private set
 
+    private var downAccum = 0f
+    private var upAccum = 0f
+
     fun onScrollDelta(dy: Float) {
-        if (dy == 0f || maxHidePx <= 0f) return
-        // Slight dampening for buttery feel on 90/120 Hz
-        hidePx = (hidePx - dy * 0.55f).coerceIn(0f, maxHidePx)
+        if (dy == 0f) return
+        if (dy < -4f) {
+            downAccum += -dy
+            upAccum = 0f
+            if (downAccum > 42f) visible = false
+        } else if (dy > 4f) {
+            upAccum += dy
+            downAccum = 0f
+            if (upAccum > 18f) visible = true
+        }
     }
 
     fun snapShow() {
-        hidePx = 0f
-    }
-
-    fun setHide(px: Float) {
-        hidePx = px.coerceIn(0f, maxHidePx)
+        visible = true
+        downAccum = 0f
+        upAccum = 0f
     }
 }
 
 @Composable
 fun rememberScrollHideBarState(): ScrollHideBarState {
-    val density = LocalDensity.current
-    val maxPx = with(density) { 120.dp.toPx() }
-    return remember(maxPx) { ScrollHideBarState(maxPx) }
+    return remember { ScrollHideBarState() }
 }
 
-/** Nested scroll connection that only writes into [state] (no composition reads). */
 fun scrollHideNestedConnection(state: ScrollHideBarState): NestedScrollConnection =
     object : NestedScrollConnection {
         override fun onPostScroll(
@@ -69,8 +74,8 @@ fun scrollHideNestedConnection(state: ScrollHideBarState): NestedScrollConnectio
     }
 
 /**
- * Floating bottom nav that slides with scroll. Reading [state].hidePx is isolated here
- * so list screens do not recompose on every scroll pixel.
+ * Island pops out (scale + drop) when scrolling down, springs back in
+ * with a slight overshoot when scrolling up.
  */
 @Composable
 fun BoxScope.AutoHideBottomNavigation(
@@ -81,35 +86,31 @@ fun BoxScope.AutoHideBottomNavigation(
     contentAlpha: Float = 1f,
     reduceMotion: Boolean = false
 ) {
-    // Smooth ease-back when tab changes (does not drive scroll path)
-    val reveal = remember { Animatable(0f) }
     LaunchedEffect(selectedTab) {
-        val start = state.hidePx
-        if (start <= 0.5f) {
-            state.snapShow()
-            reveal.snapTo(0f)
-            return@LaunchedEffect
-        }
-        reveal.snapTo(start)
-        reveal.animateTo(
-            0f,
-            animationSpec = tween(
-                durationMillis = if (reduceMotion) 120 else 280,
-                easing = FastOutSlowInEasing
-            )
-        ) {
-            state.setHide(value)
-        }
         state.snapShow()
     }
 
-    val max = state.maxHidePx.coerceAtLeast(1f)
-    val hide = state.hidePx
-    val frac = (hide / max).coerceIn(0f, 1f)
+    val density = LocalDensity.current
+    val hideTravel = with(density) { 96.dp.toPx() }
+    val progress by animateFloatAsState(
+        targetValue = if (state.visible) 1f else 0f,
+        animationSpec = if (reduceMotion) {
+            tween(durationMillis = 140)
+        } else {
+            spring(
+                dampingRatio = 0.58f,
+                stiffness = Spring.StiffnessMediumLow
+            )
+        },
+        label = "islandPop"
+    )
 
     AuraBottomNavigation(
         selectedTab = selectedTab,
-        onTabSelected = onTabSelected,
+        onTabSelected = {
+            state.snapShow()
+            onTabSelected(it)
+        },
         onCenterAdd = {
             state.snapShow()
             onCenterAdd()
@@ -117,13 +118,12 @@ fun BoxScope.AutoHideBottomNavigation(
         modifier = Modifier
             .align(Alignment.BottomCenter)
             .graphicsLayer {
-                // GPU-only transform — no layout pass
-                translationY = hide
-                alpha = contentAlpha * (1f - frac * 0.28f)
-                val s = 1f - frac * 0.03f
+                val t = 1f - progress
+                translationY = t * hideTravel
+                val s = 0.72f + 0.28f * progress
                 scaleX = s
                 scaleY = s
-                // Prefer continuous layer on high-refresh displays
+                alpha = contentAlpha * progress
                 clip = false
             }
     )

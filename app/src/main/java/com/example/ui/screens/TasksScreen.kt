@@ -42,7 +42,11 @@ import androidx.compose.material.icons.filled.Snooze
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -79,6 +83,7 @@ import com.example.data.UserProfile
 import com.example.ui.components.DailyHeaderBanner
 import com.example.ui.components.PixiBadge
 import com.example.ui.components.PixiCard
+import com.example.ui.components.PixiCardShape
 import com.example.ui.components.PixiChip
 import com.example.ui.components.PixiEmptyState
 import com.example.ui.components.PixiListItemEnter
@@ -109,6 +114,7 @@ fun TasksScreen(
     onAddNote: (String, String) -> Unit,
     onToggleNotePin: (NoteEntity) -> Unit,
     onDeleteNote: (Int) -> Unit,
+    onClearCompleted: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val sound = LocalSoundEngine.current
@@ -413,7 +419,15 @@ fun TasksScreen(
                 }
                 if (completedTasks.isNotEmpty()) {
                     item {
-                        SectionHeader(title = "Completed", count = completedTasks.size)
+                        SectionHeader(
+                            title = "Completed",
+                            count = completedTasks.size,
+                            action = "Clear",
+                            onAction = {
+                                sound.play(Sfx.DELETE)
+                                onClearCompleted()
+                            }
+                        )
                     }
                     itemsIndexed(completedTasks, key = { _, t -> "dn_${t.id}" }) { index, task ->
                         TaskCardBlock(
@@ -473,7 +487,13 @@ fun TasksScreen(
 }
 
 @Composable
-private fun SectionHeader(title: String, count: Int, danger: Boolean = false) {
+private fun SectionHeader(
+    title: String,
+    count: Int,
+    danger: Boolean = false,
+    action: String? = null,
+    onAction: (() -> Unit)? = null
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -488,13 +508,26 @@ private fun SectionHeader(title: String, count: Int, danger: Boolean = false) {
             color = if (danger) MaterialTheme.colorScheme.error
             else MaterialTheme.colorScheme.onSurfaceVariant
         )
-        PixiBadge(
-            text = count.toString(),
-            containerColor = if (danger) MaterialTheme.colorScheme.error.copy(alpha = 0.15f)
-            else MaterialTheme.colorScheme.surfaceVariant,
-            contentColor = if (danger) MaterialTheme.colorScheme.error
-            else MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (action != null && onAction != null) {
+                Text(
+                    text = action,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .clickable(onClick = onAction)
+                        .padding(end = 10.dp)
+                )
+            }
+            PixiBadge(
+                text = count.toString(),
+                containerColor = if (danger) MaterialTheme.colorScheme.error.copy(alpha = 0.15f)
+                else MaterialTheme.colorScheme.surfaceVariant,
+                contentColor = if (danger) MaterialTheme.colorScheme.error
+                else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 
@@ -592,7 +625,7 @@ private fun QuickAddFromSearchCard(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun TaskCardItem(
     task: TaskEntity,
@@ -672,6 +705,47 @@ fun TaskCardItem(
     val dueLabel = remember(task.dueTimeStr) { formatDueLabel(task.dueTimeStr) }
     val slashColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f)
 
+    val dismissState = rememberSwipeToDismissBoxState(
+        confirmValueChange = { value ->
+            when (value) {
+                SwipeToDismissBoxValue.StartToEnd -> {
+                    handleToggle()
+                    false
+                }
+                SwipeToDismissBoxValue.EndToStart -> {
+                    onDeleteTask()
+                    true
+                }
+                else -> false
+            }
+        }
+    )
+
+    SwipeToDismissBox(
+        state = dismissState,
+        backgroundContent = {
+            val towardEnd = dismissState.dismissDirection == SwipeToDismissBoxValue.StartToEnd
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(vertical = 2.dp)
+                    .clip(PixiCardShape)
+                    .background(
+                        if (towardEnd) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+                        else MaterialTheme.colorScheme.error.copy(alpha = 0.18f)
+                    )
+                    .padding(horizontal = 22.dp),
+                contentAlignment = if (towardEnd) Alignment.CenterStart else Alignment.CenterEnd
+            ) {
+                Icon(
+                    imageVector = if (towardEnd) Icons.Filled.CheckCircle else Icons.Filled.DeleteOutline,
+                    contentDescription = if (towardEnd) "Complete" else "Delete",
+                    tint = if (towardEnd) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.error
+                )
+            }
+        }
+    ) {
     PixiCard(
         modifier = Modifier
             .fillMaxWidth()
@@ -974,6 +1048,7 @@ fun TaskCardItem(
                 }
             }
         }
+    }
     }
 }
 

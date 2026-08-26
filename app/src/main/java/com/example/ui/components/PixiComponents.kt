@@ -54,13 +54,14 @@ import com.example.ui.theme.PixiLightSearch
 import com.example.ui.theme.PixiYellow
 import com.example.ui.theme.rememberPixiDimens
 
-// iOS-inspired shape language
-val PixiCardShape = RoundedCornerShape(14.dp)
-val PixiCardShapeSm = RoundedCornerShape(10.dp)
-val PixiPillShape = RoundedCornerShape(12.dp) // iOS buttons are usually rounded rects
+// Soft, round iOS shape language — capsules and squircle cards, never boxy
+val PixiCardShape = RoundedCornerShape(24.dp)
+val PixiCardShapeSm = RoundedCornerShape(18.dp)
+val PixiPillShape = RoundedCornerShape(50)
 val PixiChipShape = RoundedCornerShape(50)
-val PixiFieldShape = RoundedCornerShape(10.dp)
-val PixiSheetShape = RoundedCornerShape(14.dp, 14.dp, 0.dp, 0.dp)
+val PixiFieldShape = RoundedCornerShape(18.dp)
+val PixiSheetShape = RoundedCornerShape(28.dp, 28.dp, 0.dp, 0.dp)
+val PixiIslandShape = RoundedCornerShape(34.dp)
 
 /** iOS-style white card — subtle shadow, rounded corners. */
 @Composable
@@ -347,9 +348,9 @@ fun PixiToggle(
     modifier: Modifier = Modifier,
     enabled: Boolean = true
 ) {
-    val trackW = 50.dp
-    val trackH = 30.dp
-    val thumb = 22.dp
+    val trackW = 52.dp
+    val trackH = 32.dp
+    val thumb = 24.dp
     val inset = 4.dp
     val travel = trackW - thumb - inset * 2
     val offsetX by animateDpAsState(
@@ -368,7 +369,7 @@ fun PixiToggle(
     Box(
         modifier = modifier
             .size(width = trackW, height = trackH)
-            .clip(RoundedCornerShape(9.dp))
+            .clip(RoundedCornerShape(50))
             .background(trackColor)
             .clickable(
                 enabled = enabled,
@@ -382,7 +383,7 @@ fun PixiToggle(
             modifier = Modifier
                 .offset(x = offsetX)
                 .size(thumb)
-                .clip(RoundedCornerShape(7.dp))
+                .clip(CircleShape)
                 .background(Color.White)
         ) {
             Box(
@@ -407,16 +408,15 @@ fun PixiYellowFab(
     modifier: Modifier = Modifier,
     size: Dp = 44.dp
 ) {
-    val shape = RoundedCornerShape(12.dp)
     PixiPopClickable(
         onClick = onClick,
         modifier = modifier.size(size),
-        pressedScale = 0.92f
+        pressedScale = 0.90f
     ) {
         Box(
             modifier = Modifier
                 .size(size)
-                .clip(shape)
+                .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.primary),
             contentAlignment = Alignment.Center
         ) {

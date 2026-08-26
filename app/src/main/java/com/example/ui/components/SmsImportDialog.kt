@@ -81,12 +81,12 @@ fun SmsImportDialog(
             .padding(horizontal = 12.dp, vertical = 8.dp)
             .shadow(
                 elevation = 18.dp,
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(24.dp),
                 ambientColor = Color.Black.copy(alpha = 0.18f),
                 spotColor = Color.Black.copy(alpha = 0.22f)
             )
             .testTag("sms_import_dialog"),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(24.dp),
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 0.dp
     ) {

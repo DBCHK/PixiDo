@@ -649,7 +649,7 @@ private fun CashflowPill(
 /** Shared size so bank + credit account cards align in the horizontal list. */
 private val AccountCardWidth = 232.dp
 private val AccountCardHeight = 160.dp
-private val AccountCardShape = RoundedCornerShape(22.dp)
+private val AccountCardShape = RoundedCornerShape(26.dp)
 
 @Composable
 fun AccountCard(

@@ -2,7 +2,8 @@ package com.example.ui.components
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.CalendarMonth
@@ -25,7 +27,6 @@ import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.EmojiEvents
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -35,6 +36,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
@@ -62,7 +64,8 @@ val pixiDoTabs = listOf(
 val auraTabs = pixiDoTabs
 
 /**
- * iOS tab bar: hairline top, icon + caption, selected tint, no filled circles.
+ * Floating island tab bar — capsule that sits above the home indicator,
+ * with a circular + in the middle.
  */
 @Composable
 fun AuraBottomNavigation(
@@ -72,30 +75,29 @@ fun AuraBottomNavigation(
     modifier: Modifier = Modifier
 ) {
     val d = rememberPixiDimens()
-    val iconSize = if (d.isCompact) 24.dp else 26.dp
+    val iconSize = if (d.isCompact) 22.dp else 24.dp
     val labelSize = 10.sp
-    val fabSize = if (d.isCompact) 36.dp else 40.dp
+    val fabSize = if (d.isCompact) 40.dp else 44.dp
 
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .padding(start = 16.dp, end = 16.dp, bottom = 10.dp)
     ) {
-        Column(modifier = Modifier.navigationBarsPadding()) {
-            HorizontalDivider(
-                thickness = 0.5.dp,
-                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
-            )
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = PixiIslandShape,
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+            tonalElevation = 0.dp,
+            shadowElevation = 18.dp
+        ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(
-                        horizontal = if (d.isCompact) 4.dp else 8.dp,
-                        vertical = 6.dp
-                    ),
+                    .padding(horizontal = 6.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.Bottom
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 NavItem(
                     tab = pixiDoTabs[0],
@@ -112,24 +114,13 @@ fun AuraBottomNavigation(
                     labelSize = labelSize
                 )
 
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.padding(bottom = 2.dp)
-                ) {
-                    PixiYellowFab(
-                        onClick = onCenterAdd,
-                        size = fabSize,
-                        modifier = Modifier.testTag("center_add_fab")
-                    )
-                    Text(
-                        text = "Add",
-                        fontSize = labelSize,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.primary,
-                        maxLines = 1,
-                        modifier = Modifier.padding(top = 2.dp)
-                    )
-                }
+                PixiYellowFab(
+                    onClick = onCenterAdd,
+                    size = fabSize,
+                    modifier = Modifier
+                        .padding(horizontal = 2.dp)
+                        .testTag("center_add_fab")
+                )
 
                 NavItem(
                     tab = pixiDoTabs[2],
@@ -161,8 +152,8 @@ private fun NavItem(
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.92f else 1f,
-        animationSpec = tween(durationMillis = 90),
+        targetValue = if (pressed) 0.90f else 1f,
+        animationSpec = spring(dampingRatio = 0.72f, stiffness = 500f),
         label = "tabScale"
     )
     val iconColor by animateColorAsState(
@@ -174,6 +165,11 @@ private fun NavItem(
         targetValue = if (selected) MaterialTheme.colorScheme.primary
         else MaterialTheme.colorScheme.onSurfaceVariant,
         label = "tabLabelColor"
+    )
+    val bubble by animateColorAsState(
+        targetValue = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+        else androidx.compose.ui.graphics.Color.Transparent,
+        label = "tabBubble"
     )
 
     Column(
@@ -188,12 +184,15 @@ private fun NavItem(
                 indication = null,
                 onClick = onClick
             )
-            .padding(horizontal = 8.dp, vertical = 4.dp)
+            .padding(horizontal = 4.dp, vertical = 2.dp)
             .width(56.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(
-            modifier = Modifier.height(28.dp),
+            modifier = Modifier
+                .size(36.dp)
+                .clip(CircleShape)
+                .background(bubble),
             contentAlignment = Alignment.Center
         ) {
             Icon(

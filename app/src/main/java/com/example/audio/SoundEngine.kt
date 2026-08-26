@@ -454,9 +454,9 @@ class SoundEngine private constructor(context: Context) {
                 sample += noise * 0.03 * velocity * hammerEnv
             }
             val local = (i - delay).toDouble() / sounding.coerceAtLeast(1)
-            out[i] = sample * cosineRelease(local, 0.38)
+            out[i] = sample * cosineRelease(local, 0.55)
         }
-        return normalize(withSilencePad(out), 0.09)
+        return normalize(withSilencePad(out), 0.08)
     }
 
     private fun pianoChord(
@@ -511,9 +511,9 @@ class SoundEngine private constructor(context: Context) {
             }
         }
         val faded = DoubleArray(acc.size) { i ->
-            acc[i] * cosineRelease(i.toDouble() / acc.size.coerceAtLeast(1), 0.32)
+            acc[i] * cosineRelease(i.toDouble() / acc.size.coerceAtLeast(1), 0.55)
         }
-        return normalize(withSilencePad(faded), 0.09)
+        return normalize(withSilencePad(faded), 0.08)
     }
 
     /** Cosine fade over the last [releaseFrac] of the note so it never clips off. */
@@ -521,10 +521,12 @@ class SoundEngine private constructor(context: Context) {
         val start = (1.0 - releaseFrac).coerceIn(0.15, 0.92)
         if (t <= start) return 1.0
         val x = ((t - start) / (1.0 - start)).coerceIn(0.0, 1.0)
-        return 0.5 * (1.0 + cos(PI * x))
+        // Smoothstep * cosine for an even gentler landing
+        val smooth = x * x * (3.0 - 2.0 * x)
+        return 0.5 * (1.0 + cos(PI * smooth))
     }
 
-    private fun withSilencePad(src: DoubleArray, padMs: Int = 90): DoubleArray {
+    private fun withSilencePad(src: DoubleArray, padMs: Int = 160): DoubleArray {
         val pad = (sampleRate * padMs / 1000.0).toInt().coerceAtLeast(0)
         if (pad == 0) return src
         val out = DoubleArray(src.size + pad)

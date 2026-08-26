@@ -757,6 +757,20 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun clearCompletedTasks() {
+        viewModelScope.launch {
+            val done = tasks.value.filter { it.isCompleted }
+            if (done.isEmpty()) return@launch
+            done.forEach { task ->
+                ReminderScheduler.cancelTaskReminders(appContext(), task.id)
+                NowBarHelper.clearTaskEta(appContext(), task.id)
+                repository.deleteTask(task.id)
+            }
+            _snackbarMessage.value = "Cleared ${done.size} completed"
+            refreshWidgets()
+        }
+    }
+
     fun deleteTask(taskId: Int) {
         viewModelScope.launch {
             lastDeletedTask = tasks.value.find { it.id == taskId }

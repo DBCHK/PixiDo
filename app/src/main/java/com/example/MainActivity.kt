@@ -280,7 +280,7 @@ fun PixiDoApp(
         scrollHideNestedConnection(scrollHideBar)
     }
     // Fixed bottom inset: no layout thrash while the bar slides (GPU-only transform)
-    val contentBottomPad = 88.dp
+    val contentBottomPad = 108.dp
 
     // Soft scale-in of main content after splash (splash only)
     val contentAlpha by animateFloatAsState(
@@ -521,7 +521,8 @@ fun PixiDoApp(
                         onOpenProfile = { viewModel.openProfile() },
                         onAddNote = { content, color -> viewModel.addNote(content, color) },
                         onToggleNotePin = { viewModel.toggleNotePin(it) },
-                        onDeleteNote = { viewModel.deleteNote(it) }
+                        onDeleteNote = { viewModel.deleteNote(it) },
+                        onClearCompleted = { viewModel.clearCompletedTasks() }
                     )
 
                     1 -> BudgetScreen(
