@@ -5,10 +5,14 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import com.example.data.AuraDatabase
+import com.example.data.NotificationSoundOption
+import com.example.data.UserPreferencesRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+// NowBarHelper used for approaching task cards
 
 class ReminderReceiver : BroadcastReceiver() {
 
@@ -20,7 +24,39 @@ class ReminderReceiver : BroadcastReceiver() {
                 val type = intent.getStringExtra(ReminderScheduler.EXTRA_TYPE).orEmpty()
                 val itemId = intent.getIntExtra(ReminderScheduler.EXTRA_ITEM_ID, 0)
                 val notifId = ReminderScheduler.requestCode(type, itemId)
-                NotificationHelper.showReminder(context, notifId, title, body)
+                val sound = runCatching {
+                    runBlocking {
+                        UserPreferencesRepository(context.applicationContext)
+                            .currentProfile()
+                            .notificationSound
+                    }
+                }.getOrDefault(NotificationSoundOption.SOFT)
+                when (type) {
+                    ReminderScheduler.TYPE_TASK_APPROACHING -> {
+                        // Soft Now Bar “coming up” card — no loud ringtone / full popup
+                        NowBarHelper.showTaskEta(
+                            context = context,
+                            taskId = itemId,
+                            title = title.removePrefix("Task due: ").trim().ifBlank { title },
+                            body = body,
+                            dueAtMillis = System.currentTimeMillis() + 5 * 60_000L,
+                            isDueNow = false
+                        )
+                    }
+                    else -> {
+                        NotificationHelper.showReminder(
+                            context = context,
+                            notificationId = notifId,
+                            title = title,
+                            body = body,
+                            soundOption = sound,
+                            type = type,
+                            itemId = itemId,
+                            showEtaPopup = type == ReminderScheduler.TYPE_TASK ||
+                                type == ReminderScheduler.TYPE_EVENT
+                        )
+                    }
+                }
             }
             Intent.ACTION_BOOT_COMPLETED,
             Intent.ACTION_MY_PACKAGE_REPLACED -> {
@@ -45,12 +81,11 @@ class ReminderReceiver : BroadcastReceiver() {
 
         dao.getAllTasks().first().forEach { task ->
             if (!task.isCompleted && task.dueDateMillis > now) {
-                ReminderScheduler.schedule(
+                ReminderScheduler.scheduleTaskReminders(
                     context = context,
-                    type = ReminderScheduler.TYPE_TASK,
                     itemId = task.id,
-                    triggerAtMillis = task.dueDateMillis,
-                    title = "Task due: ${task.title}",
+                    dueAtMillis = task.dueDateMillis,
+                    title = task.title,
                     body = "It's time for “${task.title}” (${task.dueTimeStr})"
                 )
             }

@@ -30,6 +30,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -43,12 +44,17 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.audio.LocalSoundEngine
 import com.example.audio.ProvideSoundEngine
 import com.example.audio.Sfx
 import com.example.notify.NotificationHelper
+import com.example.notify.ReminderScheduler
+import com.example.sms.SmsInboxScanner
 import com.example.ui.AuraViewModel
 import com.example.ui.components.AddBudgetDialog
 import com.example.ui.components.AddEventDialog
@@ -56,7 +62,9 @@ import com.example.ui.components.AddGoalDialog
 import com.example.ui.components.AddTaskDialog
 import com.example.ui.components.AutoHideBottomNavigation
 import com.example.ui.components.FocusTimerModal
+import com.example.ui.components.SmsImportDialog
 import com.example.ui.components.StartupSplash
+import com.example.ui.components.TaskEtaDialog
 import com.example.ui.components.rememberScrollHideBarState
 import com.example.ui.components.scrollHideNestedConnection
 import com.example.ui.screens.BudgetScreen
@@ -69,9 +77,17 @@ import com.example.widget.WidgetActions
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
+data class PendingEtaAlert(
+    val title: String,
+    val body: String,
+    val type: String,
+    val itemId: Int
+)
+
 class MainActivity : ComponentActivity() {
 
     private var pendingWidgetAction by mutableStateOf<String?>(null)
+    private var pendingEtaAlert by mutableStateOf<PendingEtaAlert?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -79,6 +95,7 @@ class MainActivity : ComponentActivity() {
         preferHighRefreshRate()
         NotificationHelper.ensureChannels(this)
         pendingWidgetAction = intent?.getStringExtra(com.example.widget.WidgetActions.EXTRA_ACTION)
+        pendingEtaAlert = intent?.toEtaAlert()
         setContent {
             val viewModel: AuraViewModel = viewModel()
             val profile by viewModel.userProfile.collectAsStateWithLifecycle()
@@ -93,7 +110,9 @@ class MainActivity : ComponentActivity() {
                     PixiDoApp(
                         viewModel = viewModel,
                         pendingWidgetAction = pendingWidgetAction,
-                        onWidgetActionConsumed = { pendingWidgetAction = null }
+                        onWidgetActionConsumed = { pendingWidgetAction = null },
+                        pendingEtaAlert = pendingEtaAlert,
+                        onEtaAlertConsumed = { pendingEtaAlert = null }
                     )
                 }
             }
@@ -104,6 +123,17 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         pendingWidgetAction = intent.getStringExtra(com.example.widget.WidgetActions.EXTRA_ACTION)
+        intent.toEtaAlert()?.let { pendingEtaAlert = it }
+    }
+
+    private fun Intent.toEtaAlert(): PendingEtaAlert? {
+        if (!getBooleanExtra(NotificationHelper.EXTRA_ETA_POPUP, false)) return null
+        return PendingEtaAlert(
+            title = getStringExtra(NotificationHelper.EXTRA_ETA_TITLE).orEmpty(),
+            body = getStringExtra(NotificationHelper.EXTRA_ETA_BODY).orEmpty(),
+            type = getStringExtra(NotificationHelper.EXTRA_ETA_TYPE).orEmpty(),
+            itemId = getIntExtra(NotificationHelper.EXTRA_ETA_ITEM_ID, 0)
+        )
     }
 
     /**
@@ -143,7 +173,9 @@ class MainActivity : ComponentActivity() {
 fun PixiDoApp(
     viewModel: AuraViewModel = viewModel(),
     pendingWidgetAction: String? = null,
-    onWidgetActionConsumed: () -> Unit = {}
+    onWidgetActionConsumed: () -> Unit = {},
+    pendingEtaAlert: PendingEtaAlert? = null,
+    onEtaAlertConsumed: () -> Unit = {}
 ) {
     val sound = LocalSoundEngine.current
     val context = LocalContext.current
@@ -153,7 +185,7 @@ fun PixiDoApp(
     val calendarEvents by viewModel.calendarEvents.collectAsStateWithLifecycle()
     val goals by viewModel.goals.collectAsStateWithLifecycle()
     val accounts by viewModel.accounts.collectAsStateWithLifecycle()
-    val dailyActivity by viewModel.dailyActivity.collectAsStateWithLifecycle()
+    val goalActivity by viewModel.goalActivity.collectAsStateWithLifecycle()
     val notes by viewModel.notes.collectAsStateWithLifecycle()
     val profile by viewModel.userProfile.collectAsStateWithLifecycle()
 
@@ -165,8 +197,12 @@ fun PixiDoApp(
     val isFocusTimerRunning by viewModel.isFocusTimerRunning.collectAsStateWithLifecycle()
     val showProfile by viewModel.showProfile.collectAsStateWithLifecycle()
     val snackbarMessage by viewModel.snackbarMessage.collectAsStateWithLifecycle()
+    val activeSmsPrompt by viewModel.activeSmsPrompt.collectAsStateWithLifecycle()
+    val pendingSmsTransactions by viewModel.pendingSmsTransactions.collectAsStateWithLifecycle()
 
     var showAddTaskDialog by remember { mutableStateOf(false) }
+    var editingTask by remember { mutableStateOf<com.example.data.TaskEntity?>(null) }
+    var addTaskForDate by remember { mutableStateOf<Long?>(null) }
     var showAddBudgetDialog by remember { mutableStateOf(false) }
     var showAddEventDialog by remember { mutableStateOf(false) }
     var showAddGoalDialog by remember { mutableStateOf(false) }
@@ -180,6 +216,8 @@ fun PixiDoApp(
         when (action) {
             WidgetActions.ACTION_ADD_TASK -> {
                 viewModel.selectTab(0)
+                editingTask = null
+                addTaskForDate = null
                 showAddTaskDialog = true
             }
             WidgetActions.ACTION_OPEN_FOCUS -> {
@@ -191,6 +229,16 @@ fun PixiDoApp(
             else -> { /* open app only */ }
         }
         onWidgetActionConsumed()
+    }
+
+    // Task ETA full-screen / notification deep link → show popup immediately
+    var activeEta by remember { mutableStateOf<PendingEtaAlert?>(null) }
+    LaunchedEffect(pendingEtaAlert) {
+        val eta = pendingEtaAlert ?: return@LaunchedEffect
+        showSplash = false
+        viewModel.selectTab(0)
+        activeEta = eta
+        onEtaAlertConsumed()
     }
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -217,7 +265,7 @@ fun PixiDoApp(
         label = "contentScale"
     )
 
-    // Swipeable tabs (left / right)
+    // Swipeable tabs (left / right) — simple pager, no custom pop transitions
     val pagerState = rememberPagerState(
         initialPage = selectedTab,
         pageCount = { 4 }
@@ -247,6 +295,39 @@ fun PixiDoApp(
         contract = ActivityResultContracts.RequestPermission()
     ) { /* granted or not — scheduling still works; display needs grant */ }
 
+    val smsPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        val granted = result[Manifest.permission.READ_SMS] == true ||
+            result[Manifest.permission.RECEIVE_SMS] == true
+        if (granted) {
+            viewModel.refreshSmsImports()
+        }
+    }
+
+    var smsPermissionAsked by remember { mutableStateOf(false) }
+
+    fun requestSmsPermissionsIfNeeded(forceAsk: Boolean = false) {
+        // forceAsk: user just turned the toggle on (profile Flow may not have updated yet)
+        if (!forceAsk && !profile.smsImportEnabled) return
+        val needRead = ContextCompat.checkSelfPermission(
+            context, Manifest.permission.READ_SMS
+        ) != PackageManager.PERMISSION_GRANTED
+        val needReceive = ContextCompat.checkSelfPermission(
+            context, Manifest.permission.RECEIVE_SMS
+        ) != PackageManager.PERMISSION_GRANTED
+        if (needRead || needReceive) {
+            if (forceAsk || !smsPermissionAsked) {
+                smsPermissionAsked = true
+                smsPermissionLauncher.launch(
+                    arrayOf(Manifest.permission.RECEIVE_SMS, Manifest.permission.READ_SMS)
+                )
+            }
+        } else {
+            viewModel.refreshSmsImports()
+        }
+    }
+
     LaunchedEffect(Unit) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val granted = ContextCompat.checkSelfPermission(
@@ -259,11 +340,39 @@ fun PixiDoApp(
         }
     }
 
+    // After splash: request SMS (for bank import) once, then scan inbox
+    LaunchedEffect(showSplash, profile.smsImportEnabled) {
+        if (showSplash) return@LaunchedEffect
+        if (profile.smsImportEnabled) {
+            requestSmsPermissionsIfNeeded(forceAsk = false)
+        }
+    }
+
+    // Re-scan when app returns to foreground
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, profile.smsImportEnabled) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME && profile.smsImportEnabled) {
+                if (SmsInboxScanner.hasReadPermission(context) ||
+                    SmsInboxScanner.hasReceivePermission(context)
+                ) {
+                    viewModel.refreshSmsImports()
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     fun openAddForCurrentTab() {
         sound.play(Sfx.FAB)
         sound.play(Sfx.DIALOG_OPEN)
         when (selectedTab) {
-            0 -> showAddTaskDialog = true
+            0 -> {
+                editingTask = null
+                addTaskForDate = null
+                showAddTaskDialog = true
+            }
             1 -> showAddBudgetDialog = true
             2 -> showAddEventDialog = true
             3 -> showAddGoalDialog = true
@@ -335,7 +444,6 @@ fun PixiDoApp(
                     .padding(bottom = contentBottomPad)
                     .windowInsetsPadding(WindowInsets.navigationBars)
                     .background(MaterialTheme.colorScheme.background),
-                // Keep only the current offscreen page to cut composition cost
                 beyondViewportPageCount = 0,
                 userScrollEnabled = !showSplash
             ) { page ->
@@ -346,12 +454,21 @@ fun PixiDoApp(
                         notes = notes,
                         userXp = profile.userXp,
                         profile = profile,
-                        activity = dailyActivity,
                         onToggleTask = { viewModel.toggleTaskCompletion(it) },
-                        onToggleSubtask = { task, subtask -> viewModel.toggleSubtask(task, subtask) },
+                        onToggleSubtask = { task, subtask ->
+                            viewModel.toggleSubtask(task, subtask)
+                        },
                         onDeleteTask = { viewModel.deleteTask(it) },
+                        onEditTask = { task ->
+                            sound.play(Sfx.DIALOG_OPEN)
+                            editingTask = task
+                            showAddTaskDialog = true
+                        },
+                        onSnoozeTask = { viewModel.snoozeTask(it) },
                         onOpenAddTask = {
                             sound.play(Sfx.DIALOG_OPEN)
+                            editingTask = null
+                            addTaskForDate = null
                             showAddTaskDialog = true
                         },
                         onQuickAddTask = { title ->
@@ -361,7 +478,6 @@ fun PixiDoApp(
                                 set(java.util.Calendar.SECOND, 0)
                                 set(java.util.Calendar.MILLISECOND, 0)
                             }.timeInMillis
-                            // Due later today so it lands on "today"
                             val due = dayStart + 18L * 60 * 60 * 1000
                             viewModel.addTask(
                                 title = title,
@@ -421,6 +537,7 @@ fun PixiDoApp(
 
                     2 -> CalendarScreen(
                         events = calendarEvents,
+                        tasks = tasks,
                         selectedDateMillis = selectedCalendarDate,
                         onSelectDate = {
                             sound.play(Sfx.DAY_SELECT)
@@ -438,12 +555,27 @@ fun PixiDoApp(
                             sound.play(Sfx.FAB)
                             sound.play(Sfx.DIALOG_OPEN)
                             showAddEventDialog = true
+                        },
+                        onOpenAddTask = {
+                            sound.play(Sfx.FAB)
+                            sound.play(Sfx.DIALOG_OPEN)
+                            editingTask = null
+                            addTaskForDate = selectedCalendarDate
+                            showAddTaskDialog = true
+                        },
+                        onToggleTask = { viewModel.toggleTaskCompletion(it) },
+                        onEditTask = { task ->
+                            sound.play(Sfx.DIALOG_OPEN)
+                            editingTask = task
+                            addTaskForDate = null
+                            showAddTaskDialog = true
                         }
                     )
 
                     3 -> GoalsScreen(
                         goals = goals,
                         currencyCode = profile.currencyCode,
+                        goalActivity = goalActivity,
                         onUpdateGoalProgress = { goal, delta ->
                             val willComplete =
                                 delta > 0 && goal.currentAmount + delta >= goal.targetAmount
@@ -485,11 +617,22 @@ fun PixiDoApp(
             onDismiss = {
                 sound.play(Sfx.DIALOG_CLOSE)
                 showAddTaskDialog = false
+                editingTask = null
+                addTaskForDate = null
             },
+            existingTask = editingTask,
+            initialDueDateMillis = addTaskForDate,
+            goals = goals,
             onAddTask = { title, category, priority, dueTimeStr, dueDateMillis, subtasks, linkedGoalId ->
                 sound.play(Sfx.ADD_TASK)
                 viewModel.addTask(
                     title, category, priority, dueTimeStr, dueDateMillis, subtasks, linkedGoalId
+                )
+            },
+            onUpdateTask = { id, title, category, priority, dueTimeStr, dueDateMillis, subtasks, linkedGoalId ->
+                sound.play(Sfx.ADD_TASK)
+                viewModel.updateTask(
+                    id, title, category, priority, dueTimeStr, dueDateMillis, subtasks, linkedGoalId
                 )
             }
         )
@@ -508,6 +651,25 @@ fun PixiDoApp(
                 viewModel.addBudgetItem(
                     title, amount, isExpense, category, note, accountId, transactionType
                 )
+            }
+        )
+    }
+
+    // Bank SMS → Budget import prompt (after splash, one at a time)
+    val smsPrompt = activeSmsPrompt
+    if (!showSplash && smsPrompt != null && !showProfile) {
+        val remaining = (pendingSmsTransactions.size - 1).coerceAtLeast(0)
+        SmsImportDialog(
+            item = smsPrompt,
+            currencyCode = profile.currencyCode.ifBlank { "INR" },
+            remainingCount = remaining,
+            onAccept = {
+                sound.play(Sfx.ADD_BUDGET)
+                viewModel.acceptSmsTransaction(smsPrompt)
+            },
+            onDismiss = {
+                sound.play(Sfx.DIALOG_CLOSE)
+                viewModel.dismissSmsTransaction(smsPrompt)
             }
         )
     }
@@ -565,6 +727,37 @@ fun PixiDoApp(
         )
     }
 
+    // Task ETA popup + custom calm ringtone
+    activeEta?.let { eta ->
+        TaskEtaDialog(
+            title = eta.title.removePrefix("Task due: ").removePrefix("Event: ").trim()
+                .ifBlank { eta.title },
+            body = eta.body,
+            onMarkDone = {
+                sound.play(Sfx.TASK_COMPLETE)
+                if (eta.type == ReminderScheduler.TYPE_TASK && eta.itemId > 0) {
+                    tasks.find { it.id == eta.itemId }?.let { viewModel.toggleTaskCompletion(it) }
+                } else if (eta.type == ReminderScheduler.TYPE_EVENT && eta.itemId > 0) {
+                    calendarEvents.find { it.id == eta.itemId }?.let {
+                        viewModel.toggleCalendarEventCompleted(it)
+                    }
+                }
+                activeEta = null
+            },
+            onSnooze = {
+                sound.play(Sfx.TAP_SOFT)
+                if (eta.type == ReminderScheduler.TYPE_TASK && eta.itemId > 0) {
+                    tasks.find { it.id == eta.itemId }?.let { viewModel.snoozeTaskMinutes(it, 10) }
+                }
+                activeEta = null
+            },
+            onDismiss = {
+                sound.play(Sfx.DIALOG_CLOSE)
+                activeEta = null
+            }
+        )
+    }
+
     if (showProfile) {
         val authBusy by viewModel.authBusy.collectAsStateWithLifecycle()
         val backupBusy by viewModel.backupBusy.collectAsStateWithLifecycle()
@@ -594,6 +787,17 @@ fun PixiDoApp(
             onHapticsToggle = {
                 sound.play(Sfx.SETTINGS_CHANGE)
                 viewModel.setHapticsEnabled(it)
+            },
+            onSmsImportToggle = { enabled ->
+                sound.play(Sfx.SETTINGS_CHANGE)
+                viewModel.setSmsImportEnabled(enabled)
+                if (enabled) {
+                    requestSmsPermissionsIfNeeded(forceAsk = true)
+                }
+            },
+            onNotificationSoundSelected = { option ->
+                sound.play(Sfx.SETTINGS_CHANGE)
+                viewModel.setNotificationSound(option)
             },
             onGoogleSignIn = {
                 viewModel.signInWithGoogle(context)

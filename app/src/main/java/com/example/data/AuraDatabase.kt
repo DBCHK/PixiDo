@@ -13,9 +13,11 @@ import androidx.room.RoomDatabase
         GoalEntity::class,
         AccountEntity::class,
         DailyActivityEntity::class,
-        NoteEntity::class
+        GoalActivityEntity::class,
+        NoteEntity::class,
+        PendingSmsTransactionEntity::class
     ],
-    version = 6,
+    version = 8,
     exportSchema = false
 )
 abstract class AuraDatabase : RoomDatabase() {

@@ -12,8 +12,19 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SHORT_SERVICE" />
+    <!-- Android 16 Live Updates → Samsung Now Bar on One UI 8+ -->
+    <uses-permission
+        android:name="android.permission.POST_PROMOTED_NOTIFICATIONS"
+        tools:targetApi="36" />
+    <!-- Bank SMS → Budget import (Indian ₹ / UPI alerts) -->
+    <uses-permission android:name="android.permission.RECEIVE_SMS" />
+    <uses-permission android:name="android.permission.READ_SMS" />
 
     <application
         android:allowBackup="true"
@@ -24,11 +35,23 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.PixiDo">
+
+        <!-- Samsung One UI Live Notifications / Now Bar capability flags -->
+        <meta-data
+            android:name="com.samsung.android.support.ongoing_activity"
+            android:value="true" />
+        <!-- Some One UI builds also check this legacy key -->
+        <meta-data
+            android:name="com.sec.android.support.ongoing_activity"
+            android:value="true" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:label="@string/app_name"
             android:theme="@style/Theme.PixiDo"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -43,6 +66,39 @@
                 <action android:name="com.example.pixido.ACTION_REMIND" />
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".sms.SmsReceiver"
+            android:exported="true"
+            android:permission="android.permission.BROADCAST_SMS">
+            <intent-filter android:priority="999">
+                <action android:name="android.provider.Telephony.SMS_RECEIVED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Focus timer FGS → powers Now Bar / Live Update countdown -->
+        <service
+            android:name=".notify.FocusTimerService"
+            android:exported="false"
+            android:stopWithTask="false"
+            android:foregroundServiceType="specialUse|shortService">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="focus_timer_now_bar" />
+        </service>
+
+        <receiver
+            android:name=".notify.NowBarActionReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.example.pixido.NOWBAR_FOCUS_PAUSE" />
+                <action android:name="com.example.pixido.NOWBAR_FOCUS_RESUME" />
+                <action android:name="com.example.pixido.NOWBAR_FOCUS_STOP" />
+                <action android:name="com.example.pixido.NOWBAR_TASK_DONE" />
+                <action android:name="com.example.pixido.NOWBAR_TASK_SNOOZE" />
+                <action android:name="com.example.pixido.NOWBAR_TASK_DISMISS" />
             </intent-filter>
         </receiver>
 

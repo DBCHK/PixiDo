@@ -2,7 +2,6 @@ package com.example.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,7 +31,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import com.example.data.DailyActivityEntity
 import com.example.data.UserProfile
 import com.example.ui.theme.rememberPixiDimens
 import java.text.SimpleDateFormat
@@ -40,17 +38,20 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * Soft Lilac tasks header (idea2):
- * greeting + soft Focus chip + circular avatar, then activity heatmap.
+ * Soft Lilac tasks header:
+ * greeting + Focus chip + circular avatar.
+ * (Contribution heatmaps live on the Goals tab, per goal.)
  */
 @Composable
 fun DailyHeaderBanner(
     userXp: Int,
     profile: UserProfile,
-    activity: List<DailyActivityEntity>,
     onOpenFocusMode: () -> Unit,
     onOpenProfile: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    openCount: Int = 0,
+    doneToday: Int = 0,
+    overdueCount: Int = 0
 ) {
     val d = rememberPixiDimens()
     val dateFormat = SimpleDateFormat(
@@ -182,8 +183,90 @@ fun DailyHeaderBanner(
             }
         }
 
+        // Compact day stats — designer-led snapshot of task health
         Spacer(modifier = Modifier.height(d.listGap))
+        TaskDayStatsStrip(
+            openCount = openCount,
+            doneToday = doneToday,
+            overdueCount = overdueCount,
+            userXp = userXp
+        )
+    }
+}
 
-        ContributionHeatmap(activity = activity)
+@Composable
+fun TaskDayStatsStrip(
+    openCount: Int,
+    doneToday: Int,
+    overdueCount: Int,
+    userXp: Int,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        StatChip(
+            label = "Open",
+            value = openCount.toString(),
+            modifier = Modifier.weight(1f),
+            highlight = openCount > 0
+        )
+        StatChip(
+            label = "Done",
+            value = doneToday.toString(),
+            modifier = Modifier.weight(1f),
+            highlight = doneToday > 0
+        )
+        StatChip(
+            label = if (overdueCount > 0) "Overdue" else "XP",
+            value = if (overdueCount > 0) overdueCount.toString() else userXp.toString(),
+            modifier = Modifier.weight(1f),
+            highlight = overdueCount > 0,
+            danger = overdueCount > 0
+        )
+    }
+}
+
+@Composable
+private fun StatChip(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+    highlight: Boolean = false,
+    danger: Boolean = false
+) {
+    val bg = when {
+        danger -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.55f)
+        highlight -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
+        else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+    }
+    val fg = when {
+        danger -> MaterialTheme.colorScheme.onErrorContainer
+        else -> MaterialTheme.colorScheme.onSurface
+    }
+    Box(
+        modifier = modifier
+            .clip(PixiCardShapeSm)
+            .background(bg)
+            .padding(horizontal = 10.dp, vertical = 10.dp)
+            .testTag("task_stat_$label")
+    ) {
+        Column {
+            Text(
+                text = value,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = fg,
+                maxLines = 1
+            )
+            Text(
+                text = label,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1
+            )
+        }
     }
 }

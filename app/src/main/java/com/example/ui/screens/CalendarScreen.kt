@@ -52,9 +52,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.data.CalendarEventEntity
+import com.example.data.TaskEntity
 import com.example.ui.components.PixiBadge
 import com.example.ui.components.PixiCard
 import com.example.ui.components.PixiDoodle3D
+import com.example.ui.components.PixiOutlineButton
 import com.example.ui.components.PixiPillShape
 import com.example.ui.components.PixiPrimaryButton
 import com.example.ui.theme.rememberPixiDimens
@@ -68,15 +70,20 @@ import java.util.Locale
  *  - Month grid with circular day cells (reference chip language)
  *  - Prev / next circular nav
  *  - Selected-day agenda as a time-block timeline
+ *  - Tasks due on a day appear alongside events
  */
 @Composable
 fun CalendarScreen(
     events: List<CalendarEventEntity>,
+    tasks: List<TaskEntity> = emptyList(),
     selectedDateMillis: Long,
     onSelectDate: (Long) -> Unit,
     onToggleEvent: (CalendarEventEntity) -> Unit,
     onDeleteEvent: (Int) -> Unit,
     onOpenAddEvent: () -> Unit,
+    onOpenAddTask: () -> Unit = {},
+    onToggleTask: (TaskEntity) -> Unit = {},
+    onEditTask: (TaskEntity) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val d = rememberPixiDimens()
@@ -93,6 +100,12 @@ fun CalendarScreen(
             .sortedBy { if (it.startMillis > 0) it.startMillis else it.dateMillis }
     }
 
+    val dayTasks = remember(tasks, selectedDateMillis) {
+        tasks
+            .filter { isSameDay(it.dueDateMillis, selectedDateMillis) }
+            .sortedWith(compareBy<TaskEntity> { it.isCompleted }.thenBy { it.dueDateMillis })
+    }
+
     val monthTitle = remember(visibleMonth) {
         SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(Date(visibleMonth))
     }
@@ -100,12 +113,13 @@ fun CalendarScreen(
         SimpleDateFormat("EEEE, MMM d", Locale.getDefault()).format(Date(selectedDateMillis))
     }
 
-    val monthCells = remember(visibleMonth, events) {
-        buildMonthGrid(visibleMonth, events)
+    val monthCells = remember(visibleMonth, events, tasks) {
+        buildMonthGrid(visibleMonth, events, tasks)
     }
 
-    val upcomingCount = remember(events, todayStart) {
-        events.count { !it.isCompleted && it.dateMillis >= todayStart }
+    val upcomingCount = remember(events, tasks, todayStart) {
+        events.count { !it.isCompleted && it.dateMillis >= todayStart } +
+            tasks.count { !it.isCompleted && startOfDay(it.dueDateMillis) >= todayStart }
     }
 
     Box(
@@ -309,8 +323,16 @@ fun CalendarScreen(
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = if (dayEvents.isEmpty()) "No plans yet"
-                            else "${dayEvents.size} event${if (dayEvents.size == 1) "" else "s"}",
+                            text = when {
+                                dayEvents.isEmpty() && dayTasks.isEmpty() -> "No plans yet"
+                                else -> {
+                                    val e = if (dayEvents.isEmpty()) ""
+                                    else "${dayEvents.size} event${if (dayEvents.size == 1) "" else "s"}"
+                                    val t = if (dayTasks.isEmpty()) ""
+                                    else "${dayTasks.size} task${if (dayTasks.size == 1) "" else "s"}"
+                                    listOf(e, t).filter { it.isNotBlank() }.joinToString(" · ")
+                                }
+                            },
                             fontSize = d.caption,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -325,7 +347,7 @@ fun CalendarScreen(
             }
 
             // ── Time-block agenda ───────────────────────────────────
-            if (dayEvents.isEmpty()) {
+            if (dayEvents.isEmpty() && dayTasks.isEmpty()) {
                 item {
                     PixiCard(
                         containerColor = MaterialTheme.colorScheme.surface,
@@ -351,13 +373,21 @@ fun CalendarScreen(
                             )
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = "Schedule something — we’ll remind you at start time",
+                                text = "Add a task or event for this date — we’ll remind you",
                                 fontSize = d.caption,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center
                             )
                             Spacer(modifier = Modifier.height(14.dp))
                             PixiPrimaryButton(
+                                text = "Add task for this day",
+                                onClick = onOpenAddTask,
+                                modifier = Modifier
+                                    .fillMaxWidth(if (d.isCompact) 1f else 0.7f)
+                                    .testTag("calendar_empty_add_task")
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            PixiOutlineButton(
                                 text = "Add event",
                                 onClick = onOpenAddEvent,
                                 modifier = Modifier
@@ -368,15 +398,65 @@ fun CalendarScreen(
                     }
                 }
             } else {
-                // Timeline style list
-                items(dayEvents, key = { it.id }) { event ->
-                    TimelineEventRow(
-                        event = event,
-                        onToggle = { onToggleEvent(event) },
-                        onDelete = { onDeleteEvent(event.id) },
-                        compact = d.isCompact
-                    )
-                    Spacer(modifier = Modifier.height(d.listGap))
+                if (dayTasks.isNotEmpty()) {
+                    item {
+                        Text(
+                            text = "Tasks",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                    }
+                    items(dayTasks, key = { "task_${it.id}" }) { task ->
+                        CalendarTaskRow(
+                            task = task,
+                            onToggle = { onToggleTask(task) },
+                            onEdit = { onEditTask(task) },
+                            compact = d.isCompact
+                        )
+                        Spacer(modifier = Modifier.height(d.listGap))
+                    }
+                }
+                if (dayEvents.isNotEmpty()) {
+                    item {
+                        Text(
+                            text = "Events",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
+                        )
+                    }
+                    items(dayEvents, key = { "event_${it.id}" }) { event ->
+                        TimelineEventRow(
+                            event = event,
+                            onToggle = { onToggleEvent(event) },
+                            onDelete = { onDeleteEvent(event.id) },
+                            compact = d.isCompact
+                        )
+                        Spacer(modifier = Modifier.height(d.listGap))
+                    }
+                }
+                item {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        PixiOutlineButton(
+                            text = "Add task",
+                            onClick = onOpenAddTask,
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("calendar_add_task_btn")
+                        )
+                        PixiPrimaryButton(
+                            text = "Add event",
+                            onClick = onOpenAddEvent,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
             }
 
@@ -432,6 +512,94 @@ private data class MonthCell(
     val hasEvents: Boolean,
     val eventCount: Int
 )
+
+@Composable
+private fun CalendarTaskRow(
+    task: TaskEntity,
+    onToggle: () -> Unit,
+    onEdit: () -> Unit,
+    compact: Boolean
+) {
+    val accent = when (task.priority) {
+        "HIGH_FIRE" -> Color(0xFFFF6BA8)
+        "QUICK_WIN" -> Color(0xFF67D4E8)
+        "CORE_GOAL" -> Color(0xFFC4A8F5)
+        else -> Color(0xFF9B7AE8)
+    }
+    PixiCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("calendar_task_${task.id}")
+            .clickable(onClick = onEdit),
+        containerColor = if (task.isCompleted) {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+        } else {
+            MaterialTheme.colorScheme.surface
+        }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(if (compact) 12.dp else 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(4.dp)
+                    .height(if (compact) 44.dp else 52.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(accent)
+            )
+            Spacer(modifier = Modifier.width(10.dp))
+            IconButton(onClick = onToggle, modifier = Modifier.size(36.dp)) {
+                Icon(
+                    imageVector = if (task.isCompleted) Icons.Filled.CheckCircle
+                    else Icons.Filled.RadioButtonUnchecked,
+                    contentDescription = "Toggle task",
+                    tint = if (task.isCompleted) MaterialTheme.colorScheme.primary else accent,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = task.title,
+                    fontSize = if (compact) 14.sp else 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (task.isCompleted) MaterialTheme.colorScheme.onSurfaceVariant
+                    else MaterialTheme.colorScheme.onSurface,
+                    textDecoration = if (task.isCompleted) TextDecoration.LineThrough
+                    else TextDecoration.None,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Filled.Schedule,
+                        contentDescription = null,
+                        tint = accent,
+                        modifier = Modifier.size(12.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = task.dueTimeStr.ifBlank { "All day" },
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = accent,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    PixiBadge(
+                        text = "Task",
+                        containerColor = accent.copy(alpha = 0.15f),
+                        contentColor = accent
+                    )
+                }
+            }
+        }
+    }
+}
 
 @Composable
 private fun DayCell(
@@ -749,7 +917,8 @@ private fun startOfMonth(millis: Long): Long =
 
 private fun buildMonthGrid(
     monthStart: Long,
-    events: List<CalendarEventEntity>
+    events: List<CalendarEventEntity>,
+    tasks: List<TaskEntity> = emptyList()
 ): List<MonthCell> {
     val cal = Calendar.getInstance().apply { timeInMillis = monthStart }
     val daysInMonth = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
@@ -768,6 +937,17 @@ private fun buildMonthGrid(
                 .get(Calendar.DAY_OF_MONTH)
         }
 
+    val taskDays = tasks
+        .filter {
+            val c = Calendar.getInstance().apply { timeInMillis = it.dueDateMillis }
+            c.get(Calendar.YEAR) == cal.get(Calendar.YEAR) &&
+                c.get(Calendar.MONTH) == cal.get(Calendar.MONTH)
+        }
+        .groupBy {
+            Calendar.getInstance().apply { timeInMillis = it.dueDateMillis }
+                .get(Calendar.DAY_OF_MONTH)
+        }
+
     val cells = mutableListOf<MonthCell>()
     repeat(leading) {
         cells += MonthCell(null, null, inMonth = false, hasEvents = false, eventCount = 0)
@@ -777,7 +957,7 @@ private fun buildMonthGrid(
             timeInMillis = monthStart
             set(Calendar.DAY_OF_MONTH, day)
         }
-        val count = eventDays[day]?.size ?: 0
+        val count = (eventDays[day]?.size ?: 0) + (taskDays[day]?.size ?: 0)
         cells += MonthCell(
             dayNumber = day,
             millis = dayCal.timeInMillis,

@@ -117,7 +117,7 @@ interface AuraDao {
     @Query("DELETE FROM accounts")
     suspend fun clearAccounts()
 
-    // --- Daily Activity (contribution heatmap) ---
+    // --- Daily Activity (legacy aggregate; widget fallback) ---
     @Query("SELECT * FROM daily_activity ORDER BY dateKey ASC")
     fun getAllDailyActivity(): Flow<List<DailyActivityEntity>>
 
@@ -135,6 +135,31 @@ interface AuraDao {
 
     @Query("DELETE FROM daily_activity")
     suspend fun clearDailyActivity()
+
+    // --- Goal Activity (per-goal GitHub-style contribution heatmaps) ---
+    @Query("SELECT * FROM goal_activity ORDER BY dateKey ASC")
+    fun getAllGoalActivity(): Flow<List<GoalActivityEntity>>
+
+    @Query("SELECT * FROM goal_activity")
+    suspend fun getGoalActivityOnce(): List<GoalActivityEntity>
+
+    @Query("SELECT * FROM goal_activity WHERE goalId = :goalId ORDER BY dateKey ASC")
+    fun getGoalActivityForGoal(goalId: Int): Flow<List<GoalActivityEntity>>
+
+    @Query("SELECT * FROM goal_activity WHERE goalId = :goalId AND dateKey = :dateKey LIMIT 1")
+    suspend fun getGoalActivityForDay(goalId: Int, dateKey: String): GoalActivityEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertGoalActivity(activity: GoalActivityEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertGoalActivities(items: List<GoalActivityEntity>)
+
+    @Query("DELETE FROM goal_activity WHERE goalId = :goalId")
+    suspend fun clearGoalActivityForGoal(goalId: Int)
+
+    @Query("DELETE FROM goal_activity")
+    suspend fun clearGoalActivity()
 
     // --- Quick Notes ---
     @Query("SELECT * FROM quick_notes ORDER BY isPinned DESC, updatedAt DESC")
@@ -157,4 +182,35 @@ interface AuraDao {
 
     @Query("DELETE FROM quick_notes")
     suspend fun clearNotes()
+
+    // --- Pending SMS bank transactions ---
+    @Query(
+        "SELECT * FROM pending_sms_transactions WHERE status = 'PENDING' " +
+            "ORDER BY receivedAt DESC"
+    )
+    fun getPendingSmsTransactions(): Flow<List<PendingSmsTransactionEntity>>
+
+    @Query(
+        "SELECT * FROM pending_sms_transactions WHERE status = 'PENDING' " +
+            "ORDER BY receivedAt DESC"
+    )
+    suspend fun getPendingSmsTransactionsOnce(): List<PendingSmsTransactionEntity>
+
+    @Query("SELECT * FROM pending_sms_transactions WHERE smsHash = :hash LIMIT 1")
+    suspend fun getPendingSmsByHash(hash: String): PendingSmsTransactionEntity?
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertPendingSmsTransaction(item: PendingSmsTransactionEntity): Long
+
+    @Update
+    suspend fun updatePendingSmsTransaction(item: PendingSmsTransactionEntity)
+
+    @Query("UPDATE pending_sms_transactions SET status = :status WHERE id = :id")
+    suspend fun setPendingSmsStatus(id: Int, status: String)
+
+    @Query(
+        "DELETE FROM pending_sms_transactions WHERE status != 'PENDING' " +
+            "AND receivedAt < :olderThan"
+    )
+    suspend fun purgeOldResolvedSms(olderThan: Long)
 }

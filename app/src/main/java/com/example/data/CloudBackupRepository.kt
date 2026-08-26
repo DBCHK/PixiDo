@@ -54,6 +54,7 @@ class CloudBackupRepository(
                 "goals" to snapshot.goals.map { it.toMap() },
                 "accounts" to snapshot.accounts.map { it.toMap() },
                 "dailyActivity" to snapshot.dailyActivity.map { it.toMap() },
+                "goalActivity" to snapshot.goalActivity.map { it.toMap() },
                 "notes" to snapshot.notes.map { it.toMap() }
             )
 
@@ -116,6 +117,7 @@ class CloudBackupRepository(
                 goals = (data["goals"] as? List<*>)?.mapNotNull { mapToGoal(it) }.orEmpty(),
                 accounts = (data["accounts"] as? List<*>)?.mapNotNull { mapToAccount(it) }.orEmpty(),
                 dailyActivity = (data["dailyActivity"] as? List<*>)?.mapNotNull { mapToActivity(it) }.orEmpty(),
+                goalActivity = (data["goalActivity"] as? List<*>)?.mapNotNull { mapToGoalActivity(it) }.orEmpty(),
                 notes = (data["notes"] as? List<*>)?.mapNotNull { mapToNote(it) }.orEmpty()
             )
 
@@ -232,6 +234,13 @@ private fun DailyActivityEntity.toMap() = mapOf(
     "xpEarned" to xpEarned
 )
 
+private fun GoalActivityEntity.toMap() = mapOf(
+    "goalId" to goalId,
+    "dateKey" to dateKey,
+    "completedCount" to completedCount,
+    "xpEarned" to xpEarned
+)
+
 private fun NoteEntity.toMap() = mapOf(
     "id" to id,
     "content" to content,
@@ -334,6 +343,19 @@ private fun mapToActivity(raw: Any?): DailyActivityEntity? {
     val m = raw as? Map<String, Any?> ?: return null
     val key = m["dateKey"] as? String ?: return null
     return DailyActivityEntity(
+        dateKey = key,
+        completedCount = (m["completedCount"] as? Number)?.toInt() ?: 0,
+        xpEarned = (m["xpEarned"] as? Number)?.toInt() ?: 0
+    )
+}
+
+@Suppress("UNCHECKED_CAST")
+private fun mapToGoalActivity(raw: Any?): GoalActivityEntity? {
+    val m = raw as? Map<String, Any?> ?: return null
+    val goalId = (m["goalId"] as? Number)?.toInt() ?: return null
+    val key = m["dateKey"] as? String ?: return null
+    return GoalActivityEntity(
+        goalId = goalId,
         dateKey = key,
         completedCount = (m["completedCount"] as? Number)?.toInt() ?: 0,
         xpEarned = (m["xpEarned"] as? Number)?.toInt() ?: 0

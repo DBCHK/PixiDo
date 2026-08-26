@@ -60,7 +60,9 @@ import com.example.audio.LocalSoundEngine
 import com.example.audio.Sfx
 import com.example.data.AppThemeOption
 import com.example.data.BackupFrequency
+import com.example.data.NotificationSoundOption
 import com.example.data.UserProfile
+import com.example.notify.displayName
 import com.example.ui.components.PixiCard
 import com.example.ui.components.PixiCardShapeSm
 import com.example.ui.components.PixiCloseButton
@@ -97,6 +99,8 @@ fun ProfileDialog(
     onAccentSelected: (String) -> Unit = {},
     onSoundToggle: (Boolean) -> Unit = {},
     onHapticsToggle: (Boolean) -> Unit = {},
+    onSmsImportToggle: (Boolean) -> Unit = {},
+    onNotificationSoundSelected: (NotificationSoundOption) -> Unit = {},
     onGoogleSignIn: () -> Unit = {},
     onGoogleSignOut: () -> Unit = {},
     onBackupFrequencyChange: (BackupFrequency) -> Unit = {},
@@ -401,6 +405,59 @@ fun ProfileDialog(
                     onCheckedChange = onHapticsToggle,
                     testTag = "toggle_haptics"
                 )
+                PreferenceSwitchRow(
+                    title = "Bank SMS import",
+                    subtitle = "Detect ₹ transactions and offer to add them in Budget",
+                    checked = profile.smsImportEnabled,
+                    onCheckedChange = onSmsImportToggle,
+                    testTag = "toggle_sms_import"
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
+                Text(
+                    text = "Reminder sound",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Custom chime for task & event notifications",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    NotificationSoundOption.entries.forEach { option ->
+                        val selected = profile.notificationSound == option
+                        Row(
+                            modifier = Modifier
+                                .clip(PixiPillShape)
+                                .background(
+                                    if (selected) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.surfaceVariant
+                                )
+                                .clickable {
+                                    sound.play(Sfx.SETTINGS_CHANGE)
+                                    onNotificationSoundSelected(option)
+                                }
+                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                                .testTag("notif_sound_${option.name}"),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = option.displayName(),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (selected) MaterialTheme.colorScheme.onPrimary
+                                else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
 
                 // ── Theme ────────────────────────────────────────────
                 Spacer(modifier = Modifier.height(16.dp))

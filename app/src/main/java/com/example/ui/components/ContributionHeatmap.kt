@@ -24,9 +24,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.data.DailyActivityEntity
 import com.example.ui.theme.HeatmapEmpty
 import com.example.ui.theme.HeatmapEmptyLight
 import com.example.ui.theme.HeatmapL1
@@ -43,33 +43,38 @@ import java.util.Calendar
 import java.util.Locale
 
 /**
- * GitHub-style contribution grid tracking daily task completions.
- * Soft lilac scale matching the Soft Lilac design system.
+ * GitHub-style contribution grid.
+ * Used on Goals (per-goal progress days), not on the Tasks tab.
  */
 @Composable
 fun ContributionHeatmap(
-    activity: List<DailyActivityEntity>,
+    dayCounts: Map<String, Int>,
     modifier: Modifier = Modifier,
-    weeks: Int = 17
+    weeks: Int = 17,
+    title: String = "Activity",
+    subtitle: String? = null,
+    compact: Boolean = false
 ) {
     val d = rememberPixiDimens()
-    val cell = d.heatmapCell
+    val cell = if (compact) (d.heatmapCell.value * 0.85f).dp else d.heatmapCell
     val isDark = MaterialTheme.colorScheme.background.red +
         MaterialTheme.colorScheme.background.green +
         MaterialTheme.colorScheme.background.blue < 1.5f
 
-    val activityMap = remember(activity) {
-        activity.associateBy { it.dateKey }
+    val weeksToShow = when {
+        compact -> 10
+        d.isCompact -> 12
+        else -> weeks
     }
-
-    val weeksToShow = if (d.isCompact) 12 else weeks
     val grid = remember(weeksToShow) {
         buildContributionGrid(weeksToShow)
     }
 
-    val totalCompletions = activity.sumOf { it.completedCount }
-    val activeDays = activity.count { it.completedCount > 0 }
-    val bestDay = activity.maxOfOrNull { it.completedCount } ?: 0
+    val totalCompletions = dayCounts.values.sum()
+    val activeDays = dayCounts.count { it.value > 0 }
+    val bestDay = dayCounts.values.maxOrNull() ?: 0
+    val resolvedSubtitle = subtitle
+        ?: "$totalCompletions updates · $activeDays active days"
 
     PixiCard(
         modifier = modifier
@@ -79,31 +84,33 @@ fun ContributionHeatmap(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(if (compact) 12.dp else 16.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Activity",
-                        style = MaterialTheme.typography.titleMedium,
+                        text = title,
+                        style = if (compact) MaterialTheme.typography.titleSmall
+                        else MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "$totalCompletions tasks · $activeDays active days",
+                        text = resolvedSubtitle,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1
                     )
                 }
-                if (bestDay > 0) {
+                if (bestDay > 0 && !compact) {
                     PixiBadge(text = "Best $bestDay/day")
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(if (compact) 10.dp else 14.dp))
 
             Row(
                 modifier = Modifier
@@ -114,7 +121,7 @@ fun ContributionHeatmap(
                 grid.forEach { weekColumn ->
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         weekColumn.forEach { dayKey ->
-                            val count = activityMap[dayKey]?.completedCount ?: 0
+                            val count = dayCounts[dayKey] ?: 0
                             Box(
                                 modifier = Modifier
                                     .size(cell)
@@ -126,34 +133,73 @@ fun ContributionHeatmap(
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Less",
-                    fontSize = 10.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                listOf(0, 1, 2, 4, 7).forEach { level ->
-                    Box(
-                        modifier = Modifier
-                            .padding(horizontal = 1.5.dp)
-                            .size(10.dp)
-                            .clip(RoundedCornerShape(2.dp))
-                            .background(heatmapColor(level, isDark))
+            if (!compact) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Less",
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    listOf(0, 1, 2, 4, 7).forEach { level ->
+                        Box(
+                            modifier = Modifier
+                                .padding(horizontal = 1.5.dp)
+                                .size(10.dp)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(heatmapColor(level, isDark))
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "More",
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = "More",
-                    fontSize = 10.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            }
+        }
+    }
+}
+
+/**
+ * Inline mini heatmap for a single goal card — no outer card chrome.
+ */
+@Composable
+fun GoalMiniHeatmap(
+    dayCounts: Map<String, Int>,
+    modifier: Modifier = Modifier,
+    weeks: Int = 12,
+    cell: Dp = 8.dp
+) {
+    val isDark = MaterialTheme.colorScheme.background.red +
+        MaterialTheme.colorScheme.background.green +
+        MaterialTheme.colorScheme.background.blue < 1.5f
+    val grid = remember(weeks) { buildContributionGrid(weeks) }
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .testTag("goal_mini_heatmap"),
+        horizontalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        grid.forEach { weekColumn ->
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                weekColumn.forEach { dayKey ->
+                    val count = dayCounts[dayKey] ?: 0
+                    Box(
+                        modifier = Modifier
+                            .size(cell)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(heatmapColor(count, isDark))
+                    )
+                }
             }
         }
     }

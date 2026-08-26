@@ -59,15 +59,23 @@ object WidgetDataLoader {
 
     suspend fun loadHeatmap(context: Context): HeatmapWidgetData = withContext(Dispatchers.IO) {
         val dao = AuraDatabase.getDatabase(context).auraDao()
-        val activity = dao.getDailyActivityOnce()
-        val map = activity.associateBy { it.dateKey }
+        // Aggregate per-goal contribution days into a single GitHub-style grid
+        val goalActivity = dao.getGoalActivityOnce()
+        val byDay = goalActivity.groupBy { it.dateKey }.mapValues { (_, rows) ->
+            DailyActivityEntity(
+                dateKey = rows.first().dateKey,
+                completedCount = rows.sumOf { it.completedCount },
+                xpEarned = rows.sumOf { it.xpEarned }
+            )
+        }
+        val activity = byDay.values.toList()
         val todayKey = AuraRepository.dayKey()
-        val todayCount = map[todayKey]?.completedCount ?: 0
+        val todayCount = byDay[todayKey]?.completedCount ?: 0
         val total = activity.sumOf { it.completedCount }
         val active = activity.count { it.completedCount > 0 }
         val best = activity.maxOfOrNull { it.completedCount } ?: 0
         val streak = computeStreak(activity)
-        val bmp = renderHeatmapBitmap(map, weeks = 12, cell = 9, gap = 2)
+        val bmp = renderHeatmapBitmap(byDay, weeks = 12, cell = 9, gap = 2)
         HeatmapWidgetData(total, active, streak, todayCount, best, bmp)
     }
 
@@ -104,7 +112,9 @@ object WidgetDataLoader {
         val prefs = UserPreferencesRepository(context)
         val profile = prefs.currentProfile()
         val todayKey = AuraRepository.dayKey()
-        val today = dao.getActivityForDay(todayKey)?.completedCount ?: 0
+        val today = dao.getGoalActivityOnce()
+            .filter { it.dateKey == todayKey }
+            .sumOf { it.completedCount }
         FocusWidgetData(
             label = "Focus · 25 min",
             minutesDefault = 25,

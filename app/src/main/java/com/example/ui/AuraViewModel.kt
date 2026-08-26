@@ -1,7 +1,11 @@
 package com.example.ui
 
 import android.app.Application
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.os.Build
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.auth.AuthResult
@@ -17,15 +21,20 @@ import com.example.data.BudgetItemEntity
 import com.example.data.CalendarEventEntity
 import com.example.data.CloudBackupRepository
 import com.example.data.Currencies
-import com.example.data.DailyActivityEntity
+import com.example.data.GoalActivityEntity
 import com.example.data.GoalEntity
 import com.example.data.NoteEntity
+import com.example.data.NotificationSoundOption
+import com.example.data.PendingSmsTransactionEntity
 import com.example.data.TaskEntity
 import com.example.data.TransactionType
 import com.example.data.UserPreferencesRepository
 import com.example.data.UserProfile
+import com.example.notify.FocusTimerService
 import com.example.notify.NotificationHelper
+import com.example.notify.NowBarHelper
 import com.example.notify.ReminderScheduler
+import com.example.sms.SmsInboxScanner
 import com.example.widget.WidgetActions
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -49,9 +58,14 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
     val calendarEvents: StateFlow<List<CalendarEventEntity>>
     val goals: StateFlow<List<GoalEntity>>
     val accounts: StateFlow<List<AccountEntity>>
-    val dailyActivity: StateFlow<List<DailyActivityEntity>>
+    val goalActivity: StateFlow<List<GoalActivityEntity>>
     val notes: StateFlow<List<NoteEntity>>
     val userProfile: StateFlow<UserProfile>
+    val pendingSmsTransactions: StateFlow<List<PendingSmsTransactionEntity>>
+
+    /** Current SMS import prompt (head of queue); null when nothing to show. */
+    private val _activeSmsPrompt = MutableStateFlow<PendingSmsTransactionEntity?>(null)
+    val activeSmsPrompt: StateFlow<PendingSmsTransactionEntity?> = _activeSmsPrompt.asStateFlow()
 
     private val _selectedTab = MutableStateFlow(0)
     val selectedTab: StateFlow<Int> = _selectedTab.asStateFlow()
@@ -82,6 +96,28 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
 
     private var timerJob: Job? = null
     private var lastDeletedTask: TaskEntity? = null
+    private var focusTotalSeconds: Int = 25 * 60
+
+    /** Mirrors FocusTimerService ticks so UI + Now Bar stay in sync. */
+    private val focusStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != FocusTimerService.ACTION_STATE) return
+            val left = intent.getIntExtra(FocusTimerService.EXTRA_SECONDS_LEFT, _focusSecondsLeft.value)
+            val running = intent.getBooleanExtra(FocusTimerService.EXTRA_RUNNING, false)
+            val completed = intent.getBooleanExtra(FocusTimerService.EXTRA_COMPLETED, false)
+            val total = intent.getIntExtra(FocusTimerService.EXTRA_TOTAL_SECONDS, focusTotalSeconds)
+            focusTotalSeconds = total
+            _focusSecondsLeft.value = left
+            _isFocusTimerRunning.value = running
+            if (completed) {
+                viewModelScope.launch {
+                    preferences.addXp(50)
+                    _snackbarMessage.value = "Focus complete · +50 XP"
+                    refreshWidgets()
+                }
+            }
+        }
+    }
 
     init {
         val dao = AuraDatabase.getDatabase(application).auraDao()
@@ -89,6 +125,16 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
         preferences = UserPreferencesRepository(application)
         cloudBackup = CloudBackupRepository(application, repository, preferences)
         googleAuth = GoogleAuthRepository(application)
+
+        // Listen for Focus service ticks (Now Bar actions / background countdown)
+        val filter = IntentFilter(FocusTimerService.ACTION_STATE)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            application.registerReceiver(focusStateReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("UnspecifiedRegisterReceiverFlag")
+            application.registerReceiver(focusStateReceiver, filter)
+        }
+        NowBarHelper.ensureChannel(application)
 
         tasks = repository.allTasks.stateIn(
             scope = viewModelScope,
@@ -120,7 +166,7 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
             initialValue = emptyList()
         )
 
-        dailyActivity = repository.allDailyActivity.stateIn(
+        goalActivity = repository.allGoalActivity.stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = emptyList()
@@ -138,12 +184,16 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
             initialValue = UserProfile()
         )
 
+        pendingSmsTransactions = repository.pendingSmsTransactions.stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
         // Normalize selected calendar date to local midnight
         _selectedCalendarDate.value = startOfDay(System.currentTimeMillis())
 
-        NotificationHelper.ensureChannels(application)
-
-        // Re-apply backup schedule from saved prefs + hydrate Google session
+        // Re-apply backup schedule from saved prefs + hydrate Google session + notif channels
         viewModelScope.launch {
             googleAuth.currentGoogleUser()?.let { user ->
                 preferences.setGoogleAccount(
@@ -154,12 +204,118 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
             val profile = preferences.currentProfile()
+            NotificationHelper.ensureChannels(application, profile.notificationSound)
+            NowBarHelper.ensureChannel(application)
             BackupScheduler.apply(
                 application,
                 profile.backupFrequency,
                 profile.isSignedIn || googleAuth.isSignedIn
             )
+            repository.purgeOldResolvedSms()
         }
+
+        // Keep active prompt in sync with pending queue
+        viewModelScope.launch {
+            pendingSmsTransactions.collect { list ->
+                val current = _activeSmsPrompt.value
+                if (current != null && list.any { it.id == current.id }) return@collect
+                _activeSmsPrompt.value = list.firstOrNull()
+            }
+        }
+    }
+
+    /**
+     * Scan recent inbox SMS (if permitted) and surface the next pending import prompt.
+     * Safe to call on every resume / app open.
+     */
+    fun refreshSmsImports() {
+        viewModelScope.launch {
+            val profile = preferences.currentProfile()
+            if (!profile.smsImportEnabled) {
+                _activeSmsPrompt.value = null
+                return@launch
+            }
+            if (SmsInboxScanner.hasReadPermission(getApplication())) {
+                SmsInboxScanner.scanAndQueue(getApplication())
+            }
+            val pending = repository.getPendingSmsOnce()
+            if (_activeSmsPrompt.value == null) {
+                _activeSmsPrompt.value = pending.firstOrNull()
+            }
+        }
+    }
+
+    fun setSmsImportEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            preferences.setSmsImportEnabled(enabled)
+            if (enabled) {
+                refreshSmsImports()
+            } else {
+                _activeSmsPrompt.value = null
+            }
+        }
+    }
+
+    /** Accept detected SMS → add Budget line (expense or income) and match bank account if possible. */
+    fun acceptSmsTransaction(item: PendingSmsTransactionEntity) {
+        viewModelScope.launch {
+            val type = if (item.isExpense) TransactionType.EXPENSE else TransactionType.INCOME
+            val category = if (item.isExpense) "Other" else "Other"
+            val title = buildString {
+                append(item.bankName)
+                if (item.merchantOrInfo.isNotBlank()) {
+                    append(" · ")
+                    append(item.merchantOrInfo.take(28))
+                }
+            }
+            val note = buildString {
+                append("From SMS")
+                if (item.smsSender.isNotBlank()) append(" · ${item.smsSender}")
+            }
+            val matchedAccountId = matchAccountForBank(item.bankName)
+
+            addBudgetItem(
+                title = title,
+                amount = item.amount,
+                isExpense = item.isExpense,
+                category = category,
+                note = note,
+                accountId = matchedAccountId,
+                transactionType = type
+            )
+            repository.markSmsAccepted(item.id)
+            advanceSmsPrompt(item.id)
+            val kind = if (item.isExpense) "expense" else "income"
+            _snackbarMessage.value =
+                "Added $kind · ${Currencies.format(item.amount, userProfile.value.currencyCode)} (${item.bankName})"
+            selectTab(1) // Budget
+        }
+    }
+
+    fun dismissSmsTransaction(item: PendingSmsTransactionEntity) {
+        viewModelScope.launch {
+            repository.markSmsDismissed(item.id)
+            advanceSmsPrompt(item.id)
+        }
+    }
+
+    private suspend fun advanceSmsPrompt(resolvedId: Int) {
+        val next = repository.getPendingSmsOnce().firstOrNull { it.id != resolvedId }
+        _activeSmsPrompt.value = next
+    }
+
+    /** Link SMS bank name to a PixiDo account only when names clearly match. */
+    private fun matchAccountForBank(bankName: String): Int? {
+        if (bankName.isBlank() || bankName.equals("Bank", ignoreCase = true)) return null
+        val needle = bankName.lowercase()
+        val accounts = accounts.value
+        accounts.firstOrNull { it.name.lowercase().contains(needle) }?.id?.let { return it }
+        // Partial: "HDFC Bank" vs account "HDFC"
+        val tokens = needle.split(' ').filter { it.length >= 3 && it != "bank" }
+        for (token in tokens) {
+            accounts.firstOrNull { it.name.lowercase().contains(token) }?.id?.let { return it }
+        }
+        return null
     }
 
     private fun startOfDay(millis: Long): Long {
@@ -381,6 +537,14 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { preferences.setReduceMotion(enabled) }
     }
 
+    fun setNotificationSound(option: NotificationSoundOption) {
+        viewModelScope.launch {
+            preferences.setNotificationSound(option)
+            NotificationHelper.applySoundOption(appContext(), option)
+            _snackbarMessage.value = "Reminder sound · ${option.name.lowercase().replaceFirstChar { it.titlecase() }}"
+        }
+    }
+
     // --- Notes ---
     fun addNote(content: String, colorHex: String = "#7C3AED") {
         viewModelScope.launch {
@@ -418,9 +582,10 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
 
             if (newCompleted) {
                 // No more reminder once completed
-                ReminderScheduler.cancel(appContext(), ReminderScheduler.TYPE_TASK, task.id)
+                ReminderScheduler.cancelTaskReminders(appContext(), task.id)
+                NowBarHelper.clearTaskEta(appContext(), task.id)
                 preferences.addXp(task.xpReward)
-                repository.recordTaskCompletion(task.xpReward, now)
+                // Completing a task can bump a linked goal — contribution lives on Goals
                 task.linkedGoalId?.let { goalId ->
                     goals.value.find { it.id == goalId }?.let { targetGoal ->
                         val updatedGoal = targetGoal.copy(
@@ -428,6 +593,7 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
                             isCompleted = (targetGoal.currentAmount + 1.0) >= targetGoal.targetAmount
                         )
                         repository.updateGoal(updatedGoal)
+                        repository.recordGoalProgress(goalId, xpEarned = 10, timestamp = now)
                     }
                 }
             }
@@ -478,15 +644,114 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
             )
             val newId = repository.addTask(task).toInt()
             if (task.dueDateMillis > System.currentTimeMillis()) {
-                ReminderScheduler.schedule(
+                ReminderScheduler.scheduleTaskReminders(
                     context = appContext(),
-                    type = ReminderScheduler.TYPE_TASK,
                     itemId = newId,
-                    triggerAtMillis = task.dueDateMillis,
-                    title = "Task due: ${task.title}",
+                    dueAtMillis = task.dueDateMillis,
+                    title = task.title,
                     body = "It's time for “${task.title}” (${task.dueTimeStr})"
                 )
             }
+            _snackbarMessage.value = "Task saved · shows on calendar"
+            refreshWidgets()
+        }
+    }
+
+    fun updateTask(
+        taskId: Int,
+        title: String,
+        category: String,
+        priority: String,
+        dueTimeStr: String,
+        dueDateMillis: Long,
+        subtasks: String,
+        linkedGoalId: Int?
+    ) {
+        viewModelScope.launch {
+            val existing = tasks.value.find { it.id == taskId } ?: return@launch
+            val updated = existing.copy(
+                title = title.ifBlank { existing.title },
+                category = category,
+                priority = priority,
+                dueTimeStr = dueTimeStr.ifBlank { existing.dueTimeStr },
+                dueDateMillis = if (dueDateMillis > 0) dueDateMillis else existing.dueDateMillis,
+                subtasks = subtasks,
+                linkedGoalId = linkedGoalId,
+                xpReward = when (priority) {
+                    "HIGH_FIRE" -> 40
+                    "CORE_GOAL" -> 30
+                    else -> 20
+                }
+            )
+            repository.updateTask(updated)
+            ReminderScheduler.cancelTaskReminders(appContext(), taskId)
+            NowBarHelper.clearTaskEta(appContext(), taskId)
+            if (!updated.isCompleted && updated.dueDateMillis > System.currentTimeMillis()) {
+                ReminderScheduler.scheduleTaskReminders(
+                    context = appContext(),
+                    itemId = taskId,
+                    dueAtMillis = updated.dueDateMillis,
+                    title = updated.title,
+                    body = "It's time for “${updated.title}” (${updated.dueTimeStr})"
+                )
+            }
+            _snackbarMessage.value = "Task updated"
+            refreshWidgets()
+        }
+    }
+
+    /** Push due date by one day and reschedule the reminder. */
+    fun snoozeTask(task: TaskEntity, days: Int = 1) {
+        viewModelScope.launch {
+            if (task.isCompleted) return@launch
+            val newDue = task.dueDateMillis + days * 24L * 60 * 60 * 1000
+            val label = when (days) {
+                1 -> "Tomorrow"
+                else -> "In $days days"
+            }
+            val timePart = ReminderScheduler.formatTime(newDue)
+            val updated = task.copy(
+                dueDateMillis = newDue,
+                dueTimeStr = "$label · $timePart"
+            )
+            repository.updateTask(updated)
+            ReminderScheduler.cancelTaskReminders(appContext(), task.id)
+            NowBarHelper.clearTaskEta(appContext(), task.id)
+            if (newDue > System.currentTimeMillis()) {
+                ReminderScheduler.scheduleTaskReminders(
+                    context = appContext(),
+                    itemId = task.id,
+                    dueAtMillis = newDue,
+                    title = updated.title,
+                    body = "It's time for “${updated.title}” (${updated.dueTimeStr})"
+                )
+            }
+            _snackbarMessage.value = "Snoozed · $label"
+            refreshWidgets()
+        }
+    }
+
+    /** Snooze a due task by a few minutes (ETA popup). */
+    fun snoozeTaskMinutes(task: TaskEntity, minutes: Int = 10) {
+        viewModelScope.launch {
+            if (task.isCompleted) return@launch
+            val newDue = System.currentTimeMillis() + minutes.coerceAtLeast(1) * 60_000L
+            val timePart = ReminderScheduler.formatTime(newDue)
+            val updated = task.copy(
+                dueDateMillis = newDue,
+                dueTimeStr = "Snoozed · $timePart"
+            )
+            repository.updateTask(updated)
+            ReminderScheduler.cancelTaskReminders(appContext(), task.id)
+            NowBarHelper.clearTaskEta(appContext(), task.id)
+            ReminderScheduler.scheduleTaskReminders(
+                context = appContext(),
+                itemId = task.id,
+                dueAtMillis = newDue,
+                title = updated.title,
+                body = "It's time for “${updated.title}” (${updated.dueTimeStr})"
+            )
+            _snackbarMessage.value = "Snoozed · $minutes min"
             refreshWidgets()
         }
     }
@@ -494,7 +759,8 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
     fun deleteTask(taskId: Int) {
         viewModelScope.launch {
             lastDeletedTask = tasks.value.find { it.id == taskId }
-            ReminderScheduler.cancel(appContext(), ReminderScheduler.TYPE_TASK, taskId)
+            ReminderScheduler.cancelTaskReminders(appContext(), taskId)
+            NowBarHelper.clearTaskEta(appContext(), taskId)
             repository.deleteTask(taskId)
             _snackbarMessage.value = "Task deleted · undo available"
             refreshWidgets()
@@ -507,12 +773,11 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
                 val restored = task.copy(id = 0)
                 val newId = repository.addTask(restored).toInt()
                 if (!restored.isCompleted && restored.dueDateMillis > System.currentTimeMillis()) {
-                    ReminderScheduler.schedule(
+                    ReminderScheduler.scheduleTaskReminders(
                         context = appContext(),
-                        type = ReminderScheduler.TYPE_TASK,
                         itemId = newId,
-                        triggerAtMillis = restored.dueDateMillis,
-                        title = "Task due: ${restored.title}",
+                        dueAtMillis = restored.dueDateMillis,
+                        title = restored.title,
                         body = "It's time for “${restored.title}” (${restored.dueTimeStr})"
                     )
                 }
@@ -857,6 +1122,8 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
             )
             if (delta > 0) {
                 preferences.addXp(15)
+                repository.recordGoalProgress(goal.id, xpEarned = 15)
+                refreshWidgets()
             }
         }
     }
@@ -878,30 +1145,53 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
 
     fun startFocusTimer(minutes: Int = 25) {
         timerJob?.cancel()
-        _focusSecondsLeft.value = minutes * 60
+        val total = minutes * 60
+        // Resume from remaining time if already mid-session and not zero
+        val left = if (_focusSecondsLeft.value in 1 until total && !_isFocusTimerRunning.value) {
+            _focusSecondsLeft.value
+        } else {
+            total
+        }
+        focusTotalSeconds = total
+        _focusSecondsLeft.value = left
         _isFocusTimerRunning.value = true
 
-        timerJob = viewModelScope.launch {
-            while (_focusSecondsLeft.value > 0 && _isFocusTimerRunning.value) {
-                delay(1000)
-                _focusSecondsLeft.value -= 1
-            }
-            if (_focusSecondsLeft.value == 0) {
-                _isFocusTimerRunning.value = false
-                preferences.addXp(50)
-                repository.recordTaskCompletion(50)
-                _snackbarMessage.value = "Focus complete · +50 XP"
-            }
+        // Immediate Live Update / Now Bar post from UI process (don't wait for FGS)
+        val endAt = System.currentTimeMillis() + left * 1000L
+        NowBarHelper.ensureChannel(appContext())
+        NowBarHelper.showFocus(
+            context = appContext(),
+            secondsLeft = left,
+            totalSeconds = total,
+            isRunning = true,
+            endAtMillis = endAt
+        )
+        if (!NowBarHelper.canPostPromoted(appContext())) {
+            _snackbarMessage.value =
+                "Enable Live updates for PixiDo in notification settings for Now Bar"
         }
+
+        // Service keeps countdown alive in background + refreshes the card
+        FocusTimerService.start(appContext(), left, total)
     }
 
     fun pauseFocusTimer() {
         _isFocusTimerRunning.value = false
         timerJob?.cancel()
+        FocusTimerService.pause(appContext())
     }
 
     fun resetFocusTimer(minutes: Int = 25) {
-        pauseFocusTimer()
+        timerJob?.cancel()
+        FocusTimerService.stop(appContext())
+        _isFocusTimerRunning.value = false
+        focusTotalSeconds = minutes * 60
         _focusSecondsLeft.value = minutes * 60
+        NowBarHelper.clearFocus(appContext())
+    }
+
+    override fun onCleared() {
+        runCatching { getApplication<Application>().unregisterReceiver(focusStateReceiver) }
+        super.onCleared()
     }
 }

@@ -45,7 +45,10 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.example.R
 import com.example.data.Currencies
+import com.example.data.GoalActivityEntity
 import com.example.data.GoalEntity
+import com.example.ui.components.ContributionHeatmap
+import com.example.ui.components.GoalMiniHeatmap
 import com.example.ui.components.PixiBadge
 import com.example.ui.components.PixiCard
 import com.example.ui.components.PixiCardShapeSm
@@ -62,6 +65,7 @@ import androidx.compose.ui.text.style.TextOverflow
 fun GoalsScreen(
     goals: List<GoalEntity>,
     currencyCode: String,
+    goalActivity: List<GoalActivityEntity> = emptyList(),
     onUpdateGoalProgress: (GoalEntity, Double) -> Unit,
     onDeleteGoal: (Int) -> Unit,
     onOpenAddGoal: () -> Unit,
@@ -73,6 +77,14 @@ fun GoalsScreen(
     val currencySymbol = Currencies.symbolOf(currencyCode)
 
     var amountGoal by remember { mutableStateOf<GoalEntity?>(null) }
+
+    val activityByGoal = remember(goalActivity) {
+        goalActivity.groupBy { it.goalId }
+    }
+    val overallDayCounts = remember(goalActivity) {
+        goalActivity.groupBy { it.dateKey }
+            .mapValues { (_, rows) -> rows.sumOf { it.completedCount } }
+    }
 
     Box(
         modifier = modifier
@@ -141,6 +153,19 @@ fun GoalsScreen(
                 Spacer(modifier = Modifier.height(d.sectionGap))
             }
 
+            // Overall goals contribution (GitHub-style) — lives here, not on Tasks
+            if (goals.isNotEmpty()) {
+                item {
+                    ContributionHeatmap(
+                        dayCounts = overallDayCounts,
+                        title = "Goals activity",
+                        subtitle = "Progress updates across all goals",
+                        weeks = 17
+                    )
+                    Spacer(modifier = Modifier.height(d.sectionGap))
+                }
+            }
+
             item {
                 PixiSectionLabel(text = "Milestones")
                 Spacer(modifier = Modifier.height(10.dp))
@@ -158,10 +183,14 @@ fun GoalsScreen(
                 }
             } else {
                 items(goals, key = { it.id }) { goal ->
+                    val goalDays = activityByGoal[goal.id]
+                        ?.associate { it.dateKey to it.completedCount }
+                        .orEmpty()
                     GoalCardItem(
                         goal = goal,
                         currencyCode = currencyCode,
                         currencySymbol = currencySymbol,
+                        dayCounts = goalDays,
                         onAddAmount = { amountGoal = goal },
                         onDelete = { onDeleteGoal(goal.id) }
                     )
@@ -192,12 +221,14 @@ fun GoalCardItem(
     goal: GoalEntity,
     currencyCode: String,
     currencySymbol: String,
+    dayCounts: Map<String, Int> = emptyMap(),
     onAddAmount: () -> Unit,
     onDelete: () -> Unit
 ) {
     val progressPct = (goal.currentAmount / goal.targetAmount).coerceIn(0.0, 1.0).toFloat()
     val animatedProgress by animateFloatAsState(targetValue = progressPct, label = "goalProgress")
     val isMoney = isMoneyUnit(goal.unit, currencySymbol)
+    val activeDays = dayCounts.count { it.value > 0 }
 
     PixiCard(
         modifier = Modifier
@@ -280,6 +311,18 @@ fun GoalCardItem(
                 color = if (goal.isCompleted) Color(0xFF34D399) else MaterialTheme.colorScheme.primary,
                 trackColor = MaterialTheme.colorScheme.surfaceVariant
             )
+
+            // Per-goal GitHub-style contribution grid
+            Spacer(modifier = Modifier.height(14.dp))
+            Text(
+                text = if (activeDays > 0) "Contribution · $activeDays active days"
+                else "Contribution · log progress to fill the grid",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            GoalMiniHeatmap(dayCounts = dayCounts, weeks = 12)
 
             Spacer(modifier = Modifier.height(14.dp))
 

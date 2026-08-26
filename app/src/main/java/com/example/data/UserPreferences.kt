@@ -42,6 +42,14 @@ enum class BackupFrequency {
     NEVER
 }
 
+/** Reminder notification sound presets (bundled custom chimes + system default). */
+enum class NotificationSoundOption {
+    SOFT,
+    BRIGHT,
+    CALM,
+    SYSTEM
+}
+
 data class UserProfile(
     val displayName: String = "",
     val bio: String = "",
@@ -58,12 +66,19 @@ data class UserProfile(
     val soundEnabled: Boolean = true,
     val hapticsEnabled: Boolean = true,
     val reduceMotion: Boolean = false,
+    /** Custom reminder notification sound. */
+    val notificationSound: NotificationSoundOption = NotificationSoundOption.SOFT,
     // Google account + cloud backup
     val googleUid: String = "",
     val googleEmail: String = "",
     val googlePhotoUrl: String = "",
     val backupFrequency: BackupFrequency = BackupFrequency.EVERY_24_HOURS,
-    val lastBackupAt: Long = 0L
+    val lastBackupAt: Long = 0L,
+    /**
+     * When true, bank / UPI transaction SMS are detected and offered for Budget import
+     * on the next app open (requires READ_SMS + RECEIVE_SMS).
+     */
+    val smsImportEnabled: Boolean = true
 ) {
     val isSignedIn: Boolean get() = googleUid.isNotBlank()
     val hasCustomAccent: Boolean get() = accentColorHex.isNotBlank()
@@ -86,11 +101,13 @@ class UserPreferencesRepository(private val context: Context) {
         val SOUND = booleanPreferencesKey("sound_enabled")
         val HAPTICS = booleanPreferencesKey("haptics_enabled")
         val REDUCE_MOTION = booleanPreferencesKey("reduce_motion")
+        val NOTIFICATION_SOUND = stringPreferencesKey("notification_sound")
         val GOOGLE_UID = stringPreferencesKey("google_uid")
         val GOOGLE_EMAIL = stringPreferencesKey("google_email")
         val GOOGLE_PHOTO = stringPreferencesKey("google_photo_url")
         val BACKUP_FREQUENCY = stringPreferencesKey("backup_frequency")
         val LAST_BACKUP_AT = longPreferencesKey("last_backup_at")
+        val SMS_IMPORT = booleanPreferencesKey("sms_import_enabled")
     }
 
     val userProfile: Flow<UserProfile> = context.dataStore.data.map { prefs ->
@@ -116,6 +133,11 @@ class UserPreferencesRepository(private val context: Context) {
         soundEnabled = this[Keys.SOUND] ?: true,
         hapticsEnabled = this[Keys.HAPTICS] ?: true,
         reduceMotion = this[Keys.REDUCE_MOTION] ?: false,
+        notificationSound = runCatching {
+            NotificationSoundOption.valueOf(
+                this[Keys.NOTIFICATION_SOUND] ?: NotificationSoundOption.SOFT.name
+            )
+        }.getOrDefault(NotificationSoundOption.SOFT),
         googleUid = this[Keys.GOOGLE_UID].orEmpty(),
         googleEmail = this[Keys.GOOGLE_EMAIL].orEmpty(),
         googlePhotoUrl = this[Keys.GOOGLE_PHOTO].orEmpty(),
@@ -124,7 +146,9 @@ class UserPreferencesRepository(private val context: Context) {
                 this[Keys.BACKUP_FREQUENCY] ?: BackupFrequency.EVERY_24_HOURS.name
             )
         }.getOrDefault(BackupFrequency.EVERY_24_HOURS),
-        lastBackupAt = this[Keys.LAST_BACKUP_AT] ?: 0L
+        lastBackupAt = this[Keys.LAST_BACKUP_AT] ?: 0L,
+        // Default on so bank SMS prompts work once permission is granted
+        smsImportEnabled = this[Keys.SMS_IMPORT] ?: true
     )
 
     suspend fun updateProfile(
@@ -199,7 +223,9 @@ class UserPreferencesRepository(private val context: Context) {
             "soundEnabled" to p.soundEnabled,
             "hapticsEnabled" to p.hapticsEnabled,
             "reduceMotion" to p.reduceMotion,
-            "backupFrequency" to p.backupFrequency.name
+            "notificationSound" to p.notificationSound.name,
+            "backupFrequency" to p.backupFrequency.name,
+            "smsImportEnabled" to p.smsImportEnabled
         )
     }
 
@@ -223,7 +249,9 @@ class UserPreferencesRepository(private val context: Context) {
             (map["soundEnabled"] as? Boolean)?.let { prefs[Keys.SOUND] = it }
             (map["hapticsEnabled"] as? Boolean)?.let { prefs[Keys.HAPTICS] = it }
             (map["reduceMotion"] as? Boolean)?.let { prefs[Keys.REDUCE_MOTION] = it }
+            (map["notificationSound"] as? String)?.let { prefs[Keys.NOTIFICATION_SOUND] = it }
             (map["backupFrequency"] as? String)?.let { prefs[Keys.BACKUP_FREQUENCY] = it }
+            (map["smsImportEnabled"] as? Boolean)?.let { prefs[Keys.SMS_IMPORT] = it }
         }
     }
 
@@ -268,6 +296,14 @@ class UserPreferencesRepository(private val context: Context) {
 
     suspend fun setReduceMotion(enabled: Boolean) {
         context.dataStore.edit { it[Keys.REDUCE_MOTION] = enabled }
+    }
+
+    suspend fun setNotificationSound(option: NotificationSoundOption) {
+        context.dataStore.edit { it[Keys.NOTIFICATION_SOUND] = option.name }
+    }
+
+    suspend fun setSmsImportEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.SMS_IMPORT] = enabled }
     }
 }
 

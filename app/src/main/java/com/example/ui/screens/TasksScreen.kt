@@ -1,8 +1,13 @@
 package com.example.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -20,6 +25,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -28,10 +34,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.LocalFireDepartment
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Snooze
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
@@ -40,15 +47,19 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -56,10 +67,11 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import com.example.R
 import com.example.audio.LocalSoundEngine
 import com.example.audio.Sfx
-import com.example.data.DailyActivityEntity
 import com.example.data.GoalEntity
 import com.example.data.NoteEntity
 import com.example.data.TaskEntity
@@ -76,6 +88,7 @@ import com.example.ui.components.PixiSearchField
 import com.example.ui.components.PixiSectionLabel
 import com.example.ui.components.rememberPopScale
 import com.example.ui.theme.rememberPixiDimens
+import java.util.Calendar
 
 @Composable
 fun TasksScreen(
@@ -84,10 +97,11 @@ fun TasksScreen(
     notes: List<NoteEntity>,
     userXp: Int,
     profile: UserProfile,
-    activity: List<DailyActivityEntity>,
     onToggleTask: (TaskEntity) -> Unit,
     onToggleSubtask: (TaskEntity, String) -> Unit,
     onDeleteTask: (Int) -> Unit,
+    onEditTask: (TaskEntity) -> Unit,
+    onSnoozeTask: (TaskEntity) -> Unit = {},
     onOpenAddTask: () -> Unit,
     /** Quick-create a todo with the given title (from search). */
     onQuickAddTask: (title: String) -> Unit = {},
@@ -103,21 +117,71 @@ fun TasksScreen(
     var selectedFilter by remember { mutableStateOf("ALL") }
     var query by remember { mutableStateOf("") }
 
-    val filteredTasks by remember(tasks, selectedFilter, query) {
+    val todayStart = remember { startOfDay(System.currentTimeMillis()) }
+    val tomorrowStart = todayStart + 24L * 60 * 60 * 1000
+
+    val openCount = remember(tasks) { tasks.count { !it.isCompleted } }
+    val doneToday = remember(tasks, todayStart) {
+        tasks.count { t ->
+            t.isCompleted && t.completedAtMillis != null &&
+                t.completedAtMillis!! >= todayStart
+        }
+    }
+    val overdueCount = remember(tasks, todayStart) {
+        tasks.count { !it.isCompleted && tDueDay(it) < todayStart }
+    }
+    val filteredTasks by remember(tasks, selectedFilter, query, todayStart, tomorrowStart) {
         derivedStateOf {
             val base = when (selectedFilter) {
                 "HIGH_FIRE" -> tasks.filter { it.priority == "HIGH_FIRE" }
                 "QUICK_WIN" -> tasks.filter { it.priority == "QUICK_WIN" }
                 "COMPLETED" -> tasks.filter { it.isCompleted }
                 "PENDING" -> tasks.filter { !it.isCompleted }
+                "OVERDUE" -> tasks.filter { !it.isCompleted && tDueDay(it) < todayStart }
+                "TODAY" -> tasks.filter {
+                    !it.isCompleted && tDueDay(it) in todayStart until tomorrowStart
+                }
                 else -> tasks
             }
-            if (query.isBlank()) base
+            val searched = if (query.isBlank()) base
             else base.filter {
                 it.title.contains(query, ignoreCase = true) ||
                     it.category.contains(query, ignoreCase = true)
             }
+            searched.sortedWith(
+                compareBy<TaskEntity> { it.isCompleted }
+                    .thenBy { tDueDay(it) }
+                    .thenByDescending {
+                        when (it.priority) {
+                            "HIGH_FIRE" -> 3
+                            "CORE_GOAL" -> 2
+                            "QUICK_WIN" -> 1
+                            else -> 0
+                        }
+                    }
+            )
         }
+    }
+
+    // Smart sections when viewing ALL without search
+    val useSections = selectedFilter == "ALL" && query.isBlank()
+    val overdueTasks = remember(filteredTasks, todayStart, useSections) {
+        if (!useSections) emptyList()
+        else filteredTasks.filter { !it.isCompleted && tDueDay(it) < todayStart }
+    }
+    val todayTasks = remember(filteredTasks, todayStart, tomorrowStart, useSections) {
+        if (!useSections) emptyList()
+        else filteredTasks.filter {
+            !it.isCompleted && tDueDay(it) in todayStart until tomorrowStart
+        }
+    }
+    val upcomingTasks = remember(filteredTasks, tomorrowStart, useSections) {
+        if (!useSections) emptyList()
+        else filteredTasks.filter { !it.isCompleted && tDueDay(it) >= tomorrowStart }
+    }
+    val completedTasks = remember(filteredTasks, useSections) {
+        if (!useSections) emptyList()
+        else filteredTasks.filter { it.isCompleted }.take(12)
     }
 
     Box(
@@ -134,12 +198,13 @@ fun TasksScreen(
                 top = d.screenVertical / 2
             )
         ) {
-            // Top: compact header + GitHub contributions heatmap
             item {
                 DailyHeaderBanner(
                     userXp = userXp,
                     profile = profile,
-                    activity = activity,
+                    openCount = openCount,
+                    doneToday = doneToday,
+                    overdueCount = overdueCount,
                     onOpenFocusMode = {
                         sound.play(Sfx.FOCUS_START)
                         onOpenFocusMode()
@@ -149,14 +214,13 @@ fun TasksScreen(
                         onOpenProfile()
                     }
                 )
-                Spacer(modifier = Modifier.height(d.sectionGap))
+                Spacer(modifier = Modifier.height(d.listGap))
             }
 
-            // Tasks section — search + filter chips (idea2 messages pattern)
             item {
                 PixiSectionLabel(
                     text = "Tasks",
-                    action = if (tasks.isNotEmpty()) "${tasks.count { !it.isCompleted }} open" else null
+                    action = if (tasks.isNotEmpty()) "$openCount open" else null
                 )
                 Spacer(modifier = Modifier.height(d.listGap))
             }
@@ -165,7 +229,7 @@ fun TasksScreen(
                 PixiSearchField(
                     value = query,
                     onValueChange = { query = it },
-                    placeholder = "Search tasks…",
+                    placeholder = "Search or type a new task…",
                     modifier = Modifier.testTag("task_search"),
                     leading = {
                         Icon(
@@ -203,6 +267,8 @@ fun TasksScreen(
                 ) {
                     val filters = listOf(
                         "ALL" to "All",
+                        "TODAY" to "Today",
+                        "OVERDUE" to "Overdue",
                         "PENDING" to "To Do",
                         "HIGH_FIRE" to "High",
                         "QUICK_WIN" to "Quick",
@@ -225,7 +291,6 @@ fun TasksScreen(
                 item {
                     val trimmed = query.trim()
                     if (trimmed.isNotBlank()) {
-                        // Typed in search with no hits → offer quick todo
                         QuickAddFromSearchCard(
                             query = trimmed,
                             onAdd = {
@@ -247,6 +312,8 @@ fun TasksScreen(
                             },
                             subtitle = when {
                                 tasks.isEmpty() -> "Tap the yellow + to create your first task"
+                                selectedFilter == "OVERDUE" -> "You’re all caught up — no overdue tasks"
+                                selectedFilter == "TODAY" -> "Nothing due today. Plan ahead on the calendar."
                                 else -> "Try another filter or add a new task"
                             },
                             doodleRes = if (tasks.isEmpty()) R.drawable.doodle_tasks else null,
@@ -255,31 +322,217 @@ fun TasksScreen(
                         )
                     }
                 }
-            } else {
-                itemsIndexed(filteredTasks, key = { _, t -> t.id }) { index, task ->
-                    PixiListItemEnter(index = index) {
-                        TaskCardItem(
+            } else if (useSections) {
+                if (overdueTasks.isNotEmpty()) {
+                    item {
+                        SectionHeader(title = "Overdue", count = overdueTasks.size, danger = true)
+                    }
+                    itemsIndexed(overdueTasks, key = { _, t -> "ov_${t.id}" }) { index, task ->
+                        TaskCardBlock(
+                            index = index,
                             task = task,
                             linkedGoal = goals.find { it.id == task.linkedGoalId },
-                            onToggleTask = {
-                                if (!task.isCompleted) sound.play(Sfx.TASK_COMPLETE)
-                                else sound.play(Sfx.TASK_UNDO)
-                                onToggleTask(task)
-                            },
-                            onToggleSubtask = { subtask ->
+                            isOverdue = true,
+                            onToggleTask = { onToggleTask(task) },
+                            onToggleSubtask = { sub ->
                                 sound.play(Sfx.SUBTASK_TOGGLE)
-                                onToggleSubtask(task, subtask)
+                                onToggleSubtask(task, sub)
                             },
                             onDeleteTask = {
                                 sound.play(Sfx.DELETE)
                                 onDeleteTask(task.id)
+                            },
+                            onEditTask = {
+                                sound.play(Sfx.DIALOG_OPEN)
+                                onEditTask(task)
+                            },
+                            onSnoozeTask = {
+                                sound.play(Sfx.TAP_SOFT)
+                                onSnoozeTask(task)
                             }
                         )
                     }
-                    Spacer(modifier = Modifier.height(10.dp))
+                }
+                if (todayTasks.isNotEmpty()) {
+                    item {
+                        SectionHeader(title = "Today", count = todayTasks.size)
+                    }
+                    itemsIndexed(todayTasks, key = { _, t -> "td_${t.id}" }) { index, task ->
+                        TaskCardBlock(
+                            index = index,
+                            task = task,
+                            linkedGoal = goals.find { it.id == task.linkedGoalId },
+                            isOverdue = false,
+                            onToggleTask = { onToggleTask(task) },
+                            onToggleSubtask = { sub ->
+                                sound.play(Sfx.SUBTASK_TOGGLE)
+                                onToggleSubtask(task, sub)
+                            },
+                            onDeleteTask = {
+                                sound.play(Sfx.DELETE)
+                                onDeleteTask(task.id)
+                            },
+                            onEditTask = {
+                                sound.play(Sfx.DIALOG_OPEN)
+                                onEditTask(task)
+                            },
+                            onSnoozeTask = {
+                                sound.play(Sfx.TAP_SOFT)
+                                onSnoozeTask(task)
+                            }
+                        )
+                    }
+                }
+                if (upcomingTasks.isNotEmpty()) {
+                    item {
+                        SectionHeader(title = "Upcoming", count = upcomingTasks.size)
+                    }
+                    itemsIndexed(upcomingTasks, key = { _, t -> "up_${t.id}" }) { index, task ->
+                        TaskCardBlock(
+                            index = index,
+                            task = task,
+                            linkedGoal = goals.find { it.id == task.linkedGoalId },
+                            isOverdue = false,
+                            onToggleTask = { onToggleTask(task) },
+                            onToggleSubtask = { sub ->
+                                sound.play(Sfx.SUBTASK_TOGGLE)
+                                onToggleSubtask(task, sub)
+                            },
+                            onDeleteTask = {
+                                sound.play(Sfx.DELETE)
+                                onDeleteTask(task.id)
+                            },
+                            onEditTask = {
+                                sound.play(Sfx.DIALOG_OPEN)
+                                onEditTask(task)
+                            },
+                            onSnoozeTask = {
+                                sound.play(Sfx.TAP_SOFT)
+                                onSnoozeTask(task)
+                            }
+                        )
+                    }
+                }
+                if (completedTasks.isNotEmpty()) {
+                    item {
+                        SectionHeader(title = "Completed", count = completedTasks.size)
+                    }
+                    itemsIndexed(completedTasks, key = { _, t -> "dn_${t.id}" }) { index, task ->
+                        TaskCardBlock(
+                            index = index,
+                            task = task,
+                            linkedGoal = goals.find { it.id == task.linkedGoalId },
+                            isOverdue = false,
+                            onToggleTask = { onToggleTask(task) },
+                            onToggleSubtask = { sub ->
+                                sound.play(Sfx.SUBTASK_TOGGLE)
+                                onToggleSubtask(task, sub)
+                            },
+                            onDeleteTask = {
+                                sound.play(Sfx.DELETE)
+                                onDeleteTask(task.id)
+                            },
+                            onEditTask = {
+                                sound.play(Sfx.DIALOG_OPEN)
+                                onEditTask(task)
+                            },
+                            onSnoozeTask = {
+                                sound.play(Sfx.TAP_SOFT)
+                                onSnoozeTask(task)
+                            }
+                        )
+                    }
+                }
+            } else {
+                itemsIndexed(filteredTasks, key = { _, t -> t.id }) { index, task ->
+                    TaskCardBlock(
+                        index = index,
+                        task = task,
+                        linkedGoal = goals.find { it.id == task.linkedGoalId },
+                        isOverdue = !task.isCompleted && tDueDay(task) < todayStart,
+                        onToggleTask = { onToggleTask(task) },
+                        onToggleSubtask = { subtask ->
+                            sound.play(Sfx.SUBTASK_TOGGLE)
+                            onToggleSubtask(task, subtask)
+                        },
+                        onDeleteTask = {
+                            sound.play(Sfx.DELETE)
+                            onDeleteTask(task.id)
+                        },
+                        onEditTask = {
+                            sound.play(Sfx.DIALOG_OPEN)
+                            onEditTask(task)
+                        },
+                        onSnoozeTask = {
+                            sound.play(Sfx.TAP_SOFT)
+                            onSnoozeTask(task)
+                        }
+                    )
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun SectionHeader(title: String, count: Int, danger: Boolean = false) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 4.dp, bottom = 10.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = title,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.ExtraBold,
+            color = if (danger) MaterialTheme.colorScheme.error
+            else MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        PixiBadge(
+            text = count.toString(),
+            containerColor = if (danger) MaterialTheme.colorScheme.error.copy(alpha = 0.15f)
+            else MaterialTheme.colorScheme.surfaceVariant,
+            contentColor = if (danger) MaterialTheme.colorScheme.error
+            else MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun LazyItemScope.TaskCardBlock(
+    index: Int,
+    task: TaskEntity,
+    linkedGoal: GoalEntity?,
+    isOverdue: Boolean,
+    onToggleTask: () -> Unit,
+    onToggleSubtask: (String) -> Unit,
+    onDeleteTask: () -> Unit,
+    onEditTask: () -> Unit,
+    onSnoozeTask: () -> Unit
+) {
+    // animateItem keeps the card sliding smoothly when completed items reorder to the bottom
+    Column(
+        modifier = Modifier.animateItem(
+            fadeInSpec = tween(220, easing = FastOutSlowInEasing),
+            fadeOutSpec = tween(280, easing = FastOutSlowInEasing),
+            placementSpec = tween(480, easing = FastOutSlowInEasing)
+        )
+    ) {
+        PixiListItemEnter(index = index) {
+            TaskCardItem(
+                task = task,
+                linkedGoal = linkedGoal,
+                isOverdue = isOverdue,
+                onToggleTask = onToggleTask,
+                onToggleSubtask = onToggleSubtask,
+                onDeleteTask = onDeleteTask,
+                onEditTask = onEditTask,
+                onSnoozeTask = onSnoozeTask
+            )
+        }
+        Spacer(modifier = Modifier.height(10.dp))
     }
 }
 
@@ -348,11 +601,54 @@ fun TaskCardItem(
     linkedGoal: GoalEntity?,
     onToggleTask: () -> Unit,
     onToggleSubtask: (String) -> Unit,
-    onDeleteTask: () -> Unit
+    onDeleteTask: () -> Unit,
+    onEditTask: () -> Unit = {},
+    onSnoozeTask: () -> Unit = {},
+    isOverdue: Boolean = false
 ) {
     var expandedSubtasks by remember { mutableStateOf(false) }
     val sound = LocalSoundEngine.current
-    val checkPop = rememberPopScale(task.isCompleted)
+    val scope = rememberCoroutineScope()
+    var isSlashing by remember(task.id) { mutableStateOf(false) }
+    val slashProgress = remember(task.id) { Animatable(if (task.isCompleted) 1f else 0f) }
+    val showAsDone = task.isCompleted || isSlashing
+    val checkPop = rememberPopScale(showAsDone)
+
+    val contentAlpha by animateFloatAsState(
+        targetValue = if (showAsDone) 0.58f else 1f,
+        animationSpec = tween(durationMillis = 520, easing = FastOutSlowInEasing),
+        label = "taskDoneAlpha"
+    )
+
+    LaunchedEffect(task.isCompleted, task.id) {
+        if (task.isCompleted && !isSlashing) {
+            slashProgress.snapTo(1f)
+        } else if (!task.isCompleted && !isSlashing) {
+            slashProgress.snapTo(0f)
+        }
+    }
+
+    fun handleToggle() {
+        if (isSlashing) return
+        if (task.isCompleted) {
+            sound.play(Sfx.TASK_UNDO)
+            onToggleTask()
+            return
+        }
+        // Slow slash-out, then commit complete so list can settle it at the bottom
+        isSlashing = true
+        scope.launch {
+            sound.play(Sfx.TASK_COMPLETE)
+            slashProgress.snapTo(0f)
+            slashProgress.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(durationMillis = 820, easing = FastOutSlowInEasing)
+            )
+            delay(200)
+            onToggleTask()
+            isSlashing = false
+        }
+    }
 
     val subtaskList = remember(task.subtasks) {
         task.subtasks.split(";").filter { it.isNotBlank() }
@@ -375,15 +671,16 @@ fun TaskCardItem(
         else -> "Idea"
     }
 
-    // Normalize long due labels so they lay out cleanly in a badge
     val dueLabel = remember(task.dueTimeStr) { formatDueLabel(task.dueTimeStr) }
+    val slashColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f)
 
-    // Soft list card — white surface, lavender check, message-list air
     PixiCard(
         modifier = Modifier
             .fillMaxWidth()
-            .testTag("task_item_${task.id}"),
-        containerColor = if (task.isCompleted) {
+            .testTag("task_item_${task.id}")
+            .graphicsLayer { alpha = contentAlpha }
+            .clickable(enabled = !isSlashing, onClick = onEditTask),
+        containerColor = if (showAsDone) {
             MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
         } else {
             MaterialTheme.colorScheme.surface
@@ -399,7 +696,8 @@ fun TaskCardItem(
                 verticalAlignment = Alignment.Top
             ) {
                 IconButton(
-                    onClick = onToggleTask,
+                    onClick = { handleToggle() },
+                    enabled = !isSlashing,
                     modifier = Modifier
                         .testTag("checkbox_task_${task.id}")
                         .graphicsLayer {
@@ -408,10 +706,10 @@ fun TaskCardItem(
                         }
                 ) {
                     Icon(
-                        imageVector = if (task.isCompleted) Icons.Filled.CheckCircle
+                        imageVector = if (showAsDone) Icons.Filled.CheckCircle
                         else Icons.Filled.RadioButtonUnchecked,
                         contentDescription = "Complete Task",
-                        tint = if (task.isCompleted) MaterialTheme.colorScheme.primary
+                        tint = if (showAsDone) MaterialTheme.colorScheme.primary
                         else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
                         modifier = Modifier.size(28.dp)
                     )
@@ -420,19 +718,42 @@ fun TaskCardItem(
                 Spacer(modifier = Modifier.width(2.dp))
 
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = task.title,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = if (task.isCompleted) MaterialTheme.colorScheme.onSurfaceVariant
-                        else MaterialTheme.colorScheme.onSurface,
-                        textDecoration = if (task.isCompleted) TextDecoration.LineThrough
-                        else TextDecoration.None,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            text = task.title,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (showAsDone) MaterialTheme.colorScheme.onSurfaceVariant
+                            else MaterialTheme.colorScheme.onSurface,
+                            // Soft system line-through after animation settles; live slash draws below
+                            textDecoration = if (task.isCompleted && !isSlashing) {
+                                TextDecoration.LineThrough
+                            } else {
+                                TextDecoration.None
+                            },
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        // Animated slash that slowly draws across the title
+                        if (slashProgress.value > 0.01f) {
+                            Canvas(
+                                modifier = Modifier
+                                    .matchParentSize()
+                                    .padding(vertical = 2.dp)
+                            ) {
+                                val y = size.height * 0.52f
+                                val endX = size.width * slashProgress.value.coerceIn(0f, 1f)
+                                drawLine(
+                                    color = slashColor,
+                                    start = Offset(0f, y),
+                                    end = Offset(endX, y),
+                                    strokeWidth = 2.4.dp.toPx(),
+                                    cap = StrokeCap.Round
+                                )
+                            }
+                        }
+                    }
 
-                    // Category + priority as a wrapping flow (never squeeze due time here)
                     FlowRow(
                         modifier = Modifier.padding(top = 8.dp),
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -448,6 +769,13 @@ fun TaskCardItem(
                             containerColor = priorityColor.copy(alpha = 0.15f),
                             contentColor = priorityColor
                         )
+                        if (isOverdue && !showAsDone) {
+                            PixiBadge(
+                                text = "Overdue",
+                                containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.15f),
+                                contentColor = MaterialTheme.colorScheme.error
+                            )
+                        }
                         if (task.streakCount > 1) {
                             PixiBadge(
                                 text = "🔥 ${task.streakCount}d",
@@ -457,20 +785,25 @@ fun TaskCardItem(
                         }
                     }
 
-                    // Due time on its own full-width row — clean alignment
                     if (dueLabel.isNotBlank()) {
                         Row(
                             modifier = Modifier
                                 .padding(top = 8.dp)
                                 .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f))
+                                .background(
+                                    if (isOverdue && !task.isCompleted)
+                                        MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.65f)
+                                    else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f)
+                                )
                                 .padding(horizontal = 10.dp, vertical = 5.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.Schedule,
                                 contentDescription = "Due",
-                                tint = MaterialTheme.colorScheme.primary,
+                                tint = if (isOverdue && !task.isCompleted)
+                                    MaterialTheme.colorScheme.error
+                                else MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(13.dp)
                             )
                             Spacer(modifier = Modifier.width(5.dp))
@@ -478,7 +811,9 @@ fun TaskCardItem(
                                 text = dueLabel,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                color = if (isOverdue && !task.isCompleted)
+                                    MaterialTheme.colorScheme.onErrorContainer
+                                else MaterialTheme.colorScheme.onPrimaryContainer,
                                 maxLines = 1,
                                 softWrap = false,
                                 overflow = TextOverflow.Ellipsis
@@ -504,18 +839,50 @@ fun TaskCardItem(
                         )
                     }
 
-                    IconButton(
-                        onClick = onDeleteTask,
-                        modifier = Modifier
-                            .size(32.dp)
-                            .padding(top = 4.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.DeleteOutline,
-                            contentDescription = "Delete Task",
-                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.65f),
-                            modifier = Modifier.size(18.dp)
-                        )
+                    Row {
+                        if (!task.isCompleted) {
+                            IconButton(
+                                onClick = onSnoozeTask,
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .padding(top = 4.dp)
+                                    .testTag("snooze_task_${task.id}")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Snooze,
+                                    contentDescription = "Snooze 1 day",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                        IconButton(
+                            onClick = onEditTask,
+                            modifier = Modifier
+                                .size(32.dp)
+                                .padding(top = 4.dp)
+                                .testTag("edit_task_${task.id}")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Edit,
+                                contentDescription = "Edit Task",
+                                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        IconButton(
+                            onClick = onDeleteTask,
+                            modifier = Modifier
+                                .size(32.dp)
+                                .padding(top = 4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.DeleteOutline,
+                                contentDescription = "Delete Task",
+                                tint = MaterialTheme.colorScheme.error.copy(alpha = 0.65f),
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -612,6 +979,17 @@ fun TaskCardItem(
     }
 }
 
+private fun startOfDay(millis: Long): Long =
+    Calendar.getInstance().apply {
+        timeInMillis = millis
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }.timeInMillis
+
+private fun tDueDay(task: TaskEntity): Long = startOfDay(task.dueDateMillis)
+
 /**
  * Normalize due strings like "Today · 12:00 AM" / "Tomorrow · 9:00 PM"
  * into a compact, single-line friendly label.
@@ -623,7 +1001,6 @@ private fun formatDueLabel(raw: String): String {
         .trim()
     if (cleaned.isEmpty()) return ""
 
-    // Split "Day · time" or "Day - time"
     val parts = cleaned.split("·", "•", " - ", "–").map { it.trim() }.filter { it.isNotEmpty() }
     return if (parts.size >= 2) {
         val day = parts[0]

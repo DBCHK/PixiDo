@@ -12,7 +12,9 @@ class AuraRepository(private val dao: AuraDao) {
     val allGoals = dao.getAllGoals()
     val allAccounts = dao.getAllAccounts()
     val allDailyActivity = dao.getAllDailyActivity()
+    val allGoalActivity = dao.getAllGoalActivity()
     val allNotes = dao.getAllNotes()
+    val pendingSmsTransactions = dao.getPendingSmsTransactions()
 
     suspend fun addTask(task: TaskEntity): Long = dao.insertTask(task)
     suspend fun updateTask(task: TaskEntity) = dao.updateTask(task)
@@ -27,7 +29,10 @@ class AuraRepository(private val dao: AuraDao) {
 
     suspend fun addGoal(goal: GoalEntity) = dao.insertGoal(goal)
     suspend fun updateGoal(goal: GoalEntity) = dao.updateGoal(goal)
-    suspend fun deleteGoal(goalId: Int) = dao.deleteGoalById(goalId)
+    suspend fun deleteGoal(goalId: Int) {
+        dao.clearGoalActivityForGoal(goalId)
+        dao.deleteGoalById(goalId)
+    }
 
     suspend fun addAccount(account: AccountEntity) = dao.insertAccount(account)
     suspend fun updateAccount(account: AccountEntity) = dao.updateAccount(account)
@@ -37,6 +42,19 @@ class AuraRepository(private val dao: AuraDao) {
     suspend fun updateNote(note: NoteEntity) = dao.updateNote(note)
     suspend fun deleteNote(noteId: Int) = dao.deleteNoteById(noteId)
 
+    suspend fun getPendingSmsOnce(): List<PendingSmsTransactionEntity> =
+        dao.getPendingSmsTransactionsOnce()
+
+    suspend fun markSmsAccepted(id: Int) =
+        dao.setPendingSmsStatus(id, PendingSmsTransactionEntity.STATUS_ACCEPTED)
+
+    suspend fun markSmsDismissed(id: Int) =
+        dao.setPendingSmsStatus(id, PendingSmsTransactionEntity.STATUS_DISMISSED)
+
+    suspend fun purgeOldResolvedSms(olderThan: Long = System.currentTimeMillis() - 14L * 24 * 60 * 60 * 1000) {
+        dao.purgeOldResolvedSms(olderThan)
+    }
+
     /** Snapshot of all Room tables for cloud backup. */
     suspend fun exportSnapshot(): AppDataSnapshot = AppDataSnapshot(
         tasks = dao.getTasksOnce(),
@@ -45,6 +63,7 @@ class AuraRepository(private val dao: AuraDao) {
         goals = dao.getGoalsOnce(),
         accounts = dao.getAccountsOnce(),
         dailyActivity = dao.getDailyActivityOnce(),
+        goalActivity = dao.getGoalActivityOnce(),
         notes = dao.getNotesOnce()
     )
 
@@ -56,6 +75,7 @@ class AuraRepository(private val dao: AuraDao) {
         dao.clearGoals()
         dao.clearAccounts()
         dao.clearDailyActivity()
+        dao.clearGoalActivity()
         dao.clearNotes()
 
         if (snapshot.tasks.isNotEmpty()) dao.insertTasks(snapshot.tasks)
@@ -64,25 +84,31 @@ class AuraRepository(private val dao: AuraDao) {
         if (snapshot.goals.isNotEmpty()) dao.insertGoals(snapshot.goals)
         if (snapshot.accounts.isNotEmpty()) dao.insertAccounts(snapshot.accounts)
         if (snapshot.dailyActivity.isNotEmpty()) dao.insertDailyActivities(snapshot.dailyActivity)
+        if (snapshot.goalActivity.isNotEmpty()) dao.insertGoalActivities(snapshot.goalActivity)
         if (snapshot.notes.isNotEmpty()) dao.insertNotes(snapshot.notes)
     }
 
     /**
-     * Record a completed task toward the GitHub-style contribution heatmap.
+     * Record progress on an individual goal for its contribution heatmap.
      */
-    suspend fun recordTaskCompletion(xpEarned: Int, timestamp: Long = System.currentTimeMillis()) {
+    suspend fun recordGoalProgress(
+        goalId: Int,
+        xpEarned: Int = 15,
+        timestamp: Long = System.currentTimeMillis()
+    ) {
         val dateKey = dayKey(timestamp)
-        val existing = dao.getActivityForDay(dateKey)
+        val existing = dao.getGoalActivityForDay(goalId, dateKey)
         if (existing == null) {
-            dao.upsertDailyActivity(
-                DailyActivityEntity(
+            dao.upsertGoalActivity(
+                GoalActivityEntity(
+                    goalId = goalId,
                     dateKey = dateKey,
                     completedCount = 1,
                     xpEarned = xpEarned
                 )
             )
         } else {
-            dao.upsertDailyActivity(
+            dao.upsertGoalActivity(
                 existing.copy(
                     completedCount = existing.completedCount + 1,
                     xpEarned = existing.xpEarned + xpEarned
@@ -106,5 +132,6 @@ data class AppDataSnapshot(
     val goals: List<GoalEntity> = emptyList(),
     val accounts: List<AccountEntity> = emptyList(),
     val dailyActivity: List<DailyActivityEntity> = emptyList(),
+    val goalActivity: List<GoalActivityEntity> = emptyList(),
     val notes: List<NoteEntity> = emptyList()
 )

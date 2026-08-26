@@ -19,13 +19,13 @@ import kotlin.math.sin
 import kotlin.random.Random
 
 /**
- * Soft Lilac SFX engine — subtle, sweet, slow, low.
+ * Soft Lilac SFX engine — sweet, calm, never retro or gamey.
  *
- * Design principles (replaces the old retro/gamey palette):
- *  - Pure sine + soft second harmonic only (no square/triangle harshness)
- *  - Warm low–mid fundamentals (~180–520 Hz)
- *  - Longer soft attacks and trailing releases
- *  - Quiet volumes (gentle room presence, never sharp)
+ * Design principles:
+ *  - Pure sine + soft second harmonic only (no square/saw harshness)
+ *  - Warm low–mid fundamentals (~160–420 Hz)
+ *  - Long soft attacks and trailing releases
+ *  - Quiet volumes (gentle presence, never bleepy)
  *  - Feather-light haptics
  */
 class SoundEngine private constructor(context: Context) {
@@ -161,310 +161,310 @@ class SoundEngine private constructor(context: Context) {
     // region Soft synthesis recipes
 
     private fun synthesize(sfx: Sfx): ShortArray = when (sfx) {
-        // Soft wooden pillow tap
+        // Soft pillow tap
         Sfx.TAP_SOFT -> softTone(
-            durationMs = 95,
-            freqs = doubleArrayOf(280.0),
-            attack = 0.08,
-            release = 0.78,
-            volume = 0.10,
-            harmonic = 0.12
-        )
-
-        // Gentle glass click
-        Sfx.TAP_CRISP -> softTone(
-            durationMs = 80,
-            freqs = doubleArrayOf(420.0, 630.0),
-            attack = 0.06,
-            release = 0.72,
-            volume = 0.08,
-            harmonic = 0.10
-        )
-
-        // Warm confirm hum
-        Sfx.TAP_CONFIRM -> softTone(
-            durationMs = 160,
-            freqs = doubleArrayOf(260.0, 390.0),
-            attack = 0.12,
-            release = 0.65,
-            volume = 0.12,
-            harmonic = 0.15
-        )
-
-        // Slow airy open breath
-        Sfx.DIALOG_OPEN -> softSweep(
-            durationMs = 220,
-            startHz = 180.0,
-            endHz = 360.0,
-            volume = 0.09
-        )
-
-        // Soft settle close
-        Sfx.DIALOG_CLOSE -> softSweep(
-            durationMs = 200,
-            startHz = 320.0,
-            endHz = 160.0,
-            volume = 0.08
-        )
-
-        // Sweet rising third — new task
-        Sfx.ADD_TASK -> softChord(
-            durationMs = 320,
-            freqs = doubleArrayOf(261.63, 329.63, 392.00), // C major, lower
-            staggerMs = 55,
-            volume = 0.11
-        )
-
-        // Warm two-tone — budget
-        Sfx.ADD_BUDGET -> softChord(
-            durationMs = 300,
-            freqs = doubleArrayOf(220.0, 277.18), // A + C#
-            staggerMs = 70,
-            volume = 0.11
-        )
-
-        // Gentle event arpeggio
-        Sfx.ADD_EVENT -> softChord(
-            durationMs = 340,
-            freqs = doubleArrayOf(246.94, 311.13, 370.0), // B maj-ish
-            staggerMs = 60,
-            volume = 0.10
-        )
-
-        // Soft sparkle triad — goal
-        Sfx.ADD_GOAL -> softChord(
-            durationMs = 380,
-            freqs = doubleArrayOf(196.0, 246.94, 293.66, 349.23),
-            staggerMs = 55,
-            volume = 0.10
-        )
-
-        // Low bank-soft blip
-        Sfx.ADD_ACCOUNT -> softTone(
-            durationMs = 220,
-            freqs = doubleArrayOf(196.0, 294.0),
-            attack = 0.10,
-            release = 0.68,
-            volume = 0.10,
-            harmonic = 0.12
-        )
-
-        // Satisfying soft major resolve — task done
-        Sfx.TASK_COMPLETE -> softChord(
-            durationMs = 420,
-            freqs = doubleArrayOf(261.63, 329.63, 392.00, 523.25),
-            staggerMs = 65,
-            volume = 0.12
-        )
-
-        // Soft undo sigh
-        Sfx.TASK_UNDO -> softTone(
-            durationMs = 160,
-            freqs = doubleArrayOf(240.0, 180.0),
-            attack = 0.12,
-            release = 0.70,
-            volume = 0.09,
-            harmonic = 0.08
-        )
-
-        // Tiny subtask tick
-        Sfx.SUBTASK_TOGGLE -> softTone(
-            durationMs = 90,
-            freqs = doubleArrayOf(360.0),
-            attack = 0.06,
-            release = 0.75,
-            volume = 0.08,
-            harmonic = 0.10
-        )
-
-        // Soft paper hush (no harsh tear)
-        Sfx.DELETE -> softHush(
-            durationMs = 180,
-            volume = 0.07
-        )
-
-        // Filter select murmur
-        Sfx.FILTER_SELECT -> softTone(
             durationMs = 110,
-            freqs = doubleArrayOf(300.0, 450.0),
-            attack = 0.08,
-            release = 0.68,
-            volume = 0.09,
-            harmonic = 0.10
-        )
-
-        // Soft FAB bloom
-        Sfx.FAB -> softTone(
-            durationMs = 180,
-            freqs = doubleArrayOf(330.0, 440.0),
-            attack = 0.08,
-            release = 0.62,
-            volume = 0.10,
-            harmonic = 0.14
-        )
-
-        // Tab pad tone
-        Sfx.TAB_SWITCH -> softTone(
-            durationMs = 130,
-            freqs = doubleArrayOf(240.0, 360.0),
-            attack = 0.10,
-            release = 0.70,
-            volume = 0.09,
-            harmonic = 0.10
-        )
-
-        // Profile sheet lift
-        Sfx.PROFILE_OPEN -> softSweep(
-            durationMs = 240,
-            startHz = 200.0,
-            endHz = 380.0,
-            volume = 0.09
-        )
-
-        // Profile save soft chime
-        Sfx.PROFILE_SAVE -> softChord(
-            durationMs = 300,
-            freqs = doubleArrayOf(277.18, 349.23, 415.30),
-            staggerMs = 50,
-            volume = 0.11
-        )
-
-        // Theme change gentle cascade
-        Sfx.THEME_CHANGE -> softChord(
-            durationMs = 340,
-            freqs = doubleArrayOf(233.08, 293.66, 349.23),
-            staggerMs = 70,
-            volume = 0.10
-        )
-
-        // Settings soft tick
-        Sfx.SETTINGS_CHANGE -> softTone(
-            durationMs = 140,
-            freqs = doubleArrayOf(280.0, 350.0),
-            attack = 0.10,
-            release = 0.68,
-            volume = 0.08,
-            harmonic = 0.08
-        )
-
-        // Focus start — slow breath up
-        Sfx.FOCUS_START -> softSweep(
-            durationMs = 360,
-            startHz = 160.0,
-            endHz = 320.0,
-            volume = 0.11
-        )
-
-        // Focus pause — soft hold
-        Sfx.FOCUS_PAUSE -> softTone(
-            durationMs = 180,
-            freqs = doubleArrayOf(240.0, 200.0),
-            attack = 0.14,
-            release = 0.68,
-            volume = 0.09,
-            harmonic = 0.08
-        )
-
-        // Focus reset — soft settle
-        Sfx.FOCUS_RESET -> softTone(
-            durationMs = 170,
-            freqs = doubleArrayOf(220.0, 180.0),
+            freqs = doubleArrayOf(240.0),
             attack = 0.12,
-            release = 0.68,
-            volume = 0.09,
-            harmonic = 0.08
-        )
-
-        // Focus complete — warm resolve
-        Sfx.FOCUS_COMPLETE -> softChord(
-            durationMs = 520,
-            freqs = doubleArrayOf(196.0, 246.94, 293.66, 392.0),
-            staggerMs = 80,
-            volume = 0.12
-        )
-
-        // Goal progress bump
-        Sfx.GOAL_PROGRESS -> softTone(
-            durationMs = 160,
-            freqs = doubleArrayOf(330.0, 415.0),
-            attack = 0.10,
-            release = 0.65,
-            volume = 0.10,
-            harmonic = 0.12
-        )
-
-        // Goal complete — soft fanfare (low)
-        Sfx.GOAL_COMPLETE -> softChord(
-            durationMs = 500,
-            freqs = doubleArrayOf(220.0, 277.18, 329.63, 415.30),
-            staggerMs = 75,
-            volume = 0.12
-        )
-
-        // Day select
-        Sfx.DAY_SELECT -> softTone(
-            durationMs = 110,
-            freqs = doubleArrayOf(300.0),
-            attack = 0.08,
-            release = 0.72,
-            volume = 0.09,
-            harmonic = 0.10
-        )
-
-        // Event toggle
-        Sfx.EVENT_TOGGLE -> softTone(
-            durationMs = 140,
-            freqs = doubleArrayOf(280.0, 350.0),
-            attack = 0.08,
-            release = 0.68,
-            volume = 0.09,
-            harmonic = 0.10
-        )
-
-        // Note save
-        Sfx.NOTE_SAVE -> softTone(
-            durationMs = 200,
-            freqs = doubleArrayOf(246.94, 311.13),
-            attack = 0.12,
-            release = 0.68,
-            volume = 0.10,
-            harmonic = 0.12
-        )
-
-        // Search focus
-        Sfx.SEARCH_FOCUS -> softTone(
-            durationMs = 100,
-            freqs = doubleArrayOf(340.0),
-            attack = 0.08,
-            release = 0.78,
+            release = 0.80,
             volume = 0.07,
             harmonic = 0.08
         )
 
+        // Gentle glass murmur
+        Sfx.TAP_CRISP -> softTone(
+            durationMs = 100,
+            freqs = doubleArrayOf(320.0, 400.0),
+            attack = 0.10,
+            release = 0.76,
+            volume = 0.06,
+            harmonic = 0.08
+        )
+
+        // Warm confirm hum
+        Sfx.TAP_CONFIRM -> softTone(
+            durationMs = 190,
+            freqs = doubleArrayOf(220.0, 330.0),
+            attack = 0.14,
+            release = 0.70,
+            volume = 0.08,
+            harmonic = 0.10
+        )
+
+        // Slow airy open breath
+        Sfx.DIALOG_OPEN -> softSweep(
+            durationMs = 260,
+            startHz = 160.0,
+            endHz = 300.0,
+            volume = 0.07
+        )
+
+        // Soft settle close
+        Sfx.DIALOG_CLOSE -> softSweep(
+            durationMs = 230,
+            startHz = 280.0,
+            endHz = 150.0,
+            volume = 0.06
+        )
+
+        // Sweet rising third — new task
+        Sfx.ADD_TASK -> softChord(
+            durationMs = 380,
+            freqs = doubleArrayOf(220.0, 277.18, 329.63),
+            staggerMs = 70,
+            volume = 0.08
+        )
+
+        // Warm two-tone — budget
+        Sfx.ADD_BUDGET -> softChord(
+            durationMs = 340,
+            freqs = doubleArrayOf(196.0, 246.94),
+            staggerMs = 80,
+            volume = 0.08
+        )
+
+        // Gentle event arpeggio
+        Sfx.ADD_EVENT -> softChord(
+            durationMs = 380,
+            freqs = doubleArrayOf(207.65, 261.63, 311.13),
+            staggerMs = 75,
+            volume = 0.07
+        )
+
+        // Soft sparkle triad — goal
+        Sfx.ADD_GOAL -> softChord(
+            durationMs = 420,
+            freqs = doubleArrayOf(174.61, 220.0, 261.63, 329.63),
+            staggerMs = 70,
+            volume = 0.07
+        )
+
+        // Low bank-soft blip
+        Sfx.ADD_ACCOUNT -> softTone(
+            durationMs = 240,
+            freqs = doubleArrayOf(174.61, 261.63),
+            attack = 0.12,
+            release = 0.72,
+            volume = 0.07,
+            harmonic = 0.08
+        )
+
+        // Soft major resolve — task done (matches slow slash animation)
+        Sfx.TASK_COMPLETE -> softChord(
+            durationMs = 560,
+            freqs = doubleArrayOf(196.0, 246.94, 293.66, 349.23),
+            staggerMs = 90,
+            volume = 0.09
+        )
+
+        // Soft undo sigh
+        Sfx.TASK_UNDO -> softTone(
+            durationMs = 200,
+            freqs = doubleArrayOf(220.0, 174.61),
+            attack = 0.14,
+            release = 0.74,
+            volume = 0.07,
+            harmonic = 0.06
+        )
+
+        // Tiny subtask tick
+        Sfx.SUBTASK_TOGGLE -> softTone(
+            durationMs = 100,
+            freqs = doubleArrayOf(280.0),
+            attack = 0.10,
+            release = 0.78,
+            volume = 0.06,
+            harmonic = 0.08
+        )
+
+        // Soft paper hush (no harsh tear)
+        Sfx.DELETE -> softHush(
+            durationMs = 220,
+            volume = 0.05
+        )
+
+        // Filter select murmur
+        Sfx.FILTER_SELECT -> softTone(
+            durationMs = 130,
+            freqs = doubleArrayOf(250.0, 320.0),
+            attack = 0.12,
+            release = 0.72,
+            volume = 0.06,
+            harmonic = 0.08
+        )
+
+        // Soft FAB bloom
+        Sfx.FAB -> softTone(
+            durationMs = 210,
+            freqs = doubleArrayOf(261.63, 329.63),
+            attack = 0.12,
+            release = 0.70,
+            volume = 0.07,
+            harmonic = 0.10
+        )
+
+        // Tab pad tone
+        Sfx.TAB_SWITCH -> softTone(
+            durationMs = 150,
+            freqs = doubleArrayOf(210.0, 280.0),
+            attack = 0.12,
+            release = 0.74,
+            volume = 0.06,
+            harmonic = 0.08
+        )
+
+        // Profile sheet lift
+        Sfx.PROFILE_OPEN -> softSweep(
+            durationMs = 280,
+            startHz = 170.0,
+            endHz = 300.0,
+            volume = 0.07
+        )
+
+        // Profile save soft chime
+        Sfx.PROFILE_SAVE -> softChord(
+            durationMs = 340,
+            freqs = doubleArrayOf(220.0, 277.18, 329.63),
+            staggerMs = 65,
+            volume = 0.08
+        )
+
+        // Theme change gentle cascade
+        Sfx.THEME_CHANGE -> softChord(
+            durationMs = 400,
+            freqs = doubleArrayOf(196.0, 246.94, 293.66),
+            staggerMs = 85,
+            volume = 0.07
+        )
+
+        // Settings soft tick
+        Sfx.SETTINGS_CHANGE -> softTone(
+            durationMs = 160,
+            freqs = doubleArrayOf(240.0, 300.0),
+            attack = 0.12,
+            release = 0.72,
+            volume = 0.06,
+            harmonic = 0.06
+        )
+
+        // Focus start — slow breath up
+        Sfx.FOCUS_START -> softSweep(
+            durationMs = 420,
+            startHz = 140.0,
+            endHz = 260.0,
+            volume = 0.08
+        )
+
+        // Focus pause — soft hold
+        Sfx.FOCUS_PAUSE -> softTone(
+            durationMs = 210,
+            freqs = doubleArrayOf(210.0, 180.0),
+            attack = 0.16,
+            release = 0.72,
+            volume = 0.07,
+            harmonic = 0.06
+        )
+
+        // Focus reset — soft settle
+        Sfx.FOCUS_RESET -> softTone(
+            durationMs = 200,
+            freqs = doubleArrayOf(200.0, 160.0),
+            attack = 0.14,
+            release = 0.72,
+            volume = 0.07,
+            harmonic = 0.06
+        )
+
+        // Focus complete — warm resolve
+        Sfx.FOCUS_COMPLETE -> softChord(
+            durationMs = 640,
+            freqs = doubleArrayOf(174.61, 220.0, 261.63, 329.63),
+            staggerMs = 100,
+            volume = 0.09
+        )
+
+        // Goal progress bump
+        Sfx.GOAL_PROGRESS -> softTone(
+            durationMs = 190,
+            freqs = doubleArrayOf(261.63, 329.63),
+            attack = 0.12,
+            release = 0.70,
+            volume = 0.07,
+            harmonic = 0.08
+        )
+
+        // Goal complete — soft fanfare (low)
+        Sfx.GOAL_COMPLETE -> softChord(
+            durationMs = 600,
+            freqs = doubleArrayOf(174.61, 220.0, 261.63, 329.63),
+            staggerMs = 95,
+            volume = 0.09
+        )
+
+        // Day select
+        Sfx.DAY_SELECT -> softTone(
+            durationMs = 130,
+            freqs = doubleArrayOf(250.0),
+            attack = 0.12,
+            release = 0.76,
+            volume = 0.06,
+            harmonic = 0.08
+        )
+
+        // Event toggle
+        Sfx.EVENT_TOGGLE -> softTone(
+            durationMs = 160,
+            freqs = doubleArrayOf(240.0, 300.0),
+            attack = 0.12,
+            release = 0.72,
+            volume = 0.06,
+            harmonic = 0.08
+        )
+
+        // Note save
+        Sfx.NOTE_SAVE -> softTone(
+            durationMs = 230,
+            freqs = doubleArrayOf(220.0, 277.18),
+            attack = 0.14,
+            release = 0.72,
+            volume = 0.07,
+            harmonic = 0.08
+        )
+
+        // Search focus
+        Sfx.SEARCH_FOCUS -> softTone(
+            durationMs = 120,
+            freqs = doubleArrayOf(280.0),
+            attack = 0.12,
+            release = 0.80,
+            volume = 0.05,
+            harmonic = 0.06
+        )
+
         // Success micro
         Sfx.SUCCESS -> softChord(
-            durationMs = 360,
-            freqs = doubleArrayOf(293.66, 370.0, 440.0),
-            staggerMs = 55,
-            volume = 0.11
+            durationMs = 420,
+            freqs = doubleArrayOf(220.0, 277.18, 329.63),
+            staggerMs = 70,
+            volume = 0.08
         )
 
         // Soft error murmur (low, not buzzy)
         Sfx.ERROR -> softTone(
-            durationMs = 240,
-            freqs = doubleArrayOf(160.0, 140.0),
-            attack = 0.14,
-            release = 0.60,
-            volume = 0.09,
-            harmonic = 0.05
+            durationMs = 280,
+            freqs = doubleArrayOf(150.0, 130.0),
+            attack = 0.16,
+            release = 0.65,
+            volume = 0.07,
+            harmonic = 0.04
         )
 
         // Slow sweet splash intro — soft rising pad
         Sfx.SPLASH_INTRO -> softChord(
-            durationMs = 900,
-            freqs = doubleArrayOf(196.0, 246.94, 293.66, 392.0), // G minor-ish warm
-            staggerMs = 140,
-            volume = 0.09
+            durationMs = 1100,
+            freqs = doubleArrayOf(174.61, 220.0, 261.63, 329.63),
+            staggerMs = 170,
+            volume = 0.07
         )
     }
 

@@ -11,10 +11,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -28,10 +33,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.example.R
+import com.example.data.GoalEntity
+import com.example.data.TaskEntity
 import com.example.notify.ReminderScheduler
+import java.text.SimpleDateFormat
 import java.util.Calendar
+import java.util.Date
+import java.util.Locale
+import java.util.concurrent.TimeUnit
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun AddTaskDialog(
     onDismiss: () -> Unit,
@@ -43,14 +54,65 @@ fun AddTaskDialog(
         dueDateMillis: Long,
         subtasks: String,
         linkedGoalId: Int?
-    ) -> Unit
+    ) -> Unit,
+    /** When non-null, dialog is in edit mode. */
+    existingTask: TaskEntity? = null,
+    onUpdateTask: (
+        taskId: Int,
+        title: String,
+        category: String,
+        priority: String,
+        dueTimeStr: String,
+        dueDateMillis: Long,
+        subtasks: String,
+        linkedGoalId: Int?
+    ) -> Unit = { _, _, _, _, _, _, _, _ -> },
+    /** Pre-select a due day (e.g. from calendar). Ignored when editing. */
+    initialDueDateMillis: Long? = null,
+    goals: List<GoalEntity> = emptyList()
 ) {
-    var title by remember { mutableStateOf("") }
-    var selectedCategory by remember { mutableStateOf("Work") }
-    var selectedPriority by remember { mutableStateOf("HIGH_FIRE") }
-    var selectedTime by remember { mutableStateOf("09:00") }
-    var dayOffset by remember { mutableStateOf(0) } // 0 = today, 1 = tomorrow, …
-    var subtasks by remember { mutableStateOf("") }
+    val isEdit = existingTask != null
+    val todayStart = remember {
+        Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+    }
+
+    var title by remember(existingTask?.id) {
+        mutableStateOf(existingTask?.title.orEmpty())
+    }
+    var selectedCategory by remember(existingTask?.id) {
+        mutableStateOf(existingTask?.category ?: "Work")
+    }
+    var selectedPriority by remember(existingTask?.id) {
+        mutableStateOf(existingTask?.priority ?: "HIGH_FIRE")
+    }
+    var selectedTime by remember(existingTask?.id) {
+        mutableStateOf(
+            existingTask?.let { ReminderScheduler.formatTime(it.dueDateMillis) }
+                ?: "09:00"
+        )
+    }
+    var selectedDayStart by remember(existingTask?.id, initialDueDateMillis) {
+        mutableStateOf(
+            when {
+                existingTask != null -> startOfDay(existingTask.dueDateMillis)
+                initialDueDateMillis != null && initialDueDateMillis > 0 ->
+                    startOfDay(initialDueDateMillis)
+                else -> todayStart
+            }
+        )
+    }
+    var subtasks by remember(existingTask?.id) {
+        mutableStateOf(existingTask?.subtasks.orEmpty())
+    }
+    var linkedGoalId by remember(existingTask?.id) {
+        mutableStateOf(existingTask?.linkedGoalId)
+    }
+    var showDatePicker by remember { mutableStateOf(false) }
 
     val categories = listOf("Work", "Personal", "Health", "Learning", "Social", "Other")
     val priorities = listOf(
@@ -69,6 +131,14 @@ fun AddTaskDialog(
         7 to "In a week"
     )
 
+    val dayOffset = remember(selectedDayStart, todayStart) {
+        val diff = selectedDayStart - todayStart
+        TimeUnit.MILLISECONDS.toDays(diff).toInt()
+    }
+    val dateLabel = remember(selectedDayStart) {
+        formatDayLabel(selectedDayStart, todayStart)
+    }
+
     val fieldColors = OutlinedTextFieldDefaults.colors(
         focusedBorderColor = MaterialTheme.colorScheme.primary,
         unfocusedBorderColor = MaterialTheme.colorScheme.outline,
@@ -80,7 +150,7 @@ fun AddTaskDialog(
         PixiCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .testTag("add_task_dialog")
+                .testTag(if (isEdit) "edit_task_dialog" else "add_task_dialog")
         ) {
             Column(
                 modifier = Modifier
@@ -94,7 +164,7 @@ fun AddTaskDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "New Task",
+                        text = if (isEdit) "Edit Task" else "New Task",
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -105,17 +175,22 @@ fun AddTaskDialog(
                     )
                 }
 
-                PixiDoodle3D(
-                    resId = R.drawable.doodle_tasks,
-                    size = 110.dp,
-                    modifier = Modifier
-                        .padding(vertical = 10.dp)
-                        .align(Alignment.CenterHorizontally),
-                    orbitSeconds = 8
-                )
+                if (!isEdit) {
+                    PixiDoodle3D(
+                        resId = R.drawable.doodle_tasks,
+                        size = 110.dp,
+                        modifier = Modifier
+                            .padding(vertical = 10.dp)
+                            .align(Alignment.CenterHorizontally),
+                        orbitSeconds = 8
+                    )
+                } else {
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
 
                 Text(
-                    text = "What do you want to get done?",
+                    text = if (isEdit) "Update details — calendar stays in sync"
+                    else "What do you want to get done?",
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier
@@ -153,15 +228,34 @@ fun AddTaskDialog(
                         PixiChip(
                             label = label,
                             selected = dayOffset == offset,
-                            onClick = { dayOffset = offset }
+                            onClick = {
+                                selectedDayStart = Calendar.getInstance().apply {
+                                    timeInMillis = todayStart
+                                    add(Calendar.DAY_OF_YEAR, offset)
+                                }.timeInMillis
+                            }
                         )
                     }
+                    PixiChip(
+                        label = if (dayPresets.none { it.first == dayOffset }) dateLabel else "Pick date",
+                        selected = dayPresets.none { it.first == dayOffset },
+                        onClick = { showDatePicker = true }
+                    )
                 }
+
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "Selected · $dateLabel",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.testTag("selected_due_day_label")
+                )
 
                 Spacer(modifier = Modifier.height(14.dp))
 
                 Text(
-                    text = "Due time (you’ll get a notification)",
+                    text = "Due time (custom notification)",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -174,7 +268,8 @@ fun AddTaskDialog(
                     timePresets.forEach { t ->
                         PixiChip(
                             label = t,
-                            selected = selectedTime == t,
+                            selected = selectedTime == t ||
+                                normalizeTimeChip(selectedTime) == t,
                             onClick = { selectedTime = t }
                         )
                     }
@@ -238,6 +333,34 @@ fun AddTaskDialog(
                     }
                 }
 
+                if (goals.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Text(
+                        text = "Link goal (optional)",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        PixiChip(
+                            label = "None",
+                            selected = linkedGoalId == null,
+                            onClick = { linkedGoalId = null }
+                        )
+                        goals.filter { !it.isCompleted }.take(8).forEach { goal ->
+                            PixiChip(
+                                label = goal.title.take(18),
+                                selected = linkedGoalId == goal.id,
+                                onClick = { linkedGoalId = goal.id }
+                            )
+                        }
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(12.dp))
 
                 OutlinedTextField(
@@ -253,40 +376,118 @@ fun AddTaskDialog(
                 Spacer(modifier = Modifier.height(22.dp))
 
                 PixiPrimaryButton(
-                    text = "Add Task",
+                    text = if (isEdit) "Save changes" else "Add Task",
                     onClick = {
                         if (title.isNotBlank()) {
-                            val dayStart = Calendar.getInstance().apply {
-                                set(Calendar.HOUR_OF_DAY, 0)
-                                set(Calendar.MINUTE, 0)
-                                set(Calendar.SECOND, 0)
-                                set(Calendar.MILLISECOND, 0)
-                                add(Calendar.DAY_OF_YEAR, dayOffset)
-                            }.timeInMillis
-
-                            val dueMillis = ReminderScheduler.combineDateAndTime(dayStart, selectedTime)
-                                ?: (dayStart + 9 * 60 * 60 * 1000L) // fallback 9:00
+                            val dueMillis = ReminderScheduler.combineDateAndTime(
+                                selectedDayStart,
+                                selectedTime
+                            ) ?: (selectedDayStart + 9 * 60 * 60 * 1000L)
 
                             val displayTime = ReminderScheduler.formatTime(dueMillis)
-                            val dayLabel = dayPresets.find { it.first == dayOffset }?.second ?: "Today"
-                            // Keep a short, single-line friendly label for task cards
+                            val dayLabel = formatDayLabel(selectedDayStart, todayStart)
                             val dueLabel = "$dayLabel · $displayTime"
 
-                            onAddTask(
-                                title,
-                                selectedCategory,
-                                selectedPriority,
-                                dueLabel,
-                                dueMillis,
-                                subtasks,
-                                null
-                            )
+                            val task = existingTask
+                            if (task != null) {
+                                onUpdateTask(
+                                    task.id,
+                                    title.trim(),
+                                    selectedCategory,
+                                    selectedPriority,
+                                    dueLabel,
+                                    dueMillis,
+                                    subtasks,
+                                    linkedGoalId
+                                )
+                            } else {
+                                onAddTask(
+                                    title.trim(),
+                                    selectedCategory,
+                                    selectedPriority,
+                                    dueLabel,
+                                    dueMillis,
+                                    subtasks,
+                                    linkedGoalId
+                                )
+                            }
                             onDismiss()
                         }
                     },
-                    modifier = Modifier.testTag("submit_add_task_btn")
+                    modifier = Modifier.testTag(
+                        if (isEdit) "submit_edit_task_btn" else "submit_add_task_btn"
+                    )
                 )
             }
         }
     }
+
+    if (showDatePicker) {
+        val pickerState = rememberDatePickerState(
+            initialSelectedDateMillis = selectedDayStart
+        )
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pickerState.selectedDateMillis?.let { utcMillis ->
+                            // DatePicker returns UTC midnight — convert to local start-of-day
+                            selectedDayStart = utcMillisToLocalDayStart(utcMillis)
+                        }
+                        showDatePicker = false
+                    }
+                ) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) { Text("Cancel") }
+            }
+        ) {
+            DatePicker(state = pickerState)
+        }
+    }
+}
+
+private fun startOfDay(millis: Long): Long =
+    Calendar.getInstance().apply {
+        timeInMillis = millis
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }.timeInMillis
+
+/**
+ * Material DatePicker yields UTC midnight for the picked civil date.
+ * Rebuild as local calendar day-start so tasks land on the intended day.
+ */
+private fun utcMillisToLocalDayStart(utcMillis: Long): Long {
+    val utc = Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).apply {
+        timeInMillis = utcMillis
+    }
+    return Calendar.getInstance().apply {
+        set(Calendar.YEAR, utc.get(Calendar.YEAR))
+        set(Calendar.MONTH, utc.get(Calendar.MONTH))
+        set(Calendar.DAY_OF_MONTH, utc.get(Calendar.DAY_OF_MONTH))
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }.timeInMillis
+}
+
+private fun formatDayLabel(dayStart: Long, todayStart: Long): String {
+    val days = TimeUnit.MILLISECONDS.toDays(dayStart - todayStart).toInt()
+    return when (days) {
+        0 -> "Today"
+        1 -> "Tomorrow"
+        -1 -> "Yesterday"
+        in 2..6 -> SimpleDateFormat("EEE", Locale.getDefault()).format(Date(dayStart))
+        else -> SimpleDateFormat("MMM d", Locale.getDefault()).format(Date(dayStart))
+    }
+}
+
+private fun normalizeTimeChip(raw: String): String? {
+    val parsed = ReminderScheduler.parseTimeOfDay(raw) ?: return null
+    return String.format("%02d:%02d", parsed.first, parsed.second)
 }

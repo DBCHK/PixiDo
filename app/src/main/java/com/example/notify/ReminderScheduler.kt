@@ -20,6 +20,8 @@ object ReminderScheduler {
 
     const val TYPE_TASK = "task"
     const val TYPE_EVENT = "event"
+    /** Pre-alert ~5 min before due — surfaces an “Upcoming” Now Bar card. */
+    const val TYPE_TASK_APPROACHING = "task_approaching"
 
     private const val TAG = "ReminderScheduler"
 
@@ -111,8 +113,47 @@ object ReminderScheduler {
         return when (type) {
             TYPE_TASK -> 10_000 + itemId
             TYPE_EVENT -> 20_000 + itemId
+            TYPE_TASK_APPROACHING -> 40_000 + itemId
             else -> 30_000 + itemId
         }
+    }
+
+    /**
+     * Schedule due-time reminder + optional “coming up” Now Bar ping
+     * [leadMinutes] before the ETA.
+     */
+    fun scheduleTaskReminders(
+        context: Context,
+        itemId: Int,
+        dueAtMillis: Long,
+        title: String,
+        body: String,
+        leadMinutes: Int = 5
+    ) {
+        schedule(
+            context = context,
+            type = TYPE_TASK,
+            itemId = itemId,
+            triggerAtMillis = dueAtMillis,
+            title = "Task due: $title",
+            body = body
+        )
+        val approachAt = dueAtMillis - leadMinutes.coerceAtLeast(1) * 60_000L
+        if (approachAt > System.currentTimeMillis() + 15_000L) {
+            schedule(
+                context = context,
+                type = TYPE_TASK_APPROACHING,
+                itemId = itemId,
+                triggerAtMillis = approachAt,
+                title = title,
+                body = "Coming up in $leadMinutes min · $body"
+            )
+        }
+    }
+
+    fun cancelTaskReminders(context: Context, itemId: Int) {
+        cancel(context, TYPE_TASK, itemId)
+        cancel(context, TYPE_TASK_APPROACHING, itemId)
     }
 
     /**

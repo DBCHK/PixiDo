@@ -4,8 +4,8 @@ import androidx.room.Entity
 import androidx.room.PrimaryKey
 
 /**
- * GitHub-style contribution day: how many tasks were completed on a given date.
- * [dateKey] format: yyyy-MM-dd
+ * Legacy aggregate daily activity table kept for migration compatibility.
+ * Goal contribution heatmaps now use [GoalActivityEntity].
  */
 @Entity(tableName = "daily_activity")
 data class DailyActivityEntity(
