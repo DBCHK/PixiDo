@@ -155,7 +155,7 @@ fun CalendarScreen(
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = "$upcomingCount upcoming",
+                            text = if (upcomingCount == 0) "Nothing upcoming" else "$upcomingCount upcoming",
                             fontSize = d.caption,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1

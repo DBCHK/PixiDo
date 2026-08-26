@@ -77,6 +77,7 @@ import com.example.ui.screens.ProfileDialog
 import com.example.ui.screens.TasksScreen
 import com.example.ui.theme.PixiDoTheme
 import com.example.widget.WidgetActions
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
@@ -427,14 +428,27 @@ fun PixiDoApp(
         if (msg.contains("Focus complete", ignoreCase = true)) {
             sound.play(Sfx.FOCUS_COMPLETE)
         }
+        val canUndo = msg.contains("undo", ignoreCase = true)
+        val display = if (canUndo) "Task deleted" else msg
+        val autoDismiss = if (canUndo) {
+            launch {
+                delay(3_000)
+                snackbarHostState.currentSnackbarData?.dismiss()
+            }
+        } else {
+            null
+        }
         val result = snackbarHostState.showSnackbar(
-            message = msg,
-            actionLabel = if (msg.contains("undo", ignoreCase = true)) "Undo" else null,
-            duration = SnackbarDuration.Short
+            message = display,
+            actionLabel = if (canUndo) "Undo" else null,
+            duration = if (canUndo) SnackbarDuration.Indefinite else SnackbarDuration.Short
         )
-        if (result == SnackbarResult.ActionPerformed) {
+        autoDismiss?.cancel()
+        if (result == SnackbarResult.ActionPerformed && canUndo) {
             sound.play(Sfx.SUCCESS)
             viewModel.undoDeleteTask()
+        } else if (canUndo) {
+            viewModel.expireDeletedTask()
         }
         viewModel.clearSnackbar()
     }
@@ -443,17 +457,26 @@ fun PixiDoApp(
         Scaffold(
             modifier = Modifier
                 .fillMaxSize()
-                .graphicsLayer {
-                    alpha = contentAlpha
-                    scaleX = contentScale
-                    scaleY = contentScale
-                }
+                .then(
+                    if (showSplash) {
+                        Modifier.graphicsLayer {
+                            alpha = contentAlpha
+                            scaleX = contentScale
+                            scaleY = contentScale
+                        }
+                    } else {
+                        Modifier
+                    }
+                )
                 .background(MaterialTheme.colorScheme.background),
             containerColor = MaterialTheme.colorScheme.background,
             // Bottom bar is overlaid so it can slide away without leaving a gap
             bottomBar = {},
             snackbarHost = {
-                SnackbarHost(hostState = snackbarHostState) { data ->
+                SnackbarHost(
+                    hostState = snackbarHostState,
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 118.dp)
+                ) { data ->
                     Snackbar(
                         snackbarData = data,
                         containerColor = MaterialTheme.colorScheme.surface,

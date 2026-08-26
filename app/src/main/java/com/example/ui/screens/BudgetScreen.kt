@@ -162,7 +162,7 @@ fun BudgetScreen(
             item {
                 PixiScreenHeader(
                     title = "Budget",
-                    subtitle = "Accounts · limits · cashflow",
+                    subtitle = "This month",
                     trailing = {
                         Box(
                             modifier = Modifier
@@ -218,8 +218,8 @@ fun BudgetScreen(
                                     } else {
                                         Currencies.format(netWorth, currencyCode)
                                     },
-                                    fontSize = if (d.isCompact) 24.sp else 30.sp,
-                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = if (d.isCompact) 28.sp else 34.sp,
+                                    fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurface,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
@@ -248,7 +248,7 @@ fun BudgetScreen(
                                 progress = { animatedProgress },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(10.dp)
+                                    .height(6.dp)
                                     .clip(PixiCardShapeSm),
                                 color = vibeColor,
                                 trackColor = MaterialTheme.colorScheme.surfaceVariant

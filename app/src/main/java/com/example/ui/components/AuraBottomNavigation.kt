@@ -90,7 +90,7 @@ fun AuraBottomNavigation(
             shape = PixiIslandShape,
             color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
             tonalElevation = 0.dp,
-            shadowElevation = 18.dp
+            shadowElevation = 12.dp
         ) {
             Row(
                 modifier = Modifier

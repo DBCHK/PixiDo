@@ -8,12 +8,12 @@ import androidx.compose.ui.graphics.Color
 // Clean, airy, friendly — no harsh neo-brutalist edges
 // ─────────────────────────────────────────────────────────────
 
-// Brand accents (sampled from idea2)
-val PixiLavender = Color(0xFFC4A8F5)       // Primary CTA fill
-val PixiLavenderDeep = Color(0xFF9B7AE8)   // Emphasis / selected text
-val PixiLavenderMid = Color(0xFFD4C4F8)    // Soft secondary buttons
-val PixiLavenderSoft = Color(0xFFEDE4FF)   // Primary containers / chips unselected
-val PixiLavenderMist = Color(0xFFF7F3FF)   // Soft tinted backgrounds
+// Brand accents — saturated enough for iOS-style CTAs, still lilac
+val PixiLavender = Color(0xFF7C6CF6)       // Primary CTA fill
+val PixiLavenderDeep = Color(0xFF5B4FCF)   // Emphasis / selected text
+val PixiLavenderMid = Color(0xFFB8A8F8)    // Soft secondary buttons
+val PixiLavenderSoft = Color(0xFFEEE9FF)   // Primary containers / chips unselected
+val PixiLavenderMist = Color(0xFFF7F5FF)   // Soft tinted backgrounds
 val PixiPink = Color(0xFFFF6BA8)           // Selected list highlight
 val PixiPinkSoft = Color(0xFFFFE0EE)
 val PixiYellow = Color(0xFFFFE566)         // Center FAB

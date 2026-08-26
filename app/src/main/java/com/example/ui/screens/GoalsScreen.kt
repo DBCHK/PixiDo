@@ -57,6 +57,7 @@ import com.example.ui.components.PixiEmptyState
 import com.example.ui.components.PixiFieldShape
 import com.example.ui.components.PixiPillShape
 import com.example.ui.components.PixiPrimaryButton
+import com.example.ui.components.PixiScreenHeader
 import com.example.ui.components.PixiSectionLabel
 import com.example.ui.theme.rememberPixiDimens
 import androidx.compose.ui.text.style.TextOverflow
@@ -101,12 +102,17 @@ fun GoalsScreen(
             )
         ) {
             item {
+                PixiScreenHeader(
+                    title = "Goals",
+                    subtitle = if (totalCount == 0) "Start with your first milestone"
+                    else "$completedCount of $totalCount completed",
+                    modifier = Modifier.testTag("goals_summary_card")
+                )
+                Spacer(modifier = Modifier.height(d.sectionGap))
+            }
+            item {
                 PixiCard(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("goals_summary_card"),
-                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
-                    borderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
                         modifier = Modifier
@@ -117,18 +123,18 @@ fun GoalsScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Goals",
-                                style = MaterialTheme.typography.displayLarge,
-                                fontSize = d.title,
+                                text = if (totalCount == 0) "No goals yet"
+                                else "$completedCount of $totalCount",
+                                fontSize = 28.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface,
                                 maxLines = 1
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = if (totalCount == 0) "Start with your first milestone"
-                                else "$completedCount of $totalCount completed · $currencyCode",
-                                fontSize = d.caption,
+                                text = if (totalCount == 0) "Add a milestone to track"
+                                else "completed · $currencyCode",
+                                fontSize = 15.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis
@@ -137,16 +143,16 @@ fun GoalsScreen(
 
                         Box(
                             modifier = Modifier
-                                .size(if (d.isCompact) 48.dp else 56.dp)
+                                .size(if (d.isCompact) 48.dp else 52.dp)
                                 .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primary),
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.EmojiEvents,
                                 contentDescription = "Trophy",
-                                tint = MaterialTheme.colorScheme.onPrimary,
-                                modifier = Modifier.size(if (d.isCompact) 24.dp else 28.dp)
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(if (d.isCompact) 22.dp else 24.dp)
                             )
                         }
                     }

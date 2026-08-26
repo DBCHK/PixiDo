@@ -852,9 +852,13 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
             ReminderScheduler.cancelTaskReminders(appContext(), taskId)
             NowBarHelper.clearTaskEta(appContext(), taskId)
             repository.deleteTask(taskId)
-            _snackbarMessage.value = "Task deleted · undo available"
+            _snackbarMessage.value = "Task deleted · undo"
             refreshWidgets()
         }
+    }
+
+    fun expireDeletedTask() {
+        lastDeletedTask = null
     }
 
     fun undoDeleteTask() {

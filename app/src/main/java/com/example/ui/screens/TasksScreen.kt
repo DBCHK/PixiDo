@@ -89,7 +89,6 @@ import com.example.ui.components.PixiCard
 import com.example.ui.components.PixiCardShape
 import com.example.ui.components.PixiChip
 import com.example.ui.components.PixiEmptyState
-import com.example.ui.components.PixiListItemEnter
 import com.example.ui.components.PixiPillShape
 import com.example.ui.components.PixiPrimaryButton
 import com.example.ui.components.PixiSearchField
@@ -235,18 +234,10 @@ fun TasksScreen(
             }
 
             item {
-                PixiSectionLabel(
-                    text = "Tasks",
-                    action = if (tasks.isNotEmpty()) "$openCount open" else null
-                )
-                Spacer(modifier = Modifier.height(d.listGap))
-            }
-
-            item {
                 PixiSearchField(
                     value = query,
                     onValueChange = { query = it },
-                    placeholder = "Search or type a new task…",
+                    placeholder = "Search",
                     modifier = Modifier.testTag("task_search"),
                     leading = {
                         Icon(
@@ -563,7 +554,7 @@ private fun SectionHeader(
         Text(
             text = title,
             fontSize = 13.sp,
-            fontWeight = FontWeight.ExtraBold,
+            fontWeight = FontWeight.SemiBold,
             color = if (danger) MaterialTheme.colorScheme.error
             else MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -604,28 +595,19 @@ private fun LazyItemScope.TaskCardBlock(
     onPinTask: () -> Unit = {},
     onSkipRepeat: () -> Unit = {}
 ) {
-    // animateItem keeps the card sliding smoothly when completed items reorder to the bottom
-    Column(
-        modifier = Modifier.animateItem(
-            fadeInSpec = tween(220, easing = FastOutSlowInEasing),
-            fadeOutSpec = tween(280, easing = FastOutSlowInEasing),
-            placementSpec = tween(480, easing = FastOutSlowInEasing)
+    Column {
+        TaskCardItem(
+            task = task,
+            linkedGoal = linkedGoal,
+            isOverdue = isOverdue,
+            onToggleTask = onToggleTask,
+            onToggleSubtask = onToggleSubtask,
+            onDeleteTask = onDeleteTask,
+            onEditTask = onEditTask,
+            onSnoozeTask = onSnoozeTask,
+            onPinTask = onPinTask,
+            onSkipRepeat = onSkipRepeat
         )
-    ) {
-        PixiListItemEnter(index = index) {
-            TaskCardItem(
-                task = task,
-                linkedGoal = linkedGoal,
-                isOverdue = isOverdue,
-                onToggleTask = onToggleTask,
-                onToggleSubtask = onToggleSubtask,
-                onDeleteTask = onDeleteTask,
-                onEditTask = onEditTask,
-                onSnoozeTask = onSnoozeTask,
-                onPinTask = onPinTask,
-                onSkipRepeat = onSkipRepeat
-            )
-        }
         Spacer(modifier = Modifier.height(10.dp))
     }
 }
@@ -771,6 +753,7 @@ fun TaskCardItem(
     val slashColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f)
 
     val dismissState = rememberSwipeToDismissBoxState(
+        positionalThreshold = { it * 0.45f },
         confirmValueChange = { value ->
             when (value) {
                 SwipeToDismissBoxValue.StartToEnd -> {
@@ -826,7 +809,7 @@ fun TaskCardItem(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 12.dp)
+                .padding(horizontal = 16.dp, vertical = 14.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1034,33 +1017,6 @@ fun TaskCardItem(
                                     modifier = Modifier.size(18.dp)
                                 )
                             }
-                        }
-                        IconButton(
-                            onClick = onEditTask,
-                            modifier = Modifier
-                                .size(32.dp)
-                                .padding(top = 4.dp)
-                                .testTag("edit_task_${task.id}")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Edit,
-                                contentDescription = "Edit Task",
-                                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                        IconButton(
-                            onClick = onDeleteTask,
-                            modifier = Modifier
-                                .size(32.dp)
-                                .padding(top = 4.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.DeleteOutline,
-                                contentDescription = "Delete Task",
-                                tint = MaterialTheme.colorScheme.error.copy(alpha = 0.65f),
-                                modifier = Modifier.size(18.dp)
-                            )
                         }
                     }
                 }

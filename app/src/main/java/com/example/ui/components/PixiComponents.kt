@@ -69,7 +69,7 @@ fun PixiCard(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
     containerColor: Color = MaterialTheme.colorScheme.surface,
-    borderColor: Color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f),
+    borderColor: Color = Color.Transparent,
     content: @Composable () -> Unit
 ) {
     val shape = PixiCardShape
@@ -87,7 +87,7 @@ fun PixiCard(
         },
         shape = shape,
         colors = CardDefaults.cardColors(containerColor = containerColor),
-        border = BorderStroke(0.5.dp, borderColor),
+        border = if (borderColor.alpha < 0.02f) null else BorderStroke(0.33.dp, borderColor),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         content()
@@ -145,8 +145,8 @@ fun PixiPrimaryButton(
     ) {
         Text(
             text = text,
-            fontWeight = FontWeight.Bold,
-            fontSize = 17.sp, // iOS standard button size
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 17.sp,
             maxLines = 1
         )
     }
@@ -214,9 +214,9 @@ fun PixiChip(
     modifier: Modifier = Modifier
 ) {
     val bg = if (selected) MaterialTheme.colorScheme.primary
-    else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+    else MaterialTheme.colorScheme.surface
     val fg = if (selected) MaterialTheme.colorScheme.onPrimary
-    else MaterialTheme.colorScheme.onPrimaryContainer
+    else MaterialTheme.colorScheme.onSurface
     val selectPop = rememberPopScale(selected)
 
     PixiPopClickable(
@@ -236,8 +236,8 @@ fun PixiChip(
         ) {
             Text(
                 text = label,
-                fontSize = 13.sp,
-                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                fontSize = 15.sp,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
                 color = fg,
                 maxLines = 1
             )
@@ -532,12 +532,12 @@ fun PixiBadge(
         modifier = modifier
             .clip(PixiChipShape)
             .background(containerColor)
-            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .padding(horizontal = 10.dp, vertical = 4.dp)
     ) {
         Text(
             text = text,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium,
             color = contentColor,
             maxLines = 1
         )
@@ -559,8 +559,9 @@ fun PixiSectionLabel(
     ) {
         Text(
             text = text,
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurface
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         if (action != null && onAction != null) {
             Text(

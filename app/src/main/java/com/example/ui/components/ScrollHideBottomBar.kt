@@ -20,13 +20,13 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import kotlin.math.abs
 
 /**
  * Discrete show/hide for the island tab bar.
  *
- * Scroll down past a threshold → pop out. Scroll up → spring pop back in.
- * State writes happen here; only [AutoHideBottomNavigation] reads [visible]
- * so list screens do not recompose on every scroll pixel.
+ * Only finger-drag (not fling) is counted, with strong hysteresis so a
+ * deceleration / overscroll cannot flicker the island on and off.
  */
 @Stable
 class ScrollHideBarState {
@@ -37,15 +37,21 @@ class ScrollHideBarState {
     private var upAccum = 0f
 
     fun onScrollDelta(dy: Float) {
-        if (dy == 0f) return
-        if (dy < -4f) {
-            downAccum += -dy
+        if (abs(dy) < 2f) return
+        if (dy < 0f) {
             upAccum = 0f
-            if (downAccum > 42f) visible = false
-        } else if (dy > 4f) {
-            upAccum += dy
+            downAccum += -dy
+            if (visible && downAccum > 80f) {
+                visible = false
+                downAccum = 0f
+            }
+        } else {
             downAccum = 0f
-            if (upAccum > 18f) visible = true
+            upAccum += dy
+            if (!visible && upAccum > 64f) {
+                visible = true
+                upAccum = 0f
+            }
         }
     }
 
@@ -68,15 +74,13 @@ fun scrollHideNestedConnection(state: ScrollHideBarState): NestedScrollConnectio
             available: Offset,
             source: NestedScrollSource
         ): Offset {
+            // Ignore fling / programmatic scroll — those reverse sign and cause jitter
+            if (source != NestedScrollSource.UserInput) return Offset.Zero
             state.onScrollDelta(consumed.y)
             return Offset.Zero
         }
     }
 
-/**
- * Island pops out (scale + drop) when scrolling down, springs back in
- * with a slight overshoot when scrolling up.
- */
 @Composable
 fun BoxScope.AutoHideBottomNavigation(
     state: ScrollHideBarState,
@@ -98,8 +102,8 @@ fun BoxScope.AutoHideBottomNavigation(
             tween(durationMillis = 140)
         } else {
             spring(
-                dampingRatio = 0.58f,
-                stiffness = Spring.StiffnessMediumLow
+                dampingRatio = 0.92f,
+                stiffness = Spring.StiffnessMedium
             )
         },
         label = "islandPop"
@@ -120,7 +124,7 @@ fun BoxScope.AutoHideBottomNavigation(
             .graphicsLayer {
                 val t = 1f - progress
                 translationY = t * hideTravel
-                val s = 0.72f + 0.28f * progress
+                val s = 0.92f + 0.08f * progress
                 scaleX = s
                 scaleY = s
                 alpha = contentAlpha * progress
