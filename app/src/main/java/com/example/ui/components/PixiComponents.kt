@@ -62,6 +62,8 @@ val PixiChipShape = RoundedCornerShape(50)
 val PixiFieldShape = RoundedCornerShape(12.dp)
 val PixiSheetShape = RoundedCornerShape(20.dp, 20.dp, 0.dp, 0.dp)
 val PixiIslandShape = RoundedCornerShape(28.dp)
+/** Space so list items can scroll under the island and still be reached. */
+val PixiIslandContentInset = 108.dp
 
 /** iOS-style white card — subtle shadow, rounded corners. */
 @Composable
@@ -251,17 +253,17 @@ fun PixiSearchField(
     leading: @Composable (() -> Unit)? = null,
     trailing: @Composable (() -> Unit)? = null
 ) {
-    val isLight = MaterialTheme.colorScheme.background.red > 0.9f &&
-        MaterialTheme.colorScheme.background.green > 0.9f
-    val searchBg = if (isLight) PixiLightSearch
-    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
-
+    PixiGlass(
+        modifier = modifier.fillMaxWidth(),
+        shape = PixiPillShape,
+        liquid = false,
+        elevation = 0.dp,
+        frost = false
+    ) {
     Row(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxWidth()
             .height(48.dp)
-            .clip(PixiPillShape)
-            .background(searchBg)
             .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -292,6 +294,7 @@ fun PixiSearchField(
             Spacer(modifier = Modifier.width(8.dp))
             trailing()
         }
+    }
     }
 }
 

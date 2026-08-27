@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
 
@@ -121,6 +122,7 @@ fun BoxScope.AutoHideBottomNavigation(
         },
         modifier = Modifier
             .align(Alignment.BottomCenter)
+            .wrapContentHeight()
             .graphicsLayer {
                 val t = 1f - progress
                 translationY = t * hideTravel

@@ -31,6 +31,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -41,6 +42,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
@@ -65,6 +67,10 @@ import com.example.ui.components.AddGoalDialog
 import com.example.ui.components.AddTaskDialog
 import com.example.ui.components.AutoHideBottomNavigation
 import com.example.ui.components.FocusTimerModal
+import com.example.ui.components.LocalGlassEnabled
+import com.example.ui.components.LocalHazeState
+import com.example.ui.components.PixiGlass
+import com.example.ui.components.PixiPillShape
 import com.example.ui.components.SmsImportDialog
 import com.example.ui.components.StartupSplash
 import com.example.ui.components.TaskEtaDialog
@@ -77,6 +83,8 @@ import com.example.ui.screens.ProfileDialog
 import com.example.ui.screens.TasksScreen
 import com.example.ui.theme.PixiDoTheme
 import com.example.widget.WidgetActions
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeSource
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
@@ -272,6 +280,7 @@ fun PixiDoApp(
     }
 
     val snackbarHostState = remember { SnackbarHostState() }
+    val hazeState = remember { HazeState() }
     val reduceMotion = profile.reduceMotion
     val scope = rememberCoroutineScope()
 
@@ -280,9 +289,6 @@ fun PixiDoApp(
     val nestedScrollConnection = remember(scrollHideBar) {
         scrollHideNestedConnection(scrollHideBar)
     }
-    // Fixed bottom inset: no layout thrash while the bar slides (GPU-only transform)
-    val contentBottomPad = 108.dp
-
     // Soft scale-in of main content after splash (splash only)
     val contentAlpha by animateFloatAsState(
         targetValue = if (showSplash) 0.0f else 1f,
@@ -337,6 +343,29 @@ fun PixiDoApp(
 
     var smsPermissionAsked by remember { mutableStateOf(false) }
 
+    val calendarPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) viewModel.refreshDeviceCalendar()
+    }
+
+    var calendarPermissionAsked by remember { mutableStateOf(false) }
+
+    fun requestCalendarPermissionIfNeeded(forceAsk: Boolean = false) {
+        if (!forceAsk && !profile.calendarSyncEnabled) return
+        val need = ContextCompat.checkSelfPermission(
+            context, Manifest.permission.READ_CALENDAR
+        ) != PackageManager.PERMISSION_GRANTED
+        if (need) {
+            if (forceAsk || !calendarPermissionAsked) {
+                calendarPermissionAsked = true
+                calendarPermissionLauncher.launch(Manifest.permission.READ_CALENDAR)
+            }
+        } else {
+            viewModel.refreshDeviceCalendar()
+        }
+    }
+
     fun requestSmsPermissionsIfNeeded(forceAsk: Boolean = false) {
         // forceAsk: user just turned the toggle on (profile Flow may not have updated yet)
         if (!forceAsk && !profile.smsImportEnabled) return
@@ -378,16 +407,27 @@ fun PixiDoApp(
         }
     }
 
+    LaunchedEffect(showSplash, profile.calendarSyncEnabled) {
+        if (showSplash) return@LaunchedEffect
+        if (profile.calendarSyncEnabled) {
+            requestCalendarPermissionIfNeeded(forceAsk = false)
+        }
+    }
+
     // Re-scan when app returns to foreground
     val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner, profile.smsImportEnabled) {
+    DisposableEffect(lifecycleOwner, profile.smsImportEnabled, profile.calendarSyncEnabled) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME && profile.smsImportEnabled) {
+            if (event != Lifecycle.Event.ON_RESUME) return@LifecycleEventObserver
+            if (profile.smsImportEnabled) {
                 if (SmsInboxScanner.hasReadPermission(context) ||
                     SmsInboxScanner.hasReceivePermission(context)
                 ) {
                     viewModel.refreshSmsImports()
                 }
+            }
+            if (profile.calendarSyncEnabled) {
+                viewModel.refreshDeviceCalendar()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -453,6 +493,11 @@ fun PixiDoApp(
         viewModel.clearSnackbar()
     }
 
+    val glassOn = profile.glassEffectEnabled
+    CompositionLocalProvider(
+        LocalHazeState provides hazeState.takeIf { glassOn },
+        LocalGlassEnabled provides glassOn
+    ) {
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
             modifier = Modifier
@@ -477,13 +522,18 @@ fun PixiDoApp(
                     hostState = snackbarHostState,
                     modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 118.dp)
                 ) { data ->
-                    Snackbar(
-                        snackbarData = data,
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        contentColor = MaterialTheme.colorScheme.onSurface,
-                        actionColor = MaterialTheme.colorScheme.primary,
-                        shape = RoundedCornerShape(50)
-                    )
+                    PixiGlass(
+                        shape = PixiPillShape,
+                        elevation = 12.dp
+                    ) {
+                        Snackbar(
+                            snackbarData = data,
+                            containerColor = Color.Transparent,
+                            contentColor = MaterialTheme.colorScheme.onSurface,
+                            actionColor = MaterialTheme.colorScheme.primary,
+                            shape = RoundedCornerShape(50)
+                        )
+                    }
                 }
             }
         ) { innerPadding ->
@@ -493,9 +543,9 @@ fun PixiDoApp(
                     .fillMaxSize()
                     .nestedScroll(nestedScrollConnection)
                     .padding(top = innerPadding.calculateTopPadding())
-                    .padding(bottom = contentBottomPad)
                     .windowInsetsPadding(WindowInsets.navigationBars)
-                    .background(MaterialTheme.colorScheme.background),
+                    .background(MaterialTheme.colorScheme.background)
+                    .then(if (glassOn) Modifier.hazeSource(state = hazeState) else Modifier),
                 beyondViewportPageCount = 0,
                 userScrollEnabled = !showSplash
             ) { page ->
@@ -852,11 +902,22 @@ fun PixiDoApp(
                 sound.play(Sfx.SETTINGS_CHANGE)
                 viewModel.setHapticsEnabled(it)
             },
+            onGlassEffectToggle = {
+                sound.play(Sfx.SETTINGS_CHANGE)
+                viewModel.setGlassEffectEnabled(it)
+            },
             onSmsImportToggle = { enabled ->
                 sound.play(Sfx.SETTINGS_CHANGE)
                 viewModel.setSmsImportEnabled(enabled)
                 if (enabled) {
                     requestSmsPermissionsIfNeeded(forceAsk = true)
+                }
+            },
+            onCalendarSyncToggle = { enabled ->
+                sound.play(Sfx.SETTINGS_CHANGE)
+                viewModel.setCalendarSyncEnabled(enabled)
+                if (enabled) {
+                    requestCalendarPermissionIfNeeded(forceAsk = true)
                 }
             },
             onNotificationSoundSelected = { option ->
@@ -879,6 +940,7 @@ fun PixiDoApp(
                 viewModel.restoreFromCloud()
             }
         )
+    }
     }
 }
 

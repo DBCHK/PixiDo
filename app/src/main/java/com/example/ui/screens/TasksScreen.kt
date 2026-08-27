@@ -84,6 +84,7 @@ import com.example.data.NoteEntity
 import com.example.data.TaskEntity
 import com.example.data.UserProfile
 import com.example.ui.components.DailyHeaderBanner
+import com.example.ui.components.PixiIslandContentInset
 import com.example.ui.components.PixiBadge
 import com.example.ui.components.PixiCard
 import com.example.ui.components.PixiCardShape
@@ -211,7 +212,7 @@ fun TasksScreen(
                 .fillMaxSize()
                 .padding(horizontal = d.screenHorizontal),
             contentPadding = PaddingValues(
-                bottom = d.screenVertical + 8.dp,
+                bottom = d.screenVertical + 8.dp + PixiIslandContentInset,
                 top = d.screenVertical / 2
             )
         ) {

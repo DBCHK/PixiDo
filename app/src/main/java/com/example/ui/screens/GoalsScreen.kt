@@ -54,6 +54,7 @@ import com.example.ui.components.PixiCard
 import com.example.ui.components.PixiCardShapeSm
 import com.example.ui.components.PixiCloseButton
 import com.example.ui.components.PixiEmptyState
+import com.example.ui.components.PixiIslandContentInset
 import com.example.ui.components.PixiFieldShape
 import com.example.ui.components.PixiPillShape
 import com.example.ui.components.PixiPrimaryButton
@@ -97,7 +98,7 @@ fun GoalsScreen(
                 .fillMaxSize()
                 .padding(horizontal = d.screenHorizontal),
             contentPadding = PaddingValues(
-                bottom = d.screenVertical + 8.dp,
+                bottom = d.screenVertical + 8.dp + PixiIslandContentInset,
                 top = d.screenVertical
             )
         ) {

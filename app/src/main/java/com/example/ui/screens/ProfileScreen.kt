@@ -55,7 +55,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 import com.example.audio.LocalSoundEngine
@@ -65,6 +64,9 @@ import com.example.data.BackupFrequency
 import com.example.data.NotificationSoundOption
 import com.example.data.UserProfile
 import com.example.notify.displayName
+import com.example.ui.components.PixiGlass
+import com.example.ui.components.PixiGlassHost
+import com.example.ui.components.PixiGlassWeight
 import com.example.ui.components.PixiToggle
 import com.example.ui.theme.AccentPalette
 import com.example.ui.theme.displayName
@@ -90,7 +92,9 @@ fun ProfileDialog(
     onAccentSelected: (String) -> Unit = {},
     onSoundToggle: (Boolean) -> Unit = {},
     onHapticsToggle: (Boolean) -> Unit = {},
+    onGlassEffectToggle: (Boolean) -> Unit = {},
     onSmsImportToggle: (Boolean) -> Unit = {},
+    onCalendarSyncToggle: (Boolean) -> Unit = {},
     onNotificationSoundSelected: (NotificationSoundOption) -> Unit = {},
     onGoogleSignIn: () -> Unit = {},
     onGoogleSignOut: () -> Unit = {},
@@ -129,19 +133,25 @@ fun ProfileDialog(
         onDismiss()
     }
 
-    Dialog(
-        onDismissRequest = { finish() },
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
+    PixiGlassHost(onDismissRequest = { finish() }) {
+        PixiGlass(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .fillMaxHeight(0.94f)
+                .padding(horizontal = 8.dp, vertical = 8.dp)
+                .testTag("profile_dialog"),
+            shape = RoundedCornerShape(28.dp),
+            elevation = 24.dp,
+            frost = true,
+            liquid = true,
+            weight = PixiGlassWeight.Sheet
+        ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight(0.94f)
-                .clip(RoundedCornerShape(28.dp))
-                .background(MaterialTheme.colorScheme.background)
                 .statusBarsPadding()
                 .navigationBarsPadding()
-                .testTag("profile_dialog")
         ) {
             Row(
                 modifier = Modifier
@@ -422,6 +432,20 @@ fun ProfileDialog(
                 }
 
                 IosSection(
+                    title = "Calendar",
+                    footer = "Events from Google and other phone calendars appear in PixiDo."
+                ) {
+                    IosToggleRow(
+                        title = "Sync Phone Calendar",
+                        subtitle = "Show device events in Calendar",
+                        checked = profile.calendarSyncEnabled,
+                        onCheckedChange = onCalendarSyncToggle,
+                        testTag = "toggle_calendar_sync",
+                        showDivider = false
+                    )
+                }
+
+                IosSection(
                     title = "Bank SMS",
                     footer = "When on, debit and credit SMS are offered for Budget."
                 ) {
@@ -435,7 +459,18 @@ fun ProfileDialog(
                     )
                 }
 
-                IosSection(title = "Appearance") {
+                IosSection(
+                    title = "Appearance",
+                    footer = "Glass frosts and blurs the tab bar, banners, and alerts."
+                ) {
+                    IosToggleRow(
+                        title = "Glass Effect",
+                        subtitle = "Frosted blur on chrome",
+                        checked = profile.glassEffectEnabled,
+                        onCheckedChange = onGlassEffectToggle,
+                        testTag = "toggle_glass_effect",
+                        showDivider = true
+                    )
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(
                             text = "Theme",
@@ -548,6 +583,7 @@ fun ProfileDialog(
                     }
                 }
             }
+        }
         }
     }
 }

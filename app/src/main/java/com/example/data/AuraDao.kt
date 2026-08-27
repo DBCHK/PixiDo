@@ -199,6 +199,12 @@ interface AuraDao {
     @Query("SELECT * FROM pending_sms_transactions WHERE smsHash = :hash LIMIT 1")
     suspend fun getPendingSmsByHash(hash: String): PendingSmsTransactionEntity?
 
+    @Query(
+        "SELECT * FROM pending_sms_transactions WHERE receivedAt >= :since " +
+            "ORDER BY receivedAt DESC"
+    )
+    suspend fun getRecentSmsTransactions(since: Long): List<PendingSmsTransactionEntity>
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertPendingSmsTransaction(item: PendingSmsTransactionEntity): Long
 

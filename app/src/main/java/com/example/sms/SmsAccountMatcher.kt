@@ -16,9 +16,11 @@ object SmsAccountMatcher {
     fun defaultAccount(
         accounts: List<AccountEntity>,
         bankName: String,
-        lastAccountId: Int? = null
+        lastAccountId: Int? = null,
+        accountLast4: String = ""
     ): AccountEntity? {
         if (accounts.isEmpty()) return null
+        matchByLast4(accounts, accountLast4)?.let { return it }
         matchByBank(accounts, bankName)?.let { return it }
         val lastId = lastAccountId?.takeIf { it > 0 }
         if (lastId != null) {
@@ -26,6 +28,11 @@ object SmsAccountMatcher {
         }
         accounts.firstOrNull { it.isPrimary }?.let { return it }
         return accounts.firstOrNull()
+    }
+
+    fun matchByLast4(accounts: List<AccountEntity>, last4: String): AccountEntity? {
+        if (last4.length != 4) return null
+        return accounts.firstOrNull { it.name.contains(last4) }
     }
 
     fun matchByBank(accounts: List<AccountEntity>, bankName: String): AccountEntity? {

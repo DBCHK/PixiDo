@@ -31,7 +31,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
+
 import com.example.R
 import com.example.data.GoalEntity
 import com.example.data.RepeatRule
@@ -162,11 +162,18 @@ fun AddTaskDialog(
         unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
     )
 
-    Dialog(onDismissRequest = onDismiss) {
-        PixiCard(
+    PixiGlassHost(onDismissRequest = onDismiss) {
+        PixiGlass(
             modifier = Modifier
+                .align(Alignment.Center)
                 .fillMaxWidth()
-                .testTag(if (isEdit) "edit_task_dialog" else "add_task_dialog")
+                .padding(horizontal = 16.dp)
+                .testTag(if (isEdit) "edit_task_dialog" else "add_task_dialog"),
+            shape = PixiCardShape,
+            elevation = 20.dp,
+            frost = true,
+            liquid = true,
+            weight = PixiGlassWeight.Sheet
         ) {
             Column(
                 modifier = Modifier

@@ -52,10 +52,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.data.CalendarEventEntity
+import com.example.data.DeviceCalendarRepository
 import com.example.data.TaskEntity
 import com.example.ui.components.PixiBadge
 import com.example.ui.components.PixiCard
 import com.example.ui.components.PixiDoodle3D
+import com.example.ui.components.PixiIslandContentInset
 import com.example.ui.components.PixiOutlineButton
 import com.example.ui.components.PixiPillShape
 import com.example.ui.components.PixiPrimaryButton
@@ -133,7 +135,7 @@ fun CalendarScreen(
                 .padding(horizontal = d.screenHorizontal),
             contentPadding = PaddingValues(
                 top = d.screenVertical,
-                bottom = d.screenVertical + 8.dp
+                bottom = d.screenVertical + 8.dp + PixiIslandContentInset
             ),
             verticalArrangement = Arrangement.spacedBy(0.dp)
         ) {
@@ -423,7 +425,7 @@ fun CalendarScreen(
                             modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
                         )
                     }
-                    items(dayEvents, key = { "event_${it.id}" }) { event ->
+                    items(dayEvents, key = { "event_${it.id}_${it.startMillis}" }) { event ->
                         TimelineEventRow(
                             event = event,
                             onToggle = { onToggleEvent(event) },
@@ -672,7 +674,8 @@ private fun TimelineEventRow(
     onDelete: () -> Unit,
     compact: Boolean
 ) {
-    val categoryColor = categoryColorOf(event.category)
+    val fromDevice = DeviceCalendarRepository.isDeviceEvent(event.id)
+    val categoryColor = categoryColorOf(event.category, fromDevice)
     val timeLabel = event.timeSlot.ifBlank { "All day" }
 
     PixiCard(
@@ -719,16 +722,27 @@ private fun TimelineEventRow(
 
             Spacer(modifier = Modifier.width(6.dp))
 
-            IconButton(
-                onClick = onToggle,
-                modifier = Modifier.size(36.dp)
-            ) {
+            if (!fromDevice) {
+                IconButton(
+                    onClick = onToggle,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        imageVector = if (event.isCompleted) Icons.Filled.CheckCircle
+                        else Icons.Filled.RadioButtonUnchecked,
+                        contentDescription = "Toggle",
+                        tint = if (event.isCompleted) MaterialTheme.colorScheme.primary else categoryColor,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            } else {
                 Icon(
-                    imageVector = if (event.isCompleted) Icons.Filled.CheckCircle
-                    else Icons.Filled.RadioButtonUnchecked,
-                    contentDescription = "Toggle",
-                    tint = if (event.isCompleted) MaterialTheme.colorScheme.primary else categoryColor,
-                    modifier = Modifier.size(22.dp)
+                    imageVector = Icons.Filled.Today,
+                    contentDescription = "Phone calendar",
+                    tint = categoryColor,
+                    modifier = Modifier
+                        .padding(end = 6.dp)
+                        .size(20.dp)
                 )
             }
 
@@ -771,13 +785,15 @@ private fun TimelineEventRow(
                 }
             }
 
-            IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
-                Icon(
-                    Icons.Filled.DeleteOutline,
-                    contentDescription = "Delete",
-                    tint = MaterialTheme.colorScheme.error.copy(alpha = 0.6f),
-                    modifier = Modifier.size(18.dp)
-                )
+            if (!fromDevice) {
+                IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
+                    Icon(
+                        Icons.Filled.DeleteOutline,
+                        contentDescription = "Delete",
+                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.6f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
             }
         }
     }
@@ -887,12 +903,13 @@ private fun millisHourOf(millis: Long): Int =
 
 // ── helpers ──────────────────────────────────────────────────────────
 
-private fun categoryColorOf(category: String): Color = when (category) {
-    "Deep Work" -> Color(0xFFC4A8F5)
-    "Social & Hangouts", "Social" -> Color(0xFFFF6BA8)
-    "Fitness & Wellness", "Fitness" -> Color(0xFF34D399)
-    "Bill Payment", "Bills" -> Color(0xFFFBBF24)
-    "Meeting" -> Color(0xFF67D4E8)
+private fun categoryColorOf(category: String, fromDevice: Boolean = false): Color = when {
+    fromDevice -> Color(0xFF64D2FF)
+    category == "Deep Work" -> Color(0xFFC4A8F5)
+    category == "Social & Hangouts" || category == "Social" -> Color(0xFFFF6BA8)
+    category == "Fitness & Wellness" || category == "Fitness" -> Color(0xFF34D399)
+    category == "Bill Payment" || category == "Bills" -> Color(0xFFFBBF24)
+    category == "Meeting" -> Color(0xFF67D4E8)
     else -> Color(0xFF9B7AE8)
 }
 

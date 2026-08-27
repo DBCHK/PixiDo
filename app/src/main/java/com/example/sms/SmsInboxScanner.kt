@@ -7,8 +7,6 @@ import android.net.Uri
 import android.provider.Telephony
 import android.util.Log
 import androidx.core.content.ContextCompat
-import com.example.data.AuraDatabase
-import com.example.data.PendingSmsTransactionEntity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -19,7 +17,7 @@ import kotlinx.coroutines.withContext
 object SmsInboxScanner {
 
     private const val TAG = "PixiDoSmsScan"
-    private const val LOOKBACK_MS = 48L * 60 * 60 * 1000 // 48 hours
+    private const val LOOKBACK_MS = 48L * 60 * 60 * 1000
     private const val MAX_ROWS = 80
 
     fun hasReadPermission(context: Context): Boolean {
@@ -40,7 +38,6 @@ object SmsInboxScanner {
         if (!hasReadPermission(context)) return@withContext 0
 
         val appContext = context.applicationContext
-        val dao = AuraDatabase.getDatabase(appContext).auraDao()
         val since = System.currentTimeMillis() - LOOKBACK_MS
         var added = 0
 
@@ -76,25 +73,16 @@ object SmsInboxScanner {
                 val sender = if (addressIdx >= 0) cursor.getString(addressIdx).orEmpty() else ""
                 val body = if (bodyIdx >= 0) cursor.getString(bodyIdx).orEmpty() else ""
                 val date = if (dateIdx >= 0) cursor.getLong(dateIdx) else System.currentTimeMillis()
-
-                val parsed = SmsTransactionParser.parse(body, sender) ?: continue
-                val hash = SmsTransactionParser.smsHash(body, sender, date)
-                if (dao.getPendingSmsByHash(hash) != null) continue
-
-                dao.insertPendingSmsTransaction(
-                    PendingSmsTransactionEntity(
-                        amount = parsed.amount,
-                        bankName = parsed.bankName,
-                        isExpense = parsed.isExpense,
-                        merchantOrInfo = parsed.merchantOrInfo,
-                        smsBody = body.take(500),
-                        smsSender = sender,
-                        smsHash = hash,
-                        receivedAt = date,
-                        status = PendingSmsTransactionEntity.STATUS_PENDING
+                if (SmsImportStore.ingest(
+                        context = appContext,
+                        body = body,
+                        sender = sender,
+                        timestamp = date,
+                        notifyIfBackground = false
                     )
-                )
-                added++
+                ) {
+                    added++
+                }
             }
         } catch (e: SecurityException) {
             Log.w(TAG, "READ_SMS denied", e)
@@ -104,6 +92,7 @@ object SmsInboxScanner {
             cursor?.close()
         }
 
+        SmsImportStore.collapsePending(appContext)
         if (added > 0) Log.d(TAG, "Queued $added SMS transaction(s) from inbox")
         added
     }

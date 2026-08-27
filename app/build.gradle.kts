@@ -110,6 +110,7 @@ dependencies {
   implementation(libs.androidx.credentials.play.services)
   implementation(libs.googleid)
   implementation(libs.androidx.work.runtime.ktx)
+  implementation(libs.haze)
   implementation(libs.kotlinx.coroutines.play.services)
   implementation(libs.firebase.appcheck.recaptcha)
   implementation(libs.kotlinx.coroutines.android)

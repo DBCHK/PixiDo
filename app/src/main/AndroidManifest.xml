@@ -25,6 +25,7 @@
     <!-- Bank SMS → Budget import (Indian ₹ / UPI alerts) -->
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
     <uses-permission android:name="android.permission.READ_SMS" />
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
 
     <application
         android:allowBackup="true"

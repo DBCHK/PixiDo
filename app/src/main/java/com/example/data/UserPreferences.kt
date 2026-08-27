@@ -66,6 +66,8 @@ data class UserProfile(
     val soundEnabled: Boolean = true,
     val hapticsEnabled: Boolean = true,
     val reduceMotion: Boolean = false,
+    /** Frosted glass (backdrop blur) on the tab island, banners, and alerts. */
+    val glassEffectEnabled: Boolean = true,
     /** Custom reminder notification sound. */
     val notificationSound: NotificationSoundOption = NotificationSoundOption.SOFT,
     // Google account + cloud backup
@@ -80,7 +82,9 @@ data class UserProfile(
      */
     val smsImportEnabled: Boolean = true,
     /** Last account used when assigning an SMS transaction (0 = none). */
-    val lastSmsAccountId: Int = 0
+    val lastSmsAccountId: Int = 0,
+    /** Show events from the phone / Google calendar inside PixiDo Calendar. */
+    val calendarSyncEnabled: Boolean = true
 ) {
     val isSignedIn: Boolean get() = googleUid.isNotBlank()
     val hasCustomAccent: Boolean get() = accentColorHex.isNotBlank()
@@ -103,6 +107,7 @@ class UserPreferencesRepository(private val context: Context) {
         val SOUND = booleanPreferencesKey("sound_enabled")
         val HAPTICS = booleanPreferencesKey("haptics_enabled")
         val REDUCE_MOTION = booleanPreferencesKey("reduce_motion")
+        val GLASS_EFFECT = booleanPreferencesKey("glass_effect_enabled")
         val NOTIFICATION_SOUND = stringPreferencesKey("notification_sound")
         val GOOGLE_UID = stringPreferencesKey("google_uid")
         val GOOGLE_EMAIL = stringPreferencesKey("google_email")
@@ -111,6 +116,7 @@ class UserPreferencesRepository(private val context: Context) {
         val LAST_BACKUP_AT = longPreferencesKey("last_backup_at")
         val SMS_IMPORT = booleanPreferencesKey("sms_import_enabled")
         val LAST_SMS_ACCOUNT = intPreferencesKey("last_sms_account_id")
+        val CALENDAR_SYNC = booleanPreferencesKey("calendar_sync_enabled")
     }
 
     val userProfile: Flow<UserProfile> = context.dataStore.data.map { prefs ->
@@ -136,6 +142,7 @@ class UserPreferencesRepository(private val context: Context) {
         soundEnabled = this[Keys.SOUND] ?: true,
         hapticsEnabled = this[Keys.HAPTICS] ?: true,
         reduceMotion = this[Keys.REDUCE_MOTION] ?: false,
+        glassEffectEnabled = this[Keys.GLASS_EFFECT] ?: true,
         notificationSound = runCatching {
             NotificationSoundOption.valueOf(
                 this[Keys.NOTIFICATION_SOUND] ?: NotificationSoundOption.SOFT.name
@@ -152,7 +159,8 @@ class UserPreferencesRepository(private val context: Context) {
         lastBackupAt = this[Keys.LAST_BACKUP_AT] ?: 0L,
         // Default on so bank SMS prompts work once permission is granted
         smsImportEnabled = this[Keys.SMS_IMPORT] ?: true,
-        lastSmsAccountId = this[Keys.LAST_SMS_ACCOUNT] ?: 0
+        lastSmsAccountId = this[Keys.LAST_SMS_ACCOUNT] ?: 0,
+        calendarSyncEnabled = this[Keys.CALENDAR_SYNC] ?: true
     )
 
     suspend fun updateProfile(
@@ -227,10 +235,12 @@ class UserPreferencesRepository(private val context: Context) {
             "soundEnabled" to p.soundEnabled,
             "hapticsEnabled" to p.hapticsEnabled,
             "reduceMotion" to p.reduceMotion,
+            "glassEffectEnabled" to p.glassEffectEnabled,
             "notificationSound" to p.notificationSound.name,
             "backupFrequency" to p.backupFrequency.name,
             "smsImportEnabled" to p.smsImportEnabled,
-            "lastSmsAccountId" to p.lastSmsAccountId
+            "lastSmsAccountId" to p.lastSmsAccountId,
+            "calendarSyncEnabled" to p.calendarSyncEnabled
         )
     }
 
@@ -254,12 +264,14 @@ class UserPreferencesRepository(private val context: Context) {
             (map["soundEnabled"] as? Boolean)?.let { prefs[Keys.SOUND] = it }
             (map["hapticsEnabled"] as? Boolean)?.let { prefs[Keys.HAPTICS] = it }
             (map["reduceMotion"] as? Boolean)?.let { prefs[Keys.REDUCE_MOTION] = it }
+            (map["glassEffectEnabled"] as? Boolean)?.let { prefs[Keys.GLASS_EFFECT] = it }
             (map["notificationSound"] as? String)?.let { prefs[Keys.NOTIFICATION_SOUND] = it }
             (map["backupFrequency"] as? String)?.let { prefs[Keys.BACKUP_FREQUENCY] = it }
             (map["smsImportEnabled"] as? Boolean)?.let { prefs[Keys.SMS_IMPORT] = it }
             when (val v = map["lastSmsAccountId"]) {
                 is Number -> prefs[Keys.LAST_SMS_ACCOUNT] = v.toInt()
             }
+            (map["calendarSyncEnabled"] as? Boolean)?.let { prefs[Keys.CALENDAR_SYNC] = it }
         }
     }
 
@@ -306,6 +318,10 @@ class UserPreferencesRepository(private val context: Context) {
         context.dataStore.edit { it[Keys.REDUCE_MOTION] = enabled }
     }
 
+    suspend fun setGlassEffectEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.GLASS_EFFECT] = enabled }
+    }
+
     suspend fun setNotificationSound(option: NotificationSoundOption) {
         context.dataStore.edit { it[Keys.NOTIFICATION_SOUND] = option.name }
     }
@@ -316,6 +332,10 @@ class UserPreferencesRepository(private val context: Context) {
 
     suspend fun setLastSmsAccountId(accountId: Int) {
         context.dataStore.edit { it[Keys.LAST_SMS_ACCOUNT] = accountId }
+    }
+
+    suspend fun setCalendarSyncEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.CALENDAR_SYNC] = enabled }
     }
 }
 

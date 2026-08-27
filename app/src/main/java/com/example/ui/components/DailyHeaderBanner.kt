@@ -83,10 +83,9 @@ fun DailyHeaderBanner(
                     onClick = onOpenFocusMode,
                     modifier = Modifier.testTag("focus_mode_button")
                 ) {
+                    PixiGlass(shape = PixiPillShape, elevation = 0.dp, frost = false) {
                     Row(
                         modifier = Modifier
-                            .clip(PixiPillShape)
-                            .background(MaterialTheme.colorScheme.surface)
                             .padding(horizontal = 12.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -103,6 +102,7 @@ fun DailyHeaderBanner(
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.primary
                         )
+                    }
                     }
                 }
                 PixiPopClickable(

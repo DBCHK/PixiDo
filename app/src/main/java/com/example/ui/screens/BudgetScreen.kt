@@ -71,6 +71,7 @@ import com.example.ui.components.PixiCardShape
 import com.example.ui.components.PixiCardShapeSm
 import com.example.ui.components.PixiDoodle3D
 import com.example.ui.components.PixiEmptyState
+import com.example.ui.components.PixiIslandContentInset
 import com.example.ui.components.PixiScreenHeader
 import com.example.ui.components.PixiSectionLabel
 import com.example.ui.components.TransferDialog
@@ -155,7 +156,7 @@ fun BudgetScreen(
                 .fillMaxSize()
                 .padding(horizontal = d.screenHorizontal),
             contentPadding = PaddingValues(
-                bottom = d.screenVertical + 8.dp,
+                bottom = d.screenVertical + 8.dp + PixiIslandContentInset,
                 top = d.screenVertical
             )
         ) {

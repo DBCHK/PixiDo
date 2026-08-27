@@ -5,11 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.provider.Telephony
 import android.util.Log
-import com.example.data.AuraDatabase
-import com.example.data.Currencies
-import com.example.data.PendingSmsTransactionEntity
 import com.example.data.UserPreferencesRepository
-import com.example.notify.NotificationHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -33,46 +29,19 @@ class SmsReceiver : BroadcastReceiver() {
                 val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent)
                 if (messages.isNullOrEmpty()) return@launch
 
-                // Multi-part SMS: merge by originating address
                 val bySender = messages.groupBy { it.displayOriginatingAddress.orEmpty() }
-                val dao = AuraDatabase.getDatabase(appContext).auraDao()
-
                 bySender.forEach { (sender, parts) ->
                     val body = parts.joinToString(separator = "") { it.displayMessageBody.orEmpty() }
                     val timestamp = parts.minOfOrNull { it.timestampMillis } ?: System.currentTimeMillis()
-                    val parsed = SmsTransactionParser.parse(body, sender) ?: return@forEach
-                    val hash = SmsTransactionParser.smsHash(body, sender, timestamp)
-
-                    // Unique index will ignore duplicates; still check status rows
-                    val existing = dao.getPendingSmsByHash(hash)
-                    if (existing != null) return@forEach
-
-                    dao.insertPendingSmsTransaction(
-                        PendingSmsTransactionEntity(
-                            amount = parsed.amount,
-                            bankName = parsed.bankName,
-                            isExpense = parsed.isExpense,
-                            merchantOrInfo = parsed.merchantOrInfo,
-                            smsBody = body.take(500),
-                            smsSender = sender,
-                            smsHash = hash,
-                            receivedAt = timestamp,
-                            status = PendingSmsTransactionEntity.STATUS_PENDING
-                        )
+                    SmsImportStore.ingest(
+                        context = appContext,
+                        body = body,
+                        sender = sender,
+                        timestamp = timestamp,
+                        notifyIfBackground = true
                     )
-                    Log.d(TAG, "Queued SMS txn: ${parsed.bankName} ${parsed.amount} expense=${parsed.isExpense}")
-                    if (!AppForegroundState.isResumed) {
-                        val currency = prefs.currentProfile().currencyCode.ifBlank { "INR" }
-                        NotificationHelper.showSmsTransaction(
-                            context = appContext,
-                            amountLabel = Currencies.format(parsed.amount, currency),
-                            isExpense = parsed.isExpense,
-                            bankName = parsed.bankName,
-                            merchant = parsed.merchantOrInfo,
-                            smsHash = hash
-                        )
-                    }
                 }
+                SmsImportStore.collapsePending(appContext)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to process SMS", e)
             } finally {

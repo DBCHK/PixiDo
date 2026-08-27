@@ -41,6 +41,7 @@ import com.example.data.AccountEntity
 import com.example.data.Currencies
 import com.example.data.PendingSmsTransactionEntity
 import com.example.sms.SmsAccountMatcher
+import com.example.sms.SmsTransactionParser
 
 /**
  * In-app notification panel for a detected debit/credit SMS.
@@ -60,9 +61,10 @@ fun SmsImportDialog(
     onDismiss: () -> Unit
 ) {
     var showAccountPicker by remember(item.id) { mutableStateOf(false) }
-    var selectedAccount by remember(item.id, accounts, lastAccountId) {
+    var selectedAccount by remember(item.id, accounts, lastAccountId, item.smsBody) {
+        val last4 = SmsTransactionParser.extractAccountLast4(item.smsBody)
         mutableStateOf(
-            SmsAccountMatcher.defaultAccount(accounts, item.bankName, lastAccountId)
+            SmsAccountMatcher.defaultAccount(accounts, item.bankName, lastAccountId, last4)
         )
     }
 
@@ -73,22 +75,28 @@ fun SmsImportDialog(
     } else {
         Color(0xFF34C759)
     }
+    val parsed = remember(item.id, item.smsBody, item.smsSender) {
+        SmsTransactionParser.parse(item.smsBody, item.smsSender)
+    }
     val defaultName = selectedAccount?.name
+    val channelLabel = when (parsed?.channel) {
+        SmsTransactionParser.CHANNEL_UPI -> "UPI"
+        SmsTransactionParser.CHANNEL_CARD -> "Card"
+        SmsTransactionParser.CHANNEL_ATM -> "ATM"
+        SmsTransactionParser.CHANNEL_IMPS -> "IMPS"
+        SmsTransactionParser.CHANNEL_NEFT -> "NEFT"
+        SmsTransactionParser.CHANNEL_RTGS -> "RTGS"
+        else -> null
+    }
 
-    Surface(
+    PixiGlass(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 8.dp)
-            .shadow(
-                elevation = 18.dp,
-                shape = RoundedCornerShape(24.dp),
-                ambientColor = Color.Black.copy(alpha = 0.18f),
-                spotColor = Color.Black.copy(alpha = 0.22f)
-            )
             .testTag("sms_import_dialog"),
         shape = RoundedCornerShape(24.dp),
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 0.dp
+        liquid = true,
+        elevation = 18.dp
     ) {
         Column(
             modifier = Modifier
@@ -168,10 +176,13 @@ fun SmsImportDialog(
 
             val subtitle = buildString {
                 append(item.bankName)
-                if (item.merchantOrInfo.isNotBlank()) {
+                channelLabel?.let { append(" · $it") }
+                val merchant = item.merchantOrInfo.ifBlank { parsed?.merchantOrInfo.orEmpty() }
+                if (merchant.isNotBlank()) {
                     append(" · ")
-                    append(item.merchantOrInfo)
+                    append(merchant)
                 }
+                parsed?.category?.takeIf { it != "Other" }?.let { append(" · $it") }
             }
             Text(
                 text = subtitle,

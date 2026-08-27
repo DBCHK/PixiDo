@@ -45,6 +45,9 @@ class AuraRepository(private val dao: AuraDao) {
     suspend fun getPendingSmsOnce(): List<PendingSmsTransactionEntity> =
         dao.getPendingSmsTransactionsOnce()
 
+    suspend fun getRecentSms(since: Long): List<PendingSmsTransactionEntity> =
+        dao.getRecentSmsTransactions(since)
+
     suspend fun markSmsAccepted(id: Int) =
         dao.setPendingSmsStatus(id, PendingSmsTransactionEntity.STATUS_ACCEPTED)
 

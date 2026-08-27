@@ -21,6 +21,7 @@ import com.example.data.BudgetItemEntity
 import com.example.data.CalendarEventEntity
 import com.example.data.CloudBackupRepository
 import com.example.data.Currencies
+import com.example.data.DeviceCalendarRepository
 import com.example.data.GoalActivityEntity
 import com.example.data.GoalEntity
 import com.example.data.NoteEntity
@@ -37,16 +38,21 @@ import com.example.notify.NotificationHelper
 import com.example.notify.NowBarHelper
 import com.example.notify.ReminderScheduler
 import com.example.sms.SmsAccountMatcher
+import com.example.sms.SmsImportStore
 import com.example.sms.SmsInboxScanner
+import com.example.sms.SmsTransactionParser
 import com.example.widget.WidgetActions
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Calendar
 
 class AuraViewModel(application: Application) : AndroidViewModel(application) {
@@ -55,6 +61,8 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
     private val preferences: UserPreferencesRepository
     private val cloudBackup: CloudBackupRepository
     private val googleAuth: GoogleAuthRepository
+    private val deviceCalendar: DeviceCalendarRepository
+    private val deviceEvents = MutableStateFlow<List<CalendarEventEntity>>(emptyList())
 
     val tasks: StateFlow<List<TaskEntity>>
     val budgetItems: StateFlow<List<BudgetItemEntity>>
@@ -128,6 +136,7 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
         preferences = UserPreferencesRepository(application)
         cloudBackup = CloudBackupRepository(application, repository, preferences)
         googleAuth = GoogleAuthRepository(application)
+        deviceCalendar = DeviceCalendarRepository(application)
 
         // Listen for Focus service ticks (Now Bar actions / background countdown)
         val filter = IntentFilter(FocusTimerService.ACTION_STATE)
@@ -151,7 +160,12 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
             initialValue = emptyList()
         )
 
-        calendarEvents = repository.allCalendarEvents.stateIn(
+        calendarEvents = combine(
+            repository.allCalendarEvents,
+            deviceEvents
+        ) { local, device ->
+            local + device
+        }.stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = emptyList()
@@ -241,10 +255,35 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
             if (SmsInboxScanner.hasReadPermission(getApplication())) {
                 SmsInboxScanner.scanAndQueue(getApplication())
             }
+            SmsImportStore.collapsePending(getApplication())
             val pending = repository.getPendingSmsOnce()
             if (_activeSmsPrompt.value == null) {
                 _activeSmsPrompt.value = pending.firstOrNull()
             }
+        }
+    }
+
+    fun refreshDeviceCalendar() {
+        viewModelScope.launch {
+            val profile = preferences.currentProfile()
+            if (!profile.calendarSyncEnabled || !deviceCalendar.hasPermission()) {
+                deviceEvents.value = emptyList()
+                return@launch
+            }
+            val now = System.currentTimeMillis()
+            val from = now - 60L * 24 * 60 * 60 * 1000
+            val to = now + 400L * 24 * 60 * 60 * 1000
+            deviceEvents.value = withContext(Dispatchers.IO) {
+                deviceCalendar.queryVisibleEvents(from, to)
+            }
+        }
+    }
+
+    fun setCalendarSyncEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            preferences.setCalendarSyncEnabled(enabled)
+            if (enabled) refreshDeviceCalendar()
+            else deviceEvents.value = emptyList()
         }
     }
 
@@ -262,20 +301,27 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
     /** Accept detected SMS → add Budget line (expense or income) and match bank account if possible. */
     fun acceptSmsTransaction(item: PendingSmsTransactionEntity, manualAccountId: Int? = null) {
         viewModelScope.launch {
+            val parsed = SmsTransactionParser.parse(item.smsBody, item.smsSender)
             val type = if (item.isExpense) TransactionType.EXPENSE else TransactionType.INCOME
-            val category = if (item.isExpense) "Other" else "Other"
+            val category = parsed?.category?.takeIf { it != "Other" }
+                ?: if (item.isExpense) "Other" else "Other"
+            val merchant = item.merchantOrInfo.ifBlank { parsed?.merchantOrInfo.orEmpty() }
             val title = buildString {
                 append(item.bankName)
-                if (item.merchantOrInfo.isNotBlank()) {
+                if (merchant.isNotBlank()) {
                     append(" · ")
-                    append(item.merchantOrInfo.take(28))
+                    append(merchant.take(28))
                 }
             }
             val note = buildString {
                 append("From SMS")
                 if (item.smsSender.isNotBlank()) append(" · ${item.smsSender}")
+                parsed?.refId?.takeIf { it.isNotBlank() }?.let { append(" · Ref $it") }
             }
-            val matchedAccountId = manualAccountId ?: matchAccountForBank(item.bankName)
+            val matchedAccountId = manualAccountId ?: matchAccountForBank(
+                bankName = item.bankName,
+                accountLast4 = parsed?.accountLast4.orEmpty()
+            )
             if (matchedAccountId != null && matchedAccountId > 0) {
                 preferences.setLastSmsAccountId(matchedAccountId)
             }
@@ -291,6 +337,7 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
                 transactionType = type
             )
             repository.markSmsAccepted(item.id)
+            SmsImportStore.dismissSemanticTwins(getApplication(), item)
             advanceSmsPrompt(item.id)
             val kind = if (item.isExpense) "expense" else "income"
             _snackbarMessage.value =
@@ -313,11 +360,12 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** Link SMS bank name to a PixiDo account: bank match → last used → primary → first. */
-    private fun matchAccountForBank(bankName: String): Int? {
+    private fun matchAccountForBank(bankName: String, accountLast4: String = ""): Int? {
         return SmsAccountMatcher.defaultAccount(
             accounts = accounts.value,
             bankName = bankName,
-            lastAccountId = userProfile.value.lastSmsAccountId
+            lastAccountId = userProfile.value.lastSmsAccountId,
+            accountLast4 = accountLast4
         )?.id
     }
 
@@ -538,6 +586,10 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setReduceMotion(enabled: Boolean) {
         viewModelScope.launch { preferences.setReduceMotion(enabled) }
+    }
+
+    fun setGlassEffectEnabled(enabled: Boolean) {
+        viewModelScope.launch { preferences.setGlassEffectEnabled(enabled) }
     }
 
     fun setNotificationSound(option: NotificationSoundOption) {
@@ -1160,6 +1212,7 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun toggleCalendarEventCompleted(event: CalendarEventEntity) {
+        if (DeviceCalendarRepository.isDeviceEvent(event.id)) return
         viewModelScope.launch {
             val done = !event.isCompleted
             repository.updateCalendarEvent(event.copy(isCompleted = done))
@@ -1170,6 +1223,7 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun deleteCalendarEvent(eventId: Int) {
+        if (DeviceCalendarRepository.isDeviceEvent(eventId)) return
         viewModelScope.launch {
             ReminderScheduler.cancel(appContext(), ReminderScheduler.TYPE_EVENT, eventId)
             repository.deleteCalendarEvent(eventId)
