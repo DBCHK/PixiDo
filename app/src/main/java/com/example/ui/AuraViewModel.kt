@@ -22,13 +22,17 @@ import com.example.data.CalendarEventEntity
 import com.example.data.CloudBackupRepository
 import com.example.data.Currencies
 import com.example.data.DeviceCalendarRepository
+import com.example.data.DeviceCalendarSource
+import com.example.data.DeviceCalendars
 import com.example.data.GoalActivityEntity
 import com.example.data.GoalEntity
 import com.example.data.NoteEntity
 import com.example.data.NotificationSoundOption
 import com.example.data.PendingSmsTransactionEntity
 import com.example.data.RepeatRule
+import com.example.data.DayTime
 import com.example.data.TaskEntity
+import com.example.data.TaskPhases
 import com.example.data.TaskRepeat
 import com.example.data.TransactionType
 import com.example.data.UserPreferencesRepository
@@ -63,6 +67,8 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
     private val googleAuth: GoogleAuthRepository
     private val deviceCalendar: DeviceCalendarRepository
     private val deviceEvents = MutableStateFlow<List<CalendarEventEntity>>(emptyList())
+    private val _deviceCalendars = MutableStateFlow<List<DeviceCalendarSource>>(emptyList())
+    val deviceCalendars: StateFlow<List<DeviceCalendarSource>> = _deviceCalendars.asStateFlow()
 
     val tasks: StateFlow<List<TaskEntity>>
     val budgetItems: StateFlow<List<BudgetItemEntity>>
@@ -266,15 +272,21 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
     fun refreshDeviceCalendar() {
         viewModelScope.launch {
             val profile = preferences.currentProfile()
-            if (!profile.calendarSyncEnabled || !deviceCalendar.hasPermission()) {
+            val permitted = deviceCalendar.hasPermission()
+            val sources = if (permitted) {
+                withContext(Dispatchers.IO) { deviceCalendar.listCalendars() }
+            } else emptyList()
+            _deviceCalendars.value = sources
+            if (!profile.calendarSyncEnabled || !permitted || !profile.calendarSourcesPicked) {
                 deviceEvents.value = emptyList()
                 return@launch
             }
+            val ids = profile.selectedCalendarIdSet.intersect(sources.map { it.id }.toSet())
             val now = System.currentTimeMillis()
             val from = now - 60L * 24 * 60 * 60 * 1000
             val to = now + 400L * 24 * 60 * 60 * 1000
             deviceEvents.value = withContext(Dispatchers.IO) {
-                deviceCalendar.queryVisibleEvents(from, to)
+                deviceCalendar.queryVisibleEvents(from, to, ids)
             }
         }
     }
@@ -284,6 +296,39 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
             preferences.setCalendarSyncEnabled(enabled)
             if (enabled) refreshDeviceCalendar()
             else deviceEvents.value = emptyList()
+        }
+    }
+
+    fun setSelectedCalendarSources(ids: Set<Long>, notify: Boolean = true) {
+        viewModelScope.launch {
+            preferences.setSelectedCalendarSources(ids, picked = true)
+            if (notify) {
+                _snackbarMessage.value = when (ids.size) {
+                    0 -> "Phone events hidden"
+                    1 -> "1 calendar synced"
+                    else -> "${ids.size} calendars synced"
+                }
+            }
+            refreshDeviceCalendar()
+        }
+    }
+
+    fun toggleCalendarSource(id: Long, enabled: Boolean) {
+        viewModelScope.launch {
+            val profile = preferences.currentProfile()
+            val sources = _deviceCalendars.value.ifEmpty {
+                if (deviceCalendar.hasPermission()) {
+                    withContext(Dispatchers.IO) { deviceCalendar.listCalendars() }
+                } else emptyList()
+            }
+            val base = if (profile.calendarSourcesPicked) {
+                profile.selectedCalendarIdSet
+            } else {
+                DeviceCalendars.suggestedIds(sources)
+            }
+            val next = base.toMutableSet()
+            if (enabled) next += id else next -= id
+            setSelectedCalendarSources(next, notify = false)
         }
     }
 
@@ -670,10 +715,19 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun bumpLinkedGoal(task: TaskEntity, now: Long) {
         task.linkedGoalId?.let { goalId ->
             goals.value.find { it.id == goalId }?.let { targetGoal ->
-                val updatedGoal = targetGoal.copy(
-                    currentAmount = targetGoal.currentAmount + 1.0,
-                    isCompleted = (targetGoal.currentAmount + 1.0) >= targetGoal.targetAmount
-                )
+                if (targetGoal.isCompleted) return
+                val updatedGoal = if (targetGoal.isSimpleTask) {
+                    targetGoal.copy(
+                        currentAmount = targetGoal.targetAmount.coerceAtLeast(1.0),
+                        isCompleted = true
+                    )
+                } else {
+                    val next = targetGoal.currentAmount + 1.0
+                    targetGoal.copy(
+                        currentAmount = next,
+                        isCompleted = next >= targetGoal.targetAmount
+                    )
+                }
                 repository.updateGoal(updatedGoal)
                 repository.recordGoalProgress(goalId, xpEarned = 10, timestamp = now)
             }
@@ -719,18 +773,61 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
 
     fun toggleSubtask(task: TaskEntity, subtask: String) {
         viewModelScope.launch {
-            val currentCompleted = task.completedSubtasks
-                .split(";")
-                .filter { it.isNotBlank() }
-                .toMutableSet()
-
-            if (currentCompleted.contains(subtask)) {
-                currentCompleted.remove(subtask)
-            } else {
-                currentCompleted.add(subtask)
+            val name = TaskPhases.nameOf(subtask)
+            if (name.isBlank()) return@launch
+            val currentCompleted = TaskPhases.names(task.completedSubtasks).toMutableSet()
+            if (!currentCompleted.add(name)) {
+                currentCompleted.remove(name)
             }
-
             repository.updateTask(task.copy(completedSubtasks = currentCompleted.joinToString(";")))
+        }
+    }
+
+    /** Move the due day, keeping the existing time of day. */
+    fun rescheduleTask(task: TaskEntity, dayStartMillis: Long) {
+        viewModelScope.launch {
+            if (task.isCompleted) return@launch
+            val newDue = DayTime.withTimeFrom(dayStartMillis, task.dueDateMillis)
+            val todayStart = DayTime.startOfDay(System.currentTimeMillis())
+            val offset = DayTime.daysBetween(todayStart, DayTime.startOfDay(newDue))
+            val dayLabel = when (offset) {
+                0 -> "Today"
+                1 -> "Tomorrow"
+                -1 -> "Yesterday"
+                else -> java.text.SimpleDateFormat("EEE, MMM d", java.util.Locale.getDefault())
+                    .format(java.util.Date(newDue))
+            }
+            val updated = task.copy(
+                dueDateMillis = newDue,
+                dueTimeStr = "$dayLabel · ${ReminderScheduler.formatTime(newDue)}"
+            )
+            repository.updateTask(updated)
+            ReminderScheduler.cancelTaskReminders(appContext(), task.id)
+            NowBarHelper.clearTaskEta(appContext(), task.id)
+            if (newDue > System.currentTimeMillis()) {
+                ReminderScheduler.scheduleTaskReminders(
+                    context = appContext(),
+                    itemId = task.id,
+                    dueAtMillis = newDue,
+                    title = updated.title,
+                    body = "It's time for “${updated.title}” (${updated.dueTimeStr})"
+                )
+            }
+            _snackbarMessage.value = "Due $dayLabel"
+            refreshWidgets()
+        }
+    }
+
+    fun rewriteSubtasks(task: TaskEntity, subtasks: String) {
+        viewModelScope.launch {
+            val names = TaskPhases.names(subtasks).toSet()
+            val completed = TaskPhases.names(task.completedSubtasks).filter { it in names }
+            repository.updateTask(
+                task.copy(
+                    subtasks = subtasks,
+                    completedSubtasks = completed.joinToString(";")
+                )
+            )
         }
     }
 
@@ -1237,23 +1334,28 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
         targetAmount: Double,
         unit: String,
         deadlineStr: String,
-        colorHex: String
+        colorHex: String,
+        isSimple: Boolean = false
     ) {
         viewModelScope.launch {
-            // Money goals use the same currency as Budget settings
-            val currencyUnit = if (unit == "$" || unit.equals("money", ignoreCase = true)) {
-                Currencies.symbolOf(userProfile.value.currencyCode)
-            } else {
-                unit.ifBlank { Currencies.symbolOf(userProfile.value.currencyCode) }
+            val simple = isSimple ||
+                unit.equals("done", ignoreCase = true) ||
+                unit.equals("yes", ignoreCase = true)
+            val currencyUnit = when {
+                simple -> "done"
+                unit == "$" || unit.equals("money", ignoreCase = true) ->
+                    Currencies.symbolOf(userProfile.value.currencyCode)
+                else -> unit.ifBlank { Currencies.symbolOf(userProfile.value.currencyCode) }
             }
             repository.addGoal(
                 GoalEntity(
                     title = title.ifBlank { "New Goal" },
                     category = category,
-                    targetAmount = maxOf(1.0, targetAmount),
+                    targetAmount = if (simple) 1.0 else maxOf(1.0, targetAmount),
                     unit = currencyUnit,
-                    deadlineStr = deadlineStr.ifBlank { "2027" },
-                    colorHex = colorHex
+                    deadlineStr = deadlineStr.ifBlank { if (simple) "Whenever" else "2027" },
+                    colorHex = colorHex,
+                    isSimple = simple
                 )
             )
         }
@@ -1271,6 +1373,27 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
             if (delta > 0) {
                 preferences.addXp(15)
                 repository.recordGoalProgress(goal.id, xpEarned = 15)
+                refreshWidgets()
+            }
+        }
+    }
+
+    /** One-tap complete / undo for simple YES DONE goals. */
+    fun completeSimpleGoal(goal: GoalEntity) {
+        viewModelScope.launch {
+            if (goal.isCompleted) {
+                repository.updateGoal(
+                    goal.copy(currentAmount = 0.0, isCompleted = false)
+                )
+            } else {
+                repository.updateGoal(
+                    goal.copy(
+                        currentAmount = goal.targetAmount.coerceAtLeast(1.0),
+                        isCompleted = true
+                    )
+                )
+                preferences.addXp(20)
+                repository.recordGoalProgress(goal.id, xpEarned = 20)
                 refreshWidgets()
             }
         }

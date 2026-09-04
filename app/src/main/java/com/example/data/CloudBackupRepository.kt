@@ -214,7 +214,8 @@ private fun GoalEntity.toMap() = mapOf(
     "unit" to unit,
     "deadlineStr" to deadlineStr,
     "colorHex" to colorHex,
-    "isCompleted" to isCompleted
+    "isCompleted" to isCompleted,
+    "isSimple" to isSimple
 )
 
 private fun AccountEntity.toMap() = mapOf(
@@ -322,7 +323,8 @@ private fun mapToGoal(raw: Any?): GoalEntity? {
         unit = m["unit"] as? String ?: "$",
         deadlineStr = m["deadlineStr"] as? String ?: "",
         colorHex = m["colorHex"] as? String ?: "#A78BFA",
-        isCompleted = m["isCompleted"] as? Boolean ?: false
+        isCompleted = m["isCompleted"] as? Boolean ?: false,
+        isSimple = m["isSimple"] as? Boolean ?: false
     )
 }
 

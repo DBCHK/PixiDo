@@ -12,6 +12,50 @@ import java.util.Locale
 import java.util.TimeZone
 import kotlin.math.abs
 
+data class DeviceCalendarSource(
+    val id: Long,
+    val displayName: String,
+    val accountName: String,
+    val color: Int,
+    val isPrimary: Boolean
+)
+
+object DeviceCalendars {
+    fun parseIds(raw: String): Set<Long> =
+        raw.split(',')
+            .mapNotNull { it.trim().toLongOrNull() }
+            .toSet()
+
+    fun encodeIds(ids: Set<Long>): String =
+        ids.sorted().joinToString(",")
+
+    fun looksLikeHolidayOrBirthday(name: String): Boolean {
+        val n = name.lowercase(Locale.getDefault())
+        return n.contains("holiday") ||
+            n.contains("birthday") ||
+            n.contains("birthdays") ||
+            n.contains("contacts")
+    }
+
+    /**
+     * One primary calendar per account. Skips Holidays / Birthdays so the
+     * same public events aren't imported from every signed-in Google account.
+     */
+    fun suggestedIds(calendars: List<DeviceCalendarSource>): Set<Long> {
+        if (calendars.isEmpty()) return emptySet()
+        val out = mutableSetOf<Long>()
+        calendars.groupBy { it.accountName.ifBlank { it.displayName } }.values.forEach { group ->
+            val usable = group.filterNot { looksLikeHolidayOrBirthday(it.displayName) }
+            val pick = usable.firstOrNull { it.isPrimary }
+                ?: usable.firstOrNull()
+                ?: group.firstOrNull { it.isPrimary }
+            if (pick != null) out += pick.id
+        }
+        if (out.isEmpty()) out += calendars.first().id
+        return out
+    }
+}
+
 /**
  * Reads the device calendar (Google, Samsung, etc.) so those events can
  * be shown alongside PixiDo events. Read-only — we never write back.
@@ -24,12 +68,69 @@ class DeviceCalendarRepository(private val context: Context) {
             Manifest.permission.READ_CALENDAR
         ) == PackageManager.PERMISSION_GRANTED
 
+    fun listCalendars(): List<DeviceCalendarSource> {
+        if (!hasPermission()) return emptyList()
+        val cr = context.contentResolver
+        val projection = arrayOf(
+            CalendarContract.Calendars._ID,
+            CalendarContract.Calendars.CALENDAR_DISPLAY_NAME,
+            CalendarContract.Calendars.ACCOUNT_NAME,
+            CalendarContract.Calendars.CALENDAR_COLOR,
+            CalendarContract.Calendars.VISIBLE,
+            CalendarContract.Calendars.IS_PRIMARY,
+            CalendarContract.Calendars.OWNER_ACCOUNT
+        )
+        val out = ArrayList<DeviceCalendarSource>()
+        runCatching {
+            cr.query(
+                CalendarContract.Calendars.CONTENT_URI,
+                projection,
+                null,
+                null,
+                "${CalendarContract.Calendars.ACCOUNT_NAME} ASC"
+            )?.use { cursor ->
+                val idIdx = cursor.getColumnIndex(CalendarContract.Calendars._ID)
+                val nameIdx = cursor.getColumnIndex(CalendarContract.Calendars.CALENDAR_DISPLAY_NAME)
+                val accountIdx = cursor.getColumnIndex(CalendarContract.Calendars.ACCOUNT_NAME)
+                val colorIdx = cursor.getColumnIndex(CalendarContract.Calendars.CALENDAR_COLOR)
+                val visibleIdx = cursor.getColumnIndex(CalendarContract.Calendars.VISIBLE)
+                val primaryIdx = cursor.getColumnIndex(CalendarContract.Calendars.IS_PRIMARY)
+                val ownerIdx = cursor.getColumnIndex(CalendarContract.Calendars.OWNER_ACCOUNT)
+                if (idIdx < 0) return@use
+                while (cursor.moveToNext()) {
+                    if (visibleIdx >= 0 && cursor.getInt(visibleIdx) == 0) continue
+                    val id = cursor.getLong(idIdx)
+                    val name = if (nameIdx >= 0) cursor.getString(nameIdx)?.trim().orEmpty() else ""
+                    val account = if (accountIdx >= 0) cursor.getString(accountIdx)?.trim().orEmpty() else ""
+                    val owner = if (ownerIdx >= 0) cursor.getString(ownerIdx)?.trim().orEmpty() else ""
+                    val color = if (colorIdx >= 0) cursor.getInt(colorIdx) else 0
+                    val isPrimary = when {
+                        primaryIdx >= 0 -> cursor.getInt(primaryIdx) == 1
+                        owner.isNotBlank() && account.isNotBlank() ->
+                            owner.equals(account, ignoreCase = true)
+                        else -> false
+                    }
+                    out += DeviceCalendarSource(
+                        id = id,
+                        displayName = name.ifBlank { "Calendar" },
+                        accountName = account.ifBlank { "This device" },
+                        color = color,
+                        isPrimary = isPrimary
+                    )
+                }
+            }
+        }
+        return out.distinctBy { it.id }
+    }
+
     fun queryVisibleEvents(
         fromMillis: Long,
-        toMillis: Long
+        toMillis: Long,
+        calendarIds: Set<Long>
     ): List<CalendarEventEntity> {
         if (!hasPermission()) return emptyList()
         if (toMillis <= fromMillis) return emptyList()
+        if (calendarIds.isEmpty()) return emptyList()
 
         val cr = context.contentResolver
         val uri = CalendarContract.Instances.CONTENT_URI.buildUpon().let { builder ->
@@ -45,16 +146,21 @@ class DeviceCalendarRepository(private val context: Context) {
             CalendarContract.Instances.BEGIN,
             CalendarContract.Instances.END,
             CalendarContract.Instances.ALL_DAY,
-            CalendarContract.Instances.CALENDAR_DISPLAY_NAME
+            CalendarContract.Instances.CALENDAR_DISPLAY_NAME,
+            CalendarContract.Instances.CALENDAR_ID
         )
+
+        val idList = calendarIds.joinToString(",") { it.toString() }
+        val selection = "${CalendarContract.Instances.CALENDAR_ID} IN ($idList)"
 
         val timeFmt = SimpleDateFormat("h:mm a", Locale.getDefault())
         val out = ArrayList<CalendarEventEntity>()
+        val seen = HashSet<String>()
 
         cr.query(
             uri,
             projection,
-            null,
+            selection,
             null,
             "${CalendarContract.Instances.BEGIN} ASC"
         )?.use { cursor ->
@@ -73,6 +179,8 @@ class DeviceCalendarRepository(private val context: Context) {
                 val begin = cursor.getLong(beginIdx)
                 val end = cursor.getLong(endIdx)
                 val allDay = cursor.getInt(allDayIdx) == 1
+                val dedupeKey = "${title.lowercase(Locale.getDefault())}|$begin|$allDay"
+                if (!seen.add(dedupeKey)) continue
                 val calendarName = cursor.getString(calIdx)?.trim().orEmpty().ifBlank { "Phone" }
                 val description = cursor.getString(descIdx).orEmpty()
 

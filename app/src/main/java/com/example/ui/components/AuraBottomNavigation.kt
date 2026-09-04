@@ -54,7 +54,7 @@ data class NavigationTab(
 
 val pixiDoTabs = listOf(
     NavigationTab("Tasks", Icons.Filled.CheckCircle, Icons.Outlined.CheckCircle, "nav_tab_tasks"),
-    NavigationTab("Budget", Icons.Filled.AccountBalanceWallet, Icons.Outlined.AccountBalanceWallet, "nav_tab_budget"),
+    NavigationTab("Wallet", Icons.Filled.AccountBalanceWallet, Icons.Outlined.AccountBalanceWallet, "nav_tab_budget"),
     NavigationTab("Calendar", Icons.Filled.CalendarMonth, Icons.Outlined.CalendarMonth, "nav_tab_calendar"),
     NavigationTab("Goals", Icons.Filled.EmojiEvents, Icons.Outlined.EmojiEvents, "nav_tab_goals")
 )
@@ -158,12 +158,12 @@ private fun NavItem(
         label = "tabScale"
     )
     val iconColor by animateColorAsState(
-        targetValue = if (selected) MaterialTheme.colorScheme.primary
+        targetValue = if (selected) com.example.ui.theme.PulseMint
         else MaterialTheme.colorScheme.onSurfaceVariant,
         label = "tabIconColor"
     )
     val labelColor by animateColorAsState(
-        targetValue = if (selected) MaterialTheme.colorScheme.primary
+        targetValue = if (selected) com.example.ui.theme.PulseMint
         else MaterialTheme.colorScheme.onSurfaceVariant,
         label = "tabLabelColor"
     )

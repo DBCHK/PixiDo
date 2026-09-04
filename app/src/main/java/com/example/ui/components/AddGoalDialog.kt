@@ -34,17 +34,26 @@ import com.example.data.Currencies
 fun AddGoalDialog(
     currencyCode: String = "USD",
     onDismiss: () -> Unit,
-    onAddGoal: (title: String, category: String, targetAmount: Double, unit: String, deadlineStr: String, colorHex: String) -> Unit
+    onAddGoal: (
+        title: String,
+        category: String,
+        targetAmount: Double,
+        unit: String,
+        deadlineStr: String,
+        colorHex: String,
+        isSimple: Boolean
+    ) -> Unit
 ) {
     val moneySymbol = Currencies.symbolOf(currencyCode)
     var title by remember { mutableStateOf("") }
-    var category by remember { mutableStateOf("Career") }
+    var category by remember { mutableStateOf("Personal") }
     var targetAmountStr by remember { mutableStateOf("") }
     // "$" means money — ViewModel maps it to budget currency symbol
     var unit by remember { mutableStateOf("$") }
     var deadlineStr by remember { mutableStateOf("") }
+    var isSimple by remember { mutableStateOf(true) }
 
-    val categories = listOf("Travel", "Savings", "Fitness", "Career", "Learning", "Personal")
+    val categories = listOf("Personal", "Travel", "Savings", "Fitness", "Career", "Learning")
     val units = listOf(
         "$" to "Money ($moneySymbol · $currencyCode)",
         "tasks" to "tasks",
@@ -78,7 +87,7 @@ fun AddGoalDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "New Goal",
+                        text = if (isSimple) "Simple task" else "New Goal",
                         style = MaterialTheme.typography.headlineSmall,
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -87,18 +96,48 @@ fun AddGoalDialog(
 
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Money goals use your budget currency ($currencyCode)",
+                    text = if (isSimple) "Tap YES DONE when you’ve done it. That’s it."
+                    else "Money goals use your budget currency ($currencyCode)",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
                 Spacer(modifier = Modifier.height(14.dp))
 
+                Text(
+                    text = "Type",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    PixiChip(
+                        label = "Simple task",
+                        selected = isSimple,
+                        onClick = { isSimple = true },
+                        modifier = Modifier.testTag("goal_type_simple")
+                    )
+                    PixiChip(
+                        label = "Tracked goal",
+                        selected = !isSimple,
+                        onClick = { isSimple = false },
+                        modifier = Modifier.testTag("goal_type_tracked")
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
-                    label = { Text("Goal Name") },
-                    placeholder = { Text("e.g. Save for Summer Trip") },
+                    label = { Text(if (isSimple) "What do you want to get done?" else "Goal Name") },
+                    placeholder = {
+                        Text(if (isSimple) "e.g. Drink 2L of water" else "e.g. Save for Summer Trip")
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("input_goal_title"),
@@ -109,62 +148,78 @@ fun AddGoalDialog(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    OutlinedTextField(
-                        value = targetAmountStr,
-                        onValueChange = { targetAmountStr = it },
-                        label = {
-                            Text(
-                                if (unit == "$") "Target ($moneySymbol)"
-                                else "Target ($unit)"
-                            )
-                        },
-                        placeholder = { Text("2000") },
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("input_goal_target"),
-                        singleLine = true,
-                        shape = PixiFieldShape,
-                        colors = fieldColors
+                if (!isSimple) {
+                    Row(modifier = Modifier.fillMaxWidth()) {
+                        OutlinedTextField(
+                            value = targetAmountStr,
+                            onValueChange = { targetAmountStr = it },
+                            label = {
+                                Text(
+                                    if (unit == "$") "Target ($moneySymbol)"
+                                    else "Target ($unit)"
+                                )
+                            },
+                            placeholder = { Text("2000") },
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("input_goal_target"),
+                            singleLine = true,
+                            shape = PixiFieldShape,
+                            colors = fieldColors
+                        )
+                        Spacer(modifier = Modifier.padding(4.dp))
+                        OutlinedTextField(
+                            value = deadlineStr,
+                            onValueChange = { deadlineStr = it },
+                            label = { Text("Deadline") },
+                            placeholder = { Text("Dec 2027") },
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(start = 8.dp),
+                            singleLine = true,
+                            shape = PixiFieldShape,
+                            colors = fieldColors
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Text(
+                        text = "Unit",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Spacer(modifier = Modifier.padding(4.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        units.forEach { (key, label) ->
+                            PixiChip(
+                                label = label,
+                                selected = key == unit,
+                                onClick = { unit = key }
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+                } else {
                     OutlinedTextField(
                         value = deadlineStr,
                         onValueChange = { deadlineStr = it },
-                        label = { Text("Deadline") },
-                        placeholder = { Text("Dec 2027") },
+                        label = { Text("When (optional)") },
+                        placeholder = { Text("Today · this week") },
                         modifier = Modifier
-                            .weight(1f)
-                            .padding(start = 8.dp),
+                            .fillMaxWidth()
+                            .testTag("input_goal_deadline_simple"),
                         singleLine = true,
                         shape = PixiFieldShape,
                         colors = fieldColors
                     )
+                    Spacer(modifier = Modifier.height(14.dp))
                 }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                Text(
-                    text = "Unit",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    units.forEach { (key, label) ->
-                        PixiChip(
-                            label = label,
-                            selected = key == unit,
-                            onClick = { unit = key }
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
 
                 Text(
                     text = "Category",
@@ -190,11 +245,19 @@ fun AddGoalDialog(
                 Spacer(modifier = Modifier.height(22.dp))
 
                 PixiPrimaryButton(
-                    text = "Create Goal",
+                    text = if (isSimple) "Add simple task" else "Create Goal",
                     onClick = {
-                        val parsedAmt = targetAmountStr.toDoubleOrNull() ?: 1.0
+                        val parsedAmt = if (isSimple) 1.0 else (targetAmountStr.toDoubleOrNull() ?: 1.0)
                         if (title.isNotBlank()) {
-                            onAddGoal(title, category, parsedAmt, unit, deadlineStr, "#C4A8F5")
+                            onAddGoal(
+                                title,
+                                category,
+                                parsedAmt,
+                                if (isSimple) "done" else unit,
+                                deadlineStr,
+                                "#C4A8F5",
+                                isSimple
+                            )
                             onDismiss()
                         }
                     },

@@ -45,9 +45,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -61,10 +64,12 @@ import com.example.notify.ReminderScheduler
 import com.example.sms.AppForegroundState
 import com.example.sms.SmsInboxScanner
 import com.example.ui.AuraViewModel
+import com.example.data.DeviceCalendars
 import com.example.ui.components.AddBudgetDialog
 import com.example.ui.components.AddEventDialog
 import com.example.ui.components.AddGoalDialog
 import com.example.ui.components.AddTaskDialog
+import com.example.ui.components.CalendarSourcesDialog
 import com.example.ui.components.AutoHideBottomNavigation
 import com.example.ui.components.FocusTimerModal
 import com.example.ui.components.LocalGlassEnabled
@@ -82,6 +87,7 @@ import com.example.ui.screens.GoalsScreen
 import com.example.ui.screens.ProfileDialog
 import com.example.ui.screens.TasksScreen
 import com.example.ui.theme.PixiDoTheme
+import com.example.ui.theme.WalletInk
 import com.example.widget.WidgetActions
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
@@ -219,6 +225,7 @@ fun PixiDoApp(
     val goalActivity by viewModel.goalActivity.collectAsStateWithLifecycle()
     val notes by viewModel.notes.collectAsStateWithLifecycle()
     val profile by viewModel.userProfile.collectAsStateWithLifecycle()
+    val deviceCalendars by viewModel.deviceCalendars.collectAsStateWithLifecycle()
 
     val selectedTab by viewModel.selectedTab.collectAsStateWithLifecycle()
     val selectedCalendarDate by viewModel.selectedCalendarDate.collectAsStateWithLifecycle()
@@ -342,14 +349,16 @@ fun PixiDoApp(
     }
 
     var smsPermissionAsked by remember { mutableStateOf(false) }
+    var calendarPermissionAsked by remember { mutableStateOf(false) }
+    var showCalendarPicker by remember { mutableStateOf(false) }
 
     val calendarPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (granted) viewModel.refreshDeviceCalendar()
+        if (granted) {
+            viewModel.refreshDeviceCalendar()
+        }
     }
-
-    var calendarPermissionAsked by remember { mutableStateOf(false) }
 
     fun requestCalendarPermissionIfNeeded(forceAsk: Boolean = false) {
         if (!forceAsk && !profile.calendarSyncEnabled) return
@@ -411,6 +420,21 @@ fun PixiDoApp(
         if (showSplash) return@LaunchedEffect
         if (profile.calendarSyncEnabled) {
             requestCalendarPermissionIfNeeded(forceAsk = false)
+        }
+    }
+
+    LaunchedEffect(
+        showSplash,
+        profile.calendarSyncEnabled,
+        profile.calendarSourcesPicked,
+        deviceCalendars.size
+    ) {
+        if (showSplash) return@LaunchedEffect
+        if (profile.calendarSyncEnabled &&
+            !profile.calendarSourcesPicked &&
+            deviceCalendars.isNotEmpty()
+        ) {
+            showCalendarPicker = true
         }
     }
 
@@ -494,6 +518,15 @@ fun PixiDoApp(
     }
 
     val glassOn = profile.glassEffectEnabled
+    val onPulseTab = selectedTab == 0 || selectedTab == 2
+    val schemeBg = MaterialTheme.colorScheme.background
+    val canvasColor = if (onPulseTab) schemeBg else WalletInk
+    val view = LocalView.current
+    val lightStatusBars = onPulseTab && schemeBg.luminance() > 0.5f
+    LaunchedEffect(lightStatusBars) {
+        val window = (view.context as? android.app.Activity)?.window ?: return@LaunchedEffect
+        WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = lightStatusBars
+    }
     CompositionLocalProvider(
         LocalHazeState provides hazeState.takeIf { glassOn },
         LocalGlassEnabled provides glassOn
@@ -513,8 +546,8 @@ fun PixiDoApp(
                         Modifier
                     }
                 )
-                .background(MaterialTheme.colorScheme.background),
-            containerColor = MaterialTheme.colorScheme.background,
+                .background(canvasColor),
+            containerColor = canvasColor,
             // Bottom bar is overlaid so it can slide away without leaving a gap
             bottomBar = {},
             snackbarHost = {
@@ -544,7 +577,7 @@ fun PixiDoApp(
                     .nestedScroll(nestedScrollConnection)
                     .padding(top = innerPadding.calculateTopPadding())
                     .windowInsetsPadding(WindowInsets.navigationBars)
-                    .background(MaterialTheme.colorScheme.background)
+                    .background(canvasColor)
                     .then(if (glassOn) Modifier.hazeSource(state = hazeState) else Modifier),
                 beyondViewportPageCount = 0,
                 userScrollEnabled = !showSplash
@@ -568,25 +601,36 @@ fun PixiDoApp(
                         onSnoozeTask = { viewModel.snoozeTask(it) },
                         onPinTask = { viewModel.toggleTaskPinned(it) },
                         onSkipRepeat = { viewModel.skipRepeatOccurrence(it) },
+                        onRescheduleTask = { task, day -> viewModel.rescheduleTask(task, day) },
+                        onRewriteSubtasks = { task, encoded -> viewModel.rewriteSubtasks(task, encoded) },
                         onOpenAddTask = {
                             sound.play(Sfx.DIALOG_OPEN)
                             editingTask = null
                             addTaskForDate = null
                             showAddTaskDialog = true
                         },
-                        onQuickAddTask = { title ->
-                            val dayStart = java.util.Calendar.getInstance().apply {
-                                set(java.util.Calendar.HOUR_OF_DAY, 0)
+                        onCompleteSimpleGoal = { goal ->
+                            if (goal.isCompleted) sound.play(Sfx.TASK_UNDO)
+                            else sound.play(Sfx.GOAL_COMPLETE)
+                            viewModel.completeSimpleGoal(goal)
+                        },
+                        onDeleteSimpleGoal = {
+                            sound.play(Sfx.DELETE)
+                            viewModel.deleteGoal(it)
+                        },
+                        onQuickAddTask = { title, dueMillis ->
+                            val due = if (dueMillis > 0) dueMillis
+                            else java.util.Calendar.getInstance().apply {
+                                set(java.util.Calendar.HOUR_OF_DAY, 18)
                                 set(java.util.Calendar.MINUTE, 0)
                                 set(java.util.Calendar.SECOND, 0)
                                 set(java.util.Calendar.MILLISECOND, 0)
                             }.timeInMillis
-                            val due = dayStart + 18L * 60 * 60 * 1000
                             viewModel.addTask(
                                 title = title,
                                 category = "Personal",
                                 priority = "QUICK_WIN",
-                                dueTimeStr = "Today · quick add",
+                                dueTimeStr = "Quick add",
                                 dueDateMillis = due,
                                 subtasks = "",
                                 linkedGoalId = null
@@ -605,6 +649,8 @@ fun PixiDoApp(
                         accounts = accounts,
                         currencyCode = profile.currencyCode,
                         monthlyAllowance = profile.monthlyBudgetLimit,
+                        profile = profile,
+                        onOpenProfile = { viewModel.openProfile() },
                         onDeleteBudgetItem = {
                             sound.play(Sfx.DELETE)
                             viewModel.deleteBudgetItem(it)
@@ -643,6 +689,8 @@ fun PixiDoApp(
                         events = calendarEvents,
                         tasks = tasks,
                         selectedDateMillis = selectedCalendarDate,
+                        profile = profile,
+                        onOpenProfile = { viewModel.openProfile() },
                         onSelectDate = {
                             sound.play(Sfx.DAY_SELECT)
                             viewModel.setSelectedCalendarDate(it)
@@ -680,12 +728,19 @@ fun PixiDoApp(
                         goals = goals,
                         currencyCode = profile.currencyCode,
                         goalActivity = goalActivity,
+                        profile = profile,
+                        onOpenProfile = { viewModel.openProfile() },
                         onUpdateGoalProgress = { goal, delta ->
                             val willComplete =
                                 delta > 0 && goal.currentAmount + delta >= goal.targetAmount
                             if (willComplete) sound.play(Sfx.GOAL_COMPLETE)
                             else sound.play(Sfx.GOAL_PROGRESS)
                             viewModel.updateGoalProgress(goal, delta)
+                        },
+                        onCompleteSimpleGoal = { goal ->
+                            if (goal.isCompleted) sound.play(Sfx.TASK_UNDO)
+                            else sound.play(Sfx.GOAL_COMPLETE)
+                            viewModel.completeSimpleGoal(goal)
                         },
                         onDeleteGoal = {
                             sound.play(Sfx.DELETE)
@@ -811,9 +866,9 @@ fun PixiDoApp(
                 sound.play(Sfx.DIALOG_CLOSE)
                 showAddGoalDialog = false
             },
-            onAddGoal = { title, category, targetAmount, unit, deadlineStr, colorHex ->
+            onAddGoal = { title, category, targetAmount, unit, deadlineStr, colorHex, isSimple ->
                 sound.play(Sfx.ADD_GOAL)
-                viewModel.addGoal(title, category, targetAmount, unit, deadlineStr, colorHex)
+                viewModel.addGoal(title, category, targetAmount, unit, deadlineStr, colorHex, isSimple)
             }
         )
     }
@@ -872,6 +927,31 @@ fun PixiDoApp(
         )
     }
 
+    if (showCalendarPicker) {
+        CalendarSourcesDialog(
+            calendars = deviceCalendars,
+            selectedIds = if (profile.calendarSourcesPicked) {
+                profile.selectedCalendarIdSet
+            } else {
+                DeviceCalendars.suggestedIds(deviceCalendars)
+            },
+            onConfirm = { ids ->
+                sound.play(Sfx.TAP_CONFIRM)
+                viewModel.setSelectedCalendarSources(ids)
+                showCalendarPicker = false
+            },
+            onDismiss = {
+                sound.play(Sfx.DIALOG_CLOSE)
+                if (!profile.calendarSourcesPicked) {
+                    viewModel.setSelectedCalendarSources(
+                        DeviceCalendars.suggestedIds(deviceCalendars)
+                    )
+                }
+                showCalendarPicker = false
+            }
+        )
+    }
+
     if (showProfile) {
         val authBusy by viewModel.authBusy.collectAsStateWithLifecycle()
         val backupBusy by viewModel.backupBusy.collectAsStateWithLifecycle()
@@ -919,6 +999,11 @@ fun PixiDoApp(
                 if (enabled) {
                     requestCalendarPermissionIfNeeded(forceAsk = true)
                 }
+            },
+            deviceCalendars = deviceCalendars,
+            onCalendarSourceToggle = { id, enabled ->
+                sound.play(Sfx.SETTINGS_CHANGE)
+                viewModel.toggleCalendarSource(id, enabled)
             },
             onNotificationSoundSelected = { option ->
                 sound.play(Sfx.SETTINGS_CHANGE)

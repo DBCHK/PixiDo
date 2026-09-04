@@ -84,10 +84,16 @@ data class UserProfile(
     /** Last account used when assigning an SMS transaction (0 = none). */
     val lastSmsAccountId: Int = 0,
     /** Show events from the phone / Google calendar inside PixiDo Calendar. */
-    val calendarSyncEnabled: Boolean = true
+    val calendarSyncEnabled: Boolean = true,
+    /** Comma-separated CalendarContract ids the user chose to display. */
+    val selectedCalendarIds: String = "",
+    /** True once the user has confirmed which device calendars to show. */
+    val calendarSourcesPicked: Boolean = false
 ) {
     val isSignedIn: Boolean get() = googleUid.isNotBlank()
     val hasCustomAccent: Boolean get() = accentColorHex.isNotBlank()
+    val selectedCalendarIdSet: Set<Long>
+        get() = DeviceCalendars.parseIds(selectedCalendarIds)
 }
 
 class UserPreferencesRepository(private val context: Context) {
@@ -117,6 +123,8 @@ class UserPreferencesRepository(private val context: Context) {
         val SMS_IMPORT = booleanPreferencesKey("sms_import_enabled")
         val LAST_SMS_ACCOUNT = intPreferencesKey("last_sms_account_id")
         val CALENDAR_SYNC = booleanPreferencesKey("calendar_sync_enabled")
+        val SELECTED_CALENDAR_IDS = stringPreferencesKey("selected_calendar_ids")
+        val CALENDAR_SOURCES_PICKED = booleanPreferencesKey("calendar_sources_picked")
     }
 
     val userProfile: Flow<UserProfile> = context.dataStore.data.map { prefs ->
@@ -160,7 +168,9 @@ class UserPreferencesRepository(private val context: Context) {
         // Default on so bank SMS prompts work once permission is granted
         smsImportEnabled = this[Keys.SMS_IMPORT] ?: true,
         lastSmsAccountId = this[Keys.LAST_SMS_ACCOUNT] ?: 0,
-        calendarSyncEnabled = this[Keys.CALENDAR_SYNC] ?: true
+        calendarSyncEnabled = this[Keys.CALENDAR_SYNC] ?: true,
+        selectedCalendarIds = this[Keys.SELECTED_CALENDAR_IDS].orEmpty(),
+        calendarSourcesPicked = this[Keys.CALENDAR_SOURCES_PICKED] ?: false
     )
 
     suspend fun updateProfile(
@@ -240,7 +250,9 @@ class UserPreferencesRepository(private val context: Context) {
             "backupFrequency" to p.backupFrequency.name,
             "smsImportEnabled" to p.smsImportEnabled,
             "lastSmsAccountId" to p.lastSmsAccountId,
-            "calendarSyncEnabled" to p.calendarSyncEnabled
+            "calendarSyncEnabled" to p.calendarSyncEnabled,
+            "selectedCalendarIds" to p.selectedCalendarIds,
+            "calendarSourcesPicked" to p.calendarSourcesPicked
         )
     }
 
@@ -272,6 +284,8 @@ class UserPreferencesRepository(private val context: Context) {
                 is Number -> prefs[Keys.LAST_SMS_ACCOUNT] = v.toInt()
             }
             (map["calendarSyncEnabled"] as? Boolean)?.let { prefs[Keys.CALENDAR_SYNC] = it }
+            (map["selectedCalendarIds"] as? String)?.let { prefs[Keys.SELECTED_CALENDAR_IDS] = it }
+            (map["calendarSourcesPicked"] as? Boolean)?.let { prefs[Keys.CALENDAR_SOURCES_PICKED] = it }
         }
     }
 
@@ -337,6 +351,13 @@ class UserPreferencesRepository(private val context: Context) {
     suspend fun setCalendarSyncEnabled(enabled: Boolean) {
         context.dataStore.edit { it[Keys.CALENDAR_SYNC] = enabled }
     }
+
+    suspend fun setSelectedCalendarSources(ids: Set<Long>, picked: Boolean = true) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.SELECTED_CALENDAR_IDS] = DeviceCalendars.encodeIds(ids)
+            prefs[Keys.CALENDAR_SOURCES_PICKED] = picked
+        }
+    }
 }
 
 /** Supported currencies for budget tracking. */
@@ -367,5 +388,29 @@ object Currencies {
     fun format(amount: Double, code: String): String {
         val symbol = symbolOf(code)
         return "$symbol${"%.2f".format(amount)}"
+    }
+
+    /** Integer + cents split so the wallet hero can render $7,854 .43 */
+    data class SplitMoney(
+        val symbol: String,
+        val whole: String,
+        val cents: String,
+        val negative: Boolean
+    ) {
+        val signedSymbol: String get() = if (negative) "-$symbol" else symbol
+    }
+
+    fun split(amount: Double, code: String): SplitMoney {
+        val negative = amount < 0
+        val centsTotal = kotlin.math.round(kotlin.math.abs(amount) * 100.0).toLong()
+        val wholeNum = centsTotal / 100L
+        val centsNum = (centsTotal % 100L).toInt()
+        val grouped = java.text.NumberFormat.getIntegerInstance(java.util.Locale.US).format(wholeNum)
+        return SplitMoney(
+            symbol = symbolOf(code),
+            whole = grouped,
+            cents = "%02d".format(centsNum),
+            negative = negative
+        )
     }
 }

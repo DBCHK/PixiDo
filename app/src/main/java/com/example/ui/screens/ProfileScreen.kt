@@ -61,6 +61,8 @@ import com.example.audio.LocalSoundEngine
 import com.example.audio.Sfx
 import com.example.data.AppThemeOption
 import com.example.data.BackupFrequency
+import com.example.data.DeviceCalendarSource
+import com.example.data.DeviceCalendars
 import com.example.data.NotificationSoundOption
 import com.example.data.UserProfile
 import com.example.notify.displayName
@@ -95,6 +97,8 @@ fun ProfileDialog(
     onGlassEffectToggle: (Boolean) -> Unit = {},
     onSmsImportToggle: (Boolean) -> Unit = {},
     onCalendarSyncToggle: (Boolean) -> Unit = {},
+    deviceCalendars: List<DeviceCalendarSource> = emptyList(),
+    onCalendarSourceToggle: (Long, Boolean) -> Unit = { _, _ -> },
     onNotificationSoundSelected: (NotificationSoundOption) -> Unit = {},
     onGoogleSignIn: () -> Unit = {},
     onGoogleSignOut: () -> Unit = {},
@@ -433,7 +437,13 @@ fun ProfileDialog(
 
                 IosSection(
                     title = "Calendar",
-                    footer = "Events from Google and other phone calendars appear in PixiDo."
+                    footer = if (!profile.calendarSyncEnabled) {
+                        "Turn this on, then pick which phone calendars to show."
+                    } else if (deviceCalendars.isEmpty()) {
+                        "Grant calendar permission to choose which calendars appear."
+                    } else {
+                        "Uncheck Holidays and extra accounts to stop duplicate events."
+                    }
                 ) {
                     IosToggleRow(
                         title = "Sync Phone Calendar",
@@ -441,8 +451,28 @@ fun ProfileDialog(
                         checked = profile.calendarSyncEnabled,
                         onCheckedChange = onCalendarSyncToggle,
                         testTag = "toggle_calendar_sync",
-                        showDivider = false
+                        showDivider = profile.calendarSyncEnabled && deviceCalendars.isNotEmpty()
                     )
+                    if (profile.calendarSyncEnabled && deviceCalendars.isNotEmpty()) {
+                        val selected = if (profile.calendarSourcesPicked) {
+                            profile.selectedCalendarIdSet
+                        } else {
+                            DeviceCalendars.suggestedIds(deviceCalendars)
+                        }
+                        deviceCalendars.forEachIndexed { index, calendar ->
+                            IosToggleRow(
+                                title = calendar.displayName,
+                                subtitle = buildString {
+                                    append(calendar.accountName)
+                                    if (calendar.isPrimary) append(" · Primary")
+                                },
+                                checked = calendar.id in selected,
+                                onCheckedChange = { onCalendarSourceToggle(calendar.id, it) },
+                                testTag = "calendar_source_${calendar.id}",
+                                showDivider = index < deviceCalendars.lastIndex
+                            )
+                        }
+                    }
                 }
 
                 IosSection(

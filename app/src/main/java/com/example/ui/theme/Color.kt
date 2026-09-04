@@ -39,6 +39,12 @@ val PixiDarkBorder = Color(0xFF38383A)
 val PixiDarkOnBg = Color(0xFFF5F5F7)
 val PixiDarkMuted = Color(0xFF8E8E93)
 
+/** Wallet hero — always ink, even in light theme (reference). */
+val WalletInk = Color(0xFF0B0D12)
+val WalletOnInk = Color(0xFFF5F5F7)
+val WalletMuted = Color(0xFF8E9199)
+val WalletPill = Color(0xFF1C1F27)
+
 // Legacy aliases used across the app
 val PixiViolet = PixiLavenderDeep
 val PixiVioletLight = PixiLavender
@@ -136,6 +142,20 @@ val AccentPalette = listOf(
     "#F43F5E", // cherry
     "#94A3B8"  // slate
 )
+
+// idea5 Pulse kit — mint / coral / ink on paper
+val PulseMint = Color(0xFF2ED9A5)
+val PulseMintDeep = Color(0xFF17C492)
+val PulseCoral = Color(0xFFFF5C3A)
+val PulseCoralSoft = Color(0xFFFFE3DB)
+val PulsePurple = Color(0xFF7B74F6)
+val PulseOrangeBar = Color(0xFFFF7A45)
+val PulseInk = Color(0xFF111111)
+val PulsePaper = Color(0xFFF7F7F8)
+val PulseCard = Color(0xFFFFFFFF)
+val PulseStripe = Color(0xFFE4E4E7)
+val PulseIconFill = Color(0xFFF1F1F3)
+val PulseMuted = Color(0xFF9B9B9F)
 
 // Contribution heatmap — soft lilac scale
 val HeatmapEmpty = Color(0xFF2A2436)

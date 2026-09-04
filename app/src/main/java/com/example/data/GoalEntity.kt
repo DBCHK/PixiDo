@@ -10,8 +10,15 @@ data class GoalEntity(
     val category: String, // "Travel ✈️", "Savings 💰", "Fitness 💪", "Career 🚀", "Mindset 🧠"
     val targetAmount: Double,
     val currentAmount: Double = 0.0,
-    val unit: String = "$", // "$", "tasks", "books", "kms", "%"
+    val unit: String = "$", // "$", "tasks", "books", "kms", "%", "done"
     val deadlineStr: String = "End of Year",
     val colorHex: String = "#A78BFA",
-    val isCompleted: Boolean = false
-)
+    val isCompleted: Boolean = false,
+    /** Checklist goal: one tap on YES DONE marks it complete. No amount tracking. */
+    val isSimple: Boolean = false
+) {
+    val isSimpleTask: Boolean
+        get() = isSimple ||
+            unit.equals("done", ignoreCase = true) ||
+            unit.equals("yes", ignoreCase = true)
+}

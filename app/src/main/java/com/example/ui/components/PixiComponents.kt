@@ -180,6 +180,43 @@ fun PixiSecondaryButton(
     }
 }
 
+/** Satisfying one-tap complete CTA used on simple goals and task cards. */
+@Composable
+fun YesDoneButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    compact: Boolean = false
+) {
+    val height = if (compact) 34.dp else 46.dp
+    val textSize = if (compact) 12.sp else 15.sp
+    Button(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier.height(height),
+        shape = PixiPillShape,
+        colors = ButtonDefaults.buttonColors(
+            containerColor = Color(0xFF34D399),
+            contentColor = Color(0xFF06281C),
+            disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+            disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+        ),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+            horizontal = if (compact) 12.dp else 18.dp,
+            vertical = 0.dp
+        ),
+        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
+    ) {
+        Text(
+            text = "YES DONE",
+            fontWeight = FontWeight.ExtraBold,
+            fontSize = textSize,
+            maxLines = 1,
+            letterSpacing = 0.4.sp
+        )
+    }
+}
+
 /** Ghost outline pill. */
 @Composable
 fun PixiOutlineButton(
@@ -416,13 +453,13 @@ fun PixiYellowFab(
             modifier = Modifier
                 .size(size)
                 .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primary),
+                .background(com.example.ui.theme.PulseCoral),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = Icons.Filled.Add,
                 contentDescription = "Add",
-                tint = MaterialTheme.colorScheme.onPrimary,
+                tint = Color.White,
                 modifier = Modifier.size(size * 0.52f)
             )
         }
