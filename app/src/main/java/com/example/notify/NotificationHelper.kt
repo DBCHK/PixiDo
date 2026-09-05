@@ -19,7 +19,7 @@ object NotificationHelper {
 
     private const val CHANNEL_BASE = "pixido_reminders"
     /** High-priority channel for task ETA with custom calm ringtone. */
-    private const val CHANNEL_ETA = "pixido_eta_ringtone_v2"
+    private const val CHANNEL_ETA = "pixido_eta_ringtone_v4"
 
     const val EXTRA_ETA_POPUP = "pixido_eta_popup"
     const val EXTRA_ETA_TITLE = "pixido_eta_title"
@@ -32,7 +32,7 @@ object NotificationHelper {
     private const val SMS_NOTIFICATION_BASE = 71_000
 
     fun channelIdFor(option: NotificationSoundOption): String =
-        "${CHANNEL_BASE}_${option.name.lowercase()}_v2"
+        "${CHANNEL_BASE}_${option.name.lowercase()}_v4"
 
     fun ensureChannels(context: Context, option: NotificationSoundOption = NotificationSoundOption.SOFT) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
@@ -73,8 +73,13 @@ object NotificationHelper {
         // Clean up legacy channel ids from earlier builds
         manager.deleteNotificationChannel(CHANNEL_BASE)
         manager.deleteNotificationChannel("pixido_eta_ringtone")
+        manager.deleteNotificationChannel("pixido_eta_ringtone_v2")
+        manager.deleteNotificationChannel("pixido_eta_ringtone_v3")
         NotificationSoundOption.entries.forEach { opt ->
-            manager.deleteNotificationChannel("${CHANNEL_BASE}_${opt.name.lowercase()}")
+            val key = opt.name.lowercase()
+            manager.deleteNotificationChannel("${CHANNEL_BASE}_$key")
+            manager.deleteNotificationChannel("${CHANNEL_BASE}_${key}_v2")
+            manager.deleteNotificationChannel("${CHANNEL_BASE}_${key}_v3")
         }
     }
 
@@ -132,11 +137,11 @@ object NotificationHelper {
     fun soundUri(context: Context, option: NotificationSoundOption): Uri {
         return when (option) {
             NotificationSoundOption.SOFT ->
-                Uri.parse("android.resource://${context.packageName}/${R.raw.notif_soft}")
+                Uri.parse("android.resource://${context.packageName}/${R.raw.sfx_task}")
             NotificationSoundOption.BRIGHT ->
-                Uri.parse("android.resource://${context.packageName}/${R.raw.notif_bright}")
+                Uri.parse("android.resource://${context.packageName}/${R.raw.sfx_goal}")
             NotificationSoundOption.CALM ->
-                Uri.parse("android.resource://${context.packageName}/${R.raw.notif_calm}")
+                Uri.parse("android.resource://${context.packageName}/${R.raw.sfx_transaction}")
             NotificationSoundOption.SYSTEM ->
                 Settings.System.DEFAULT_NOTIFICATION_URI
         }
@@ -193,7 +198,7 @@ object NotificationHelper {
         }
 
         val notification = NotificationCompat.Builder(context, channelId)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.ic_stat_pixido)
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
@@ -307,8 +312,8 @@ object NotificationHelper {
 }
 
 fun NotificationSoundOption.displayName(): String = when (this) {
-    NotificationSoundOption.SOFT -> "Soft chime"
-    NotificationSoundOption.BRIGHT -> "Sweet ping"
-    NotificationSoundOption.CALM -> "Calm pad"
+    NotificationSoundOption.SOFT -> "Task reminder"
+    NotificationSoundOption.BRIGHT -> "Goal reminder"
+    NotificationSoundOption.CALM -> "Transaction reminder"
     NotificationSoundOption.SYSTEM -> "System default"
 }

@@ -25,17 +25,16 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SwipeToDismissBox
-import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -46,7 +45,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -77,13 +75,13 @@ import com.example.ui.components.PulseTaskCard
 import com.example.ui.components.PulsePhaseItem
 import com.example.ui.components.PulseTimelineBar
 import com.example.ui.components.PulseTimelineCard
+import com.example.ui.components.TwoStepSwipeBox
 import com.example.ui.components.PulseTimelineColors
 import com.example.ui.components.PulseTimelineDay
 import com.example.ui.components.PulseTopRow
 import com.example.ui.components.PulseActionRow
 import com.example.ui.components.PulseBlackBanner
 import com.example.ui.components.PulseCelebrate
-import com.example.ui.components.PulseDayRing
 import com.example.ui.components.PulseQuickCapture
 import com.example.ui.components.PulseWeekStrip
 import com.example.ui.components.InkSheetSearchField
@@ -283,14 +281,6 @@ private fun TasksHome(
     val busyDays = remember(tasks) {
         tasks.filter { !it.isCompleted }.map { tDueDay(it) }.toSet()
     }
-    val doneToday = remember(tasks, todayStart) {
-        tasks.count { t ->
-            t.isCompleted && t.completedAtMillis != null && t.completedAtMillis!! >= todayStart
-        }
-    }
-    val ringTotal = (openToday + doneToday).coerceAtLeast(0)
-    val ringProgress = if (ringTotal == 0) 0f else doneToday / ringTotal.toFloat()
-
     val filtered by remember(tasks, query, seeAll, todayStart, tomorrowStart, focusDay) {
         derivedStateOf {
             val searched = if (query.isBlank()) tasks
@@ -330,7 +320,7 @@ private fun TasksHome(
     }
     val openSimpleGoals = remember(goals, seeAll, query) {
         if (query.isNotBlank()) emptyList()
-        else goals.filter { it.isSimpleTask && !it.isCompleted }
+        else goals.filter { it.isSimpleTask && !it.isDailyHabit && !it.isCompleted }
     }
 
     LazyColumn(
@@ -372,40 +362,22 @@ private fun TasksHome(
                 }
             )
             Spacer(modifier = Modifier.height(22.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Start Your Day",
-                        fontSize = 32.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = ink,
-                        lineHeight = 38.sp,
-                        letterSpacing = (-0.6).sp
-                    )
-                    Text(
-                        text = "& Be Productive ✌️",
-                        fontSize = 32.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = ink,
-                        lineHeight = 38.sp,
-                        letterSpacing = (-0.6).sp
-                    )
-                }
-                PulseDayRing(
-                    progress = ringProgress,
-                    center = if (ringTotal == 0) "0" else "$doneToday/$ringTotal",
-                    caption = when {
-                        ringTotal == 0 -> "Plan"
-                        ringProgress >= 0.999f -> "Clear"
-                        else -> "Today"
-                    },
-                    onClick = {
-                        sound.play(Sfx.FILTER_SELECT)
-                        focusDay = todayStart
-                    }
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "Start Your Day",
+                    fontSize = 32.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = ink,
+                    lineHeight = 38.sp,
+                    letterSpacing = (-0.6).sp
+                )
+                Text(
+                    text = "& Be Productive ✌️",
+                    fontSize = 32.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = ink,
+                    lineHeight = 38.sp,
+                    letterSpacing = (-0.6).sp
                 )
             }
             Spacer(modifier = Modifier.height(16.dp))
@@ -907,7 +879,6 @@ private fun TaskPulseDetail(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun HomeTaskRow(
     task: TaskEntity,
@@ -921,24 +892,6 @@ private fun HomeTaskRow(
     onSkip: () -> Unit
 ) {
     val sound = LocalSoundEngine.current
-    val dismissState = rememberSwipeToDismissBoxState(
-        positionalThreshold = { it * 0.45f },
-        confirmValueChange = { value ->
-            when (value) {
-                SwipeToDismissBoxValue.StartToEnd -> {
-                    sound.play(if (task.isCompleted) Sfx.TASK_UNDO else Sfx.TASK_COMPLETE)
-                    onToggle()
-                    false
-                }
-                SwipeToDismissBoxValue.EndToStart -> {
-                    sound.play(Sfx.DELETE)
-                    onDelete()
-                    true
-                }
-                else -> false
-            }
-        }
-    )
     val desc = buildString {
         append(taskDescription(task))
         if (isOverdue && !task.isCompleted) {
@@ -946,22 +899,21 @@ private fun HomeTaskRow(
             append("Overdue")
         }
     }
-    SwipeToDismissBox(
-        state = dismissState,
-        backgroundContent = {
-            val towardEnd = dismissState.dismissDirection == SwipeToDismissBoxValue.StartToEnd
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(bottom = 12.dp)
-                    .clip(com.example.ui.components.PulseCardShape)
-                    .background(
-                        if (towardEnd) PulseMint.copy(alpha = 0.18f)
-                        else MaterialTheme.colorScheme.error.copy(alpha = 0.18f)
-                    )
-            )
+    TwoStepSwipeBox(
+        onCommitStartToEnd = {
+            sound.play(if (task.isCompleted) Sfx.TASK_UNDO else Sfx.TASK_COMPLETE)
+            onToggle()
         },
-        modifier = Modifier.padding(bottom = 0.dp)
+        onCommitEndToStart = {
+            sound.play(Sfx.DELETE)
+            onDelete()
+        },
+        startToEndColor = PulseMint,
+        endToStartColor = PulseCoral,
+        startToEndIcon = if (task.isCompleted) Icons.AutoMirrored.Filled.Undo else Icons.Filled.Check,
+        endToStartIcon = Icons.Filled.Delete,
+        onArmed = { sound.play(Sfx.TAP_SOFT) },
+        modifier = Modifier.fillMaxWidth()
     ) {
         TaskCardItem(
             task = task,

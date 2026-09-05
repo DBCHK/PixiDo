@@ -64,11 +64,13 @@ import com.example.ui.components.PulseSectionHeader
 import com.example.ui.components.PulseStripes
 import com.example.ui.components.PulseTaskCard
 import com.example.ui.components.PulseTopRow
+import com.example.ui.components.isPulseDark
 import com.example.ui.components.pulseAvatarPalette
 import com.example.ui.components.pulseCard
 import com.example.ui.components.pulseInk
 import com.example.ui.components.pulseMuted
 import com.example.ui.components.pulsePaper
+import com.example.ui.components.pulseStripe
 import com.example.ui.theme.PulseCoral
 import com.example.ui.theme.PulseInk
 import com.example.ui.theme.PulseMint
@@ -432,7 +434,7 @@ private fun PulseCalendarGrid(
     ) {
         PulseStripes(
             modifier = Modifier.matchParentSize(),
-            color = com.example.ui.theme.PulseStripe
+            color = pulseStripe().copy(alpha = if (isPulseDark()) 0.18f else 0.45f)
         )
         Column(
             modifier = Modifier

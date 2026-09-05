@@ -4,6 +4,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -36,6 +37,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
@@ -90,8 +92,9 @@ fun AuraBottomNavigation(
                 .fillMaxWidth()
                 .wrapContentHeight(),
             shape = PixiIslandShape,
+            role = PixiGlassRole.Chrome,
             liquid = true,
-            elevation = 16.dp
+            elevation = 20.dp
         ) {
             Row(
                 modifier = Modifier
@@ -167,9 +170,13 @@ private fun NavItem(
         else MaterialTheme.colorScheme.onSurfaceVariant,
         label = "tabLabelColor"
     )
+    val glassOn = LocalGlassEnabled.current
     val bubble by animateColorAsState(
-        targetValue = if (selected) MaterialTheme.colorScheme.surfaceVariant
-        else androidx.compose.ui.graphics.Color.Transparent,
+        targetValue = when {
+            !selected -> Color.Transparent
+            glassOn -> Color.White.copy(alpha = 0.32f)
+            else -> MaterialTheme.colorScheme.surfaceVariant
+        },
         label = "tabBubble"
     )
 
@@ -193,7 +200,18 @@ private fun NavItem(
             modifier = Modifier
                 .size(36.dp)
                 .clip(CircleShape)
-                .background(bubble),
+                .background(bubble)
+                .then(
+                    if (selected && glassOn) {
+                        Modifier.border(
+                            width = 0.7.dp,
+                            color = Color.White.copy(alpha = 0.55f),
+                            shape = CircleShape
+                        )
+                    } else {
+                        Modifier
+                    }
+                ),
             contentAlignment = Alignment.Center
         ) {
             Icon(

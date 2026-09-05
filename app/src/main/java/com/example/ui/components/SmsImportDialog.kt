@@ -61,10 +61,19 @@ fun SmsImportDialog(
     onDismiss: () -> Unit
 ) {
     var showAccountPicker by remember(item.id) { mutableStateOf(false) }
-    var selectedAccount by remember(item.id, accounts, lastAccountId, item.smsBody) {
-        val last4 = SmsTransactionParser.extractAccountLast4(item.smsBody)
+    var selectedAccount by remember(item.id, accounts, lastAccountId, item.smsBody, item.smsSender) {
+        val parsedSms = SmsTransactionParser.parse(item.smsBody, item.smsSender)
+        val last4 = parsedSms?.accountLast4?.ifBlank {
+            SmsTransactionParser.extractAccountLast4(item.smsBody)
+        }.orEmpty()
         mutableStateOf(
-            SmsAccountMatcher.defaultAccount(accounts, item.bankName, lastAccountId, last4)
+            SmsAccountMatcher.defaultAccount(
+                accounts = accounts,
+                bankName = item.bankName,
+                lastAccountId = lastAccountId,
+                accountLast4 = last4,
+                preferCreditCard = parsedSms?.isCreditCard
+            )
         )
     }
 
@@ -95,7 +104,7 @@ fun SmsImportDialog(
             .padding(horizontal = 12.dp, vertical = 8.dp)
             .testTag("sms_import_dialog"),
         shape = RoundedCornerShape(24.dp),
-        liquid = true,
+        role = PixiGlassRole.Sheet,
         elevation = 18.dp
     ) {
         Column(
@@ -234,10 +243,15 @@ fun SmsImportDialog(
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = if (item.isExpense) {
-                                "Amount will be deducted from this account"
-                            } else {
-                                "Amount will be credited to this account"
+                            text = when {
+                                selectedAccount?.isCreditCard == true && item.isExpense ->
+                                    "Added to this card’s bill · bank balances stay the same"
+                                selectedAccount?.isCreditCard == true ->
+                                    "Reduces this card’s outstanding"
+                                item.isExpense ->
+                                    "Amount will be deducted from this account"
+                                else ->
+                                    "Amount will be credited to this account"
                             },
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,

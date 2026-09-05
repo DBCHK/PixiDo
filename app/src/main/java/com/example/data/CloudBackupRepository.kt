@@ -215,7 +215,8 @@ private fun GoalEntity.toMap() = mapOf(
     "deadlineStr" to deadlineStr,
     "colorHex" to colorHex,
     "isCompleted" to isCompleted,
-    "isSimple" to isSimple
+    "isSimple" to isSimple,
+    "isHabit" to isHabit
 )
 
 private fun AccountEntity.toMap() = mapOf(
@@ -229,7 +230,12 @@ private fun AccountEntity.toMap() = mapOf(
     "colorHex" to colorHex,
     "isPrimary" to isPrimary,
     "notes" to notes,
-    "createdAt" to createdAt
+    "createdAt" to createdAt,
+    "cardNetwork" to cardNetwork,
+    "lastFour" to lastFour,
+    "expiryMonth" to expiryMonth,
+    "expiryYear" to expiryYear,
+    "cardholderName" to cardholderName
 )
 
 private fun DailyActivityEntity.toMap() = mapOf(
@@ -324,7 +330,8 @@ private fun mapToGoal(raw: Any?): GoalEntity? {
         deadlineStr = m["deadlineStr"] as? String ?: "",
         colorHex = m["colorHex"] as? String ?: "#A78BFA",
         isCompleted = m["isCompleted"] as? Boolean ?: false,
-        isSimple = m["isSimple"] as? Boolean ?: false
+        isSimple = m["isSimple"] as? Boolean ?: false,
+        isHabit = m["isHabit"] as? Boolean ?: false
     )
 }
 
@@ -342,7 +349,12 @@ private fun mapToAccount(raw: Any?): AccountEntity? {
         colorHex = m["colorHex"] as? String ?: "#7C3AED",
         isPrimary = m["isPrimary"] as? Boolean ?: false,
         notes = m["notes"] as? String ?: "",
-        createdAt = (m["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis()
+        createdAt = (m["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
+        cardNetwork = m["cardNetwork"] as? String ?: "",
+        lastFour = m["lastFour"] as? String ?: "",
+        expiryMonth = (m["expiryMonth"] as? Number)?.toInt() ?: 0,
+        expiryYear = (m["expiryYear"] as? Number)?.toInt() ?: 0,
+        cardholderName = m["cardholderName"] as? String ?: ""
     )
 }
 

@@ -3,14 +3,19 @@
     <string name="app_tagline">Plan. Track. Achieve.</string>
     <!-- Fallback if google-services.json is not present. Prefer Firebase Web client ID. -->
     <string name="google_web_client_id" translatable="false">485997818239-2afqgavvg56c03601qpa5vcqdk4m8472.apps.googleusercontent.com</string>
-    <string name="widget_contribution_name">Goals heatmap</string>
-    <string name="widget_contribution_desc">GitHub-style contribution grid for your goals</string>
-    <string name="widget_todos_name">Today’s todos</string>
-    <string name="widget_todos_desc">Today’s tasks with quick add</string>
+    <string name="widget_action">Widget action</string>
+    <string name="widget_contribution_name">Activity heatmap</string>
+    <string name="widget_contribution_desc">Mint contribution grid for habits and goals</string>
+    <string name="widget_todos_name">Today’s tasks</string>
+    <string name="widget_todos_desc">Today’s tasks with a quick-add button</string>
     <string name="widget_focus_name">Focus timer</string>
     <string name="widget_focus_desc">Start a calm 25-minute focus session</string>
-    <string name="widget_transactions_name">Cashflow</string>
-    <string name="widget_transactions_desc">Monthly income, spend, and net at a glance</string>
+    <string name="widget_transactions_name">Wallet cashflow</string>
+    <string name="widget_transactions_desc">Monthly income, spend, and net</string>
+    <string name="widget_goals_name">Weekly goals</string>
+    <string name="widget_goals_desc">Habits, streak, and weekly progress</string>
+    <string name="widget_spend_curve_name">Spending curve</string>
+    <string name="widget_spend_curve_desc">This week’s spend as a smooth curve</string>
     <string name="eta_channel_name">Task ETA · PixiDo ringtone</string>
     <string name="eta_channel_desc">Calm custom ringtone and popup when a task is due</string>
 </resources>

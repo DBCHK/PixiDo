@@ -2,6 +2,7 @@ package com.example.ui.screens
 
 import android.content.Intent
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -29,6 +30,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Person
@@ -68,6 +70,7 @@ import com.example.data.UserProfile
 import com.example.notify.displayName
 import com.example.ui.components.PixiGlass
 import com.example.ui.components.PixiGlassHost
+import com.example.ui.components.PixiGlassRole
 import com.example.ui.components.PixiGlassWeight
 import com.example.ui.components.PixiToggle
 import com.example.ui.theme.AccentPalette
@@ -108,6 +111,8 @@ fun ProfileDialog(
 ) {
     val sound = LocalSoundEngine.current
     var name by remember(profile.displayName) { mutableStateOf(profile.displayName) }
+    var calendarSettingsOpen by remember { mutableStateOf(false) }
+    BackHandler(enabled = calendarSettingsOpen) { calendarSettingsOpen = false }
 
     val context = LocalContext.current
     val imagePicker = rememberLauncherForActivityResult(
@@ -146,9 +151,9 @@ fun ProfileDialog(
                 .padding(horizontal = 8.dp, vertical = 8.dp)
                 .testTag("profile_dialog"),
             shape = RoundedCornerShape(28.dp),
+            role = PixiGlassRole.Sheet,
             elevation = 24.dp,
             frost = true,
-            liquid = true,
             weight = PixiGlassWeight.Sheet
         ) {
         Column(
@@ -163,13 +168,37 @@ fun ProfileDialog(
                     .padding(horizontal = 20.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "Settings",
-                    style = MaterialTheme.typography.displaySmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f)
-                )
+                if (calendarSettingsOpen) {
+                    Row(
+                        modifier = Modifier
+                            .clickable { calendarSettingsOpen = false }
+                            .padding(end = 8.dp, top = 4.dp, bottom = 4.dp)
+                            .testTag("calendar_settings_back"),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                            contentDescription = "Back to settings",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+                    Text(
+                        text = "Calendar",
+                        style = MaterialTheme.typography.displaySmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.weight(1f)
+                    )
+                } else {
+                    Text(
+                        text = "Settings",
+                        style = MaterialTheme.typography.displaySmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
                 Box(
                     modifier = Modifier
                         .testTag("close_profile")
@@ -186,6 +215,14 @@ fun ProfileDialog(
                 }
             }
 
+            if (calendarSettingsOpen) {
+                CalendarSettingsPage(
+                    profile = profile,
+                    deviceCalendars = deviceCalendars,
+                    onCalendarSyncToggle = onCalendarSyncToggle,
+                    onCalendarSourceToggle = onCalendarSourceToggle
+                )
+            } else {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -396,7 +433,7 @@ fun ProfileDialog(
                 IosSection(title = "Sounds") {
                     IosToggleRow(
                         title = "Sound Effects",
-                        subtitle = "Soft piano tones",
+                        subtitle = "Tap, tab, and reminder sounds",
                         checked = profile.soundEnabled,
                         onCheckedChange = onSoundToggle,
                         testTag = "toggle_sound",
@@ -417,7 +454,12 @@ fun ProfileDialog(
                             subtitle = if (index == 0) "Task & event reminders" else null,
                             showDivider = index < NotificationSoundOption.entries.lastIndex,
                             onClick = {
-                                sound.play(Sfx.SETTINGS_CHANGE)
+                                when (option) {
+                                    NotificationSoundOption.SOFT -> sound.play(Sfx.NOTIF_SOFT)
+                                    NotificationSoundOption.BRIGHT -> sound.play(Sfx.NOTIF_BRIGHT)
+                                    NotificationSoundOption.CALM -> sound.play(Sfx.NOTIF_CALM)
+                                    NotificationSoundOption.SYSTEM -> sound.play(Sfx.TAP_CONFIRM)
+                                }
                                 onNotificationSoundSelected(option)
                             },
                             testTag = "notif_sound_${option.name}",
@@ -437,42 +479,37 @@ fun ProfileDialog(
 
                 IosSection(
                     title = "Calendar",
-                    footer = if (!profile.calendarSyncEnabled) {
-                        "Turn this on, then pick which phone calendars to show."
-                    } else if (deviceCalendars.isEmpty()) {
-                        "Grant calendar permission to choose which calendars appear."
-                    } else {
-                        "Uncheck Holidays and extra accounts to stop duplicate events."
-                    }
+                    footer = "Phone calendars live here so Settings stays uncluttered."
                 ) {
-                    IosToggleRow(
-                        title = "Sync Phone Calendar",
-                        subtitle = "Show device events in Calendar",
-                        checked = profile.calendarSyncEnabled,
-                        onCheckedChange = onCalendarSyncToggle,
-                        testTag = "toggle_calendar_sync",
-                        showDivider = profile.calendarSyncEnabled && deviceCalendars.isNotEmpty()
-                    )
-                    if (profile.calendarSyncEnabled && deviceCalendars.isNotEmpty()) {
-                        val selected = if (profile.calendarSourcesPicked) {
-                            profile.selectedCalendarIdSet
-                        } else {
-                            DeviceCalendars.suggestedIds(deviceCalendars)
-                        }
-                        deviceCalendars.forEachIndexed { index, calendar ->
-                            IosToggleRow(
-                                title = calendar.displayName,
-                                subtitle = buildString {
-                                    append(calendar.accountName)
-                                    if (calendar.isPrimary) append(" · Primary")
-                                },
-                                checked = calendar.id in selected,
-                                onCheckedChange = { onCalendarSourceToggle(calendar.id, it) },
-                                testTag = "calendar_source_${calendar.id}",
-                                showDivider = index < deviceCalendars.lastIndex
-                            )
-                        }
+                    val selectedCount = if (!profile.calendarSyncEnabled) {
+                        0
+                    } else if (profile.calendarSourcesPicked) {
+                        profile.selectedCalendarIdSet.size
+                    } else {
+                        DeviceCalendars.suggestedIds(deviceCalendars).size
                     }
+                    IosRow(
+                        title = "Calendars",
+                        subtitle = if (!profile.calendarSyncEnabled) {
+                            "Sync phone calendars and pick which ones appear"
+                        } else if (deviceCalendars.isEmpty()) {
+                            "Grant calendar permission, then choose calendars"
+                        } else {
+                            "Choose which phone calendars appear"
+                        },
+                        value = when {
+                            !profile.calendarSyncEnabled -> "Off"
+                            deviceCalendars.isEmpty() -> "Set up"
+                            else -> "$selectedCount of ${deviceCalendars.size}"
+                        },
+                        showChevron = true,
+                        showDivider = false,
+                        onClick = {
+                            sound.play(Sfx.SETTINGS_CHANGE)
+                            calendarSettingsOpen = true
+                        },
+                        testTag = "open_calendar_settings"
+                    )
                 }
 
                 IosSection(
@@ -491,11 +528,11 @@ fun ProfileDialog(
 
                 IosSection(
                     title = "Appearance",
-                    footer = "Glass frosts and blurs the tab bar, banners, and alerts."
+                    footer = "Liquid Glass floats on controls, navigation, and sheets. Cards use a thinner material. Home widgets follow this setting."
                 ) {
                     IosToggleRow(
-                        title = "Glass Effect",
-                        subtitle = "Frosted blur on chrome",
+                        title = "Liquid Glass",
+                        subtitle = "iOS-style blur, refraction, and specular light",
                         checked = profile.glassEffectEnabled,
                         onCheckedChange = onGlassEffectToggle,
                         testTag = "toggle_glass_effect",
@@ -613,7 +650,64 @@ fun ProfileDialog(
                     }
                 }
             }
+            }
         }
+        }
+    }
+}
+
+@Composable
+private fun CalendarSettingsPage(
+    profile: UserProfile,
+    deviceCalendars: List<DeviceCalendarSource>,
+    onCalendarSyncToggle: (Boolean) -> Unit,
+    onCalendarSourceToggle: (Long, Boolean) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(bottom = 28.dp)
+            .testTag("calendar_settings_page")
+    ) {
+        IosSection(
+            title = "Phone calendars",
+            footer = if (!profile.calendarSyncEnabled) {
+                "Turn this on, then pick which phone calendars to show."
+            } else if (deviceCalendars.isEmpty()) {
+                "Grant calendar permission to choose which calendars appear."
+            } else {
+                "Uncheck Holidays and extra accounts to stop duplicate events."
+            }
+        ) {
+            IosToggleRow(
+                title = "Sync Phone Calendar",
+                subtitle = "Show device events in Calendar",
+                checked = profile.calendarSyncEnabled,
+                onCheckedChange = onCalendarSyncToggle,
+                testTag = "toggle_calendar_sync",
+                showDivider = profile.calendarSyncEnabled && deviceCalendars.isNotEmpty()
+            )
+            if (profile.calendarSyncEnabled && deviceCalendars.isNotEmpty()) {
+                val selected = if (profile.calendarSourcesPicked) {
+                    profile.selectedCalendarIdSet
+                } else {
+                    DeviceCalendars.suggestedIds(deviceCalendars)
+                }
+                deviceCalendars.forEachIndexed { index, calendar ->
+                    IosToggleRow(
+                        title = calendar.displayName,
+                        subtitle = buildString {
+                            append(calendar.accountName)
+                            if (calendar.isPrimary) append(" · Primary")
+                        },
+                        checked = calendar.id in selected,
+                        onCheckedChange = { onCalendarSourceToggle(calendar.id, it) },
+                        testTag = "calendar_source_${calendar.id}",
+                        showDivider = index < deviceCalendars.lastIndex
+                    )
+                }
+            }
         }
     }
 }
@@ -637,13 +731,16 @@ private fun IosSection(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(start = 16.dp, bottom = 6.dp)
         )
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(18.dp))
-                .background(MaterialTheme.colorScheme.surface)
+        PixiGlass(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(18.dp),
+            role = PixiGlassRole.Content,
+            frost = false,
+            elevation = 4.dp
         ) {
-            content()
+            Column(modifier = Modifier.fillMaxWidth()) {
+                content()
+            }
         }
         if (!footer.isNullOrBlank()) {
             Text(

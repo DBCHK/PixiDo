@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:description="@string/widget_contribution_desc"
-    android:initialLayout="@layout/widget_contribution"
+    android:initialLayout="@layout/widget_canvas"
+    android:previewLayout="@layout/widget_contribution"
     android:minWidth="250dp"
     android:minHeight="110dp"
     android:previewImage="@mipmap/ic_launcher"

@@ -3,6 +3,7 @@ package com.example
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.pm.ActivityInfo
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -42,6 +43,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -59,11 +63,16 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.audio.LocalSoundEngine
 import com.example.audio.ProvideSoundEngine
 import com.example.audio.Sfx
+import com.example.audio.SoundEngine
 import com.example.notify.NotificationHelper
 import com.example.notify.ReminderScheduler
 import com.example.sms.AppForegroundState
 import com.example.sms.SmsInboxScanner
 import com.example.ui.AuraViewModel
+import com.example.ui.BudgetPagerPage
+import com.example.ui.CalendarPagerPage
+import com.example.ui.GoalsPagerPage
+import com.example.ui.TasksPagerPage
 import com.example.data.DeviceCalendars
 import com.example.ui.components.AddBudgetDialog
 import com.example.ui.components.AddEventDialog
@@ -74,18 +83,17 @@ import com.example.ui.components.AutoHideBottomNavigation
 import com.example.ui.components.FocusTimerModal
 import com.example.ui.components.LocalGlassEnabled
 import com.example.ui.components.LocalHazeState
+import com.example.ui.components.LocalReduceMotion
 import com.example.ui.components.PixiGlass
+import com.example.ui.components.PixiGlassRole
 import com.example.ui.components.PixiPillShape
+import com.example.ui.components.ProvideGlassLight
 import com.example.ui.components.SmsImportDialog
 import com.example.ui.components.StartupSplash
 import com.example.ui.components.TaskEtaDialog
 import com.example.ui.components.rememberScrollHideBarState
 import com.example.ui.components.scrollHideNestedConnection
-import com.example.ui.screens.BudgetScreen
-import com.example.ui.screens.CalendarScreen
-import com.example.ui.screens.GoalsScreen
 import com.example.ui.screens.ProfileDialog
-import com.example.ui.screens.TasksScreen
 import com.example.ui.theme.PixiDoTheme
 import com.example.ui.theme.WalletInk
 import com.example.widget.WidgetActions
@@ -110,6 +118,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         enableEdgeToEdge()
         preferHighRefreshRate()
         NotificationHelper.ensureChannels(this)
@@ -185,18 +194,20 @@ class MainActivity : ComponentActivity() {
                 windowManager.defaultDisplay
             } ?: return
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                val modes = d.supportedModes
-                // Pick highest refresh rate mode with reasonable resolution match
-                val best = modes.maxWithOrNull(
-                    compareBy<android.view.Display.Mode> { it.refreshRate }
-                        .thenBy { it.physicalWidth * it.physicalHeight }
-                ) ?: return
-                if (best.refreshRate >= 89f) {
-                    val lp = window.attributes
-                    lp.preferredDisplayModeId = best.modeId
-                    window.attributes = lp
+            val current = d.mode
+            // Stay at the panel's native resolution; only bump refresh rate.
+            // Picking a higher-res mode at 120 Hz with blur is a common stutter source.
+            val best = d.supportedModes
+                .filter {
+                    it.physicalWidth == current.physicalWidth &&
+                        it.physicalHeight == current.physicalHeight
                 }
+                .maxByOrNull { it.refreshRate }
+                ?: current
+            if (best.refreshRate >= 89f && best.modeId != current.modeId) {
+                val lp = window.attributes
+                lp.preferredDisplayModeId = best.modeId
+                window.attributes = lp
             }
         } catch (_: Exception) {
             // Devices without multi-mode displays are fine at 60 Hz
@@ -217,22 +228,10 @@ fun PixiDoApp(
     val sound = LocalSoundEngine.current
     val context = LocalContext.current
 
-    val tasks by viewModel.tasks.collectAsStateWithLifecycle()
-    val budgetItems by viewModel.budgetItems.collectAsStateWithLifecycle()
-    val calendarEvents by viewModel.calendarEvents.collectAsStateWithLifecycle()
-    val goals by viewModel.goals.collectAsStateWithLifecycle()
-    val accounts by viewModel.accounts.collectAsStateWithLifecycle()
-    val goalActivity by viewModel.goalActivity.collectAsStateWithLifecycle()
-    val notes by viewModel.notes.collectAsStateWithLifecycle()
     val profile by viewModel.userProfile.collectAsStateWithLifecycle()
     val deviceCalendars by viewModel.deviceCalendars.collectAsStateWithLifecycle()
-
     val selectedTab by viewModel.selectedTab.collectAsStateWithLifecycle()
-    val selectedCalendarDate by viewModel.selectedCalendarDate.collectAsStateWithLifecycle()
-
     val showFocusModal by viewModel.showFocusModal.collectAsStateWithLifecycle()
-    val focusSecondsLeft by viewModel.focusSecondsLeft.collectAsStateWithLifecycle()
-    val isFocusTimerRunning by viewModel.isFocusTimerRunning.collectAsStateWithLifecycle()
     val showProfile by viewModel.showProfile.collectAsStateWithLifecycle()
     val snackbarMessage by viewModel.snackbarMessage.collectAsStateWithLifecycle()
     val activeSmsPrompt by viewModel.activeSmsPrompt.collectAsStateWithLifecycle()
@@ -264,6 +263,7 @@ fun PixiDoApp(
             }
             WidgetActions.ACTION_OPEN_TASKS -> viewModel.selectTab(0)
             WidgetActions.ACTION_OPEN_BUDGET -> viewModel.selectTab(1)
+            WidgetActions.ACTION_OPEN_GOALS -> viewModel.selectTab(3)
             else -> { /* open app only */ }
         }
         onWidgetActionConsumed()
@@ -527,10 +527,50 @@ fun PixiDoApp(
         val window = (view.context as? android.app.Activity)?.window ?: return@LaunchedEffect
         WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = lightStatusBars
     }
+    val onEditTask = remember(sound) {
+        { task: com.example.data.TaskEntity ->
+            sound.play(Sfx.DIALOG_OPEN)
+            editingTask = task
+            addTaskForDate = null
+            showAddTaskDialog = true
+        }
+    }
+    val onAddTask = remember(sound) {
+        { due: Long? ->
+            sound.play(Sfx.DIALOG_OPEN)
+            editingTask = null
+            addTaskForDate = due
+            showAddTaskDialog = true
+        }
+    }
+    val onAddBudget = remember(sound) {
+        {
+            sound.play(Sfx.FAB)
+            sound.play(Sfx.DIALOG_OPEN)
+            showAddBudgetDialog = true
+        }
+    }
+    val onAddEvent = remember(sound) {
+        {
+            sound.play(Sfx.FAB)
+            sound.play(Sfx.DIALOG_OPEN)
+            showAddEventDialog = true
+        }
+    }
+    val onAddGoal = remember(sound) {
+        {
+            sound.play(Sfx.FAB)
+            sound.play(Sfx.DIALOG_OPEN)
+            showAddGoalDialog = true
+        }
+    }
+
     CompositionLocalProvider(
         LocalHazeState provides hazeState.takeIf { glassOn },
-        LocalGlassEnabled provides glassOn
+        LocalGlassEnabled provides glassOn,
+        LocalReduceMotion provides reduceMotion
     ) {
+    ProvideGlassLight(enabled = glassOn, reduceMotion = reduceMotion) {
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
             modifier = Modifier
@@ -557,6 +597,7 @@ fun PixiDoApp(
                 ) { data ->
                     PixiGlass(
                         shape = PixiPillShape,
+                        role = PixiGlassRole.Chrome,
                         elevation = 12.dp
                     ) {
                         Snackbar(
@@ -570,190 +611,62 @@ fun PixiDoApp(
                 }
             }
         ) { innerPadding ->
-            HorizontalPager(
-                state = pagerState,
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .nestedScroll(nestedScrollConnection)
                     .padding(top = innerPadding.calculateTopPadding())
                     .windowInsetsPadding(WindowInsets.navigationBars)
                     .background(canvasColor)
-                    .then(if (glassOn) Modifier.hazeSource(state = hazeState) else Modifier),
-                beyondViewportPageCount = 0,
-                userScrollEnabled = !showSplash
-            ) { page ->
-                when (page) {
-                    0 -> TasksScreen(
-                        tasks = tasks,
-                        goals = goals,
-                        notes = notes,
-                        profile = profile,
-                        onToggleTask = { viewModel.toggleTaskCompletion(it) },
-                        onToggleSubtask = { task, subtask ->
-                            viewModel.toggleSubtask(task, subtask)
-                        },
-                        onDeleteTask = { viewModel.deleteTask(it) },
-                        onEditTask = { task ->
-                            sound.play(Sfx.DIALOG_OPEN)
-                            editingTask = task
-                            showAddTaskDialog = true
-                        },
-                        onSnoozeTask = { viewModel.snoozeTask(it) },
-                        onPinTask = { viewModel.toggleTaskPinned(it) },
-                        onSkipRepeat = { viewModel.skipRepeatOccurrence(it) },
-                        onRescheduleTask = { task, day -> viewModel.rescheduleTask(task, day) },
-                        onRewriteSubtasks = { task, encoded -> viewModel.rewriteSubtasks(task, encoded) },
-                        onOpenAddTask = {
-                            sound.play(Sfx.DIALOG_OPEN)
-                            editingTask = null
-                            addTaskForDate = null
-                            showAddTaskDialog = true
-                        },
-                        onCompleteSimpleGoal = { goal ->
-                            if (goal.isCompleted) sound.play(Sfx.TASK_UNDO)
-                            else sound.play(Sfx.GOAL_COMPLETE)
-                            viewModel.completeSimpleGoal(goal)
-                        },
-                        onDeleteSimpleGoal = {
-                            sound.play(Sfx.DELETE)
-                            viewModel.deleteGoal(it)
-                        },
-                        onQuickAddTask = { title, dueMillis ->
-                            val due = if (dueMillis > 0) dueMillis
-                            else java.util.Calendar.getInstance().apply {
-                                set(java.util.Calendar.HOUR_OF_DAY, 18)
-                                set(java.util.Calendar.MINUTE, 0)
-                                set(java.util.Calendar.SECOND, 0)
-                                set(java.util.Calendar.MILLISECOND, 0)
-                            }.timeInMillis
-                            viewModel.addTask(
-                                title = title,
-                                category = "Personal",
-                                priority = "QUICK_WIN",
-                                dueTimeStr = "Quick add",
-                                dueDateMillis = due,
-                                subtasks = "",
-                                linkedGoalId = null
-                            )
-                        },
-                        onOpenFocusMode = { viewModel.openFocusModal() },
-                        onOpenProfile = { viewModel.openProfile() },
-                        onAddNote = { content, color -> viewModel.addNote(content, color) },
-                        onToggleNotePin = { viewModel.toggleNotePin(it) },
-                        onDeleteNote = { viewModel.deleteNote(it) },
-                        onClearCompleted = { viewModel.clearCompletedTasks() }
-                    )
-
-                    1 -> BudgetScreen(
-                        budgetItems = budgetItems,
-                        accounts = accounts,
-                        currencyCode = profile.currencyCode,
-                        monthlyAllowance = profile.monthlyBudgetLimit,
-                        profile = profile,
-                        onOpenProfile = { viewModel.openProfile() },
-                        onDeleteBudgetItem = {
-                            sound.play(Sfx.DELETE)
-                            viewModel.deleteBudgetItem(it)
-                        },
-                        onOpenAddBudget = {
-                            sound.play(Sfx.FAB)
-                            sound.play(Sfx.DIALOG_OPEN)
-                            showAddBudgetDialog = true
-                        },
-                        onAddAccount = { name, type, balance, limit, color ->
-                            sound.play(Sfx.ADD_ACCOUNT)
-                            viewModel.addAccount(name, type, balance, limit, color)
-                        },
-                        onEditAccount = { account ->
-                            sound.play(Sfx.SETTINGS_CHANGE)
-                            viewModel.updateAccount(account)
-                        },
-                        onDeleteAccount = {
-                            sound.play(Sfx.DELETE)
-                            viewModel.deleteAccount(it)
-                        },
-                        onTransfer = { from, to, amount, note ->
-                            viewModel.transferBetweenAccounts(from, to, amount, note)
-                        },
-                        onSetCurrency = {
-                            sound.play(Sfx.SETTINGS_CHANGE)
-                            viewModel.setCurrency(it)
-                        },
-                        onSetMonthlyLimit = {
-                            sound.play(Sfx.SETTINGS_CHANGE)
-                            viewModel.setMonthlyBudgetLimit(it)
-                        }
-                    )
-
-                    2 -> CalendarScreen(
-                        events = calendarEvents,
-                        tasks = tasks,
-                        selectedDateMillis = selectedCalendarDate,
-                        profile = profile,
-                        onOpenProfile = { viewModel.openProfile() },
-                        onSelectDate = {
-                            sound.play(Sfx.DAY_SELECT)
-                            viewModel.setSelectedCalendarDate(it)
-                        },
-                        onToggleEvent = {
-                            sound.play(Sfx.EVENT_TOGGLE)
-                            viewModel.toggleCalendarEventCompleted(it)
-                        },
-                        onDeleteEvent = {
-                            sound.play(Sfx.DELETE)
-                            viewModel.deleteCalendarEvent(it)
-                        },
-                        onOpenAddEvent = {
-                            sound.play(Sfx.FAB)
-                            sound.play(Sfx.DIALOG_OPEN)
-                            showAddEventDialog = true
-                        },
-                        onOpenAddTask = {
-                            sound.play(Sfx.FAB)
-                            sound.play(Sfx.DIALOG_OPEN)
-                            editingTask = null
-                            addTaskForDate = selectedCalendarDate
-                            showAddTaskDialog = true
-                        },
-                        onToggleTask = { viewModel.toggleTaskCompletion(it) },
-                        onEditTask = { task ->
-                            sound.play(Sfx.DIALOG_OPEN)
-                            editingTask = task
-                            addTaskForDate = null
-                            showAddTaskDialog = true
-                        }
-                    )
-
-                    3 -> GoalsScreen(
-                        goals = goals,
-                        currencyCode = profile.currencyCode,
-                        goalActivity = goalActivity,
-                        profile = profile,
-                        onOpenProfile = { viewModel.openProfile() },
-                        onUpdateGoalProgress = { goal, delta ->
-                            val willComplete =
-                                delta > 0 && goal.currentAmount + delta >= goal.targetAmount
-                            if (willComplete) sound.play(Sfx.GOAL_COMPLETE)
-                            else sound.play(Sfx.GOAL_PROGRESS)
-                            viewModel.updateGoalProgress(goal, delta)
-                        },
-                        onCompleteSimpleGoal = { goal ->
-                            if (goal.isCompleted) sound.play(Sfx.TASK_UNDO)
-                            else sound.play(Sfx.GOAL_COMPLETE)
-                            viewModel.completeSimpleGoal(goal)
-                        },
-                        onDeleteGoal = {
-                            sound.play(Sfx.DELETE)
-                            viewModel.deleteGoal(it)
-                        },
-                        onOpenAddGoal = {
-                            sound.play(Sfx.FAB)
-                            sound.play(Sfx.DIALOG_OPEN)
-                            showAddGoalDialog = true
-                        }
-                    )
+                    .then(if (glassOn) Modifier.hazeSource(state = hazeState) else Modifier)
+            ) {
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .nestedScroll(nestedScrollConnection),
+                    beyondViewportPageCount = 0,
+                    userScrollEnabled = !showSplash
+                ) { page ->
+                    when (page) {
+                        0 -> TasksPagerPage(
+                            viewModel = viewModel,
+                            onEditTask = onEditTask,
+                            onAddTask = onAddTask
+                        )
+                        1 -> BudgetPagerPage(
+                            viewModel = viewModel,
+                            onAddBudget = onAddBudget
+                        )
+                        2 -> CalendarPagerPage(
+                            viewModel = viewModel,
+                            onEditTask = onEditTask,
+                            onAddTask = onAddTask,
+                            onAddEvent = onAddEvent
+                        )
+                        3 -> GoalsPagerPage(
+                            viewModel = viewModel,
+                            onAddGoal = onAddGoal
+                        )
+                    }
                 }
             }
+        }
+
+        if (glassOn) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .height(88.dp)
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                canvasColor.copy(alpha = 0.18f)
+                            )
+                        )
+                    )
+            )
         }
 
         // Isolated auto-hide bar — only this branch recomposes on scroll
@@ -774,6 +687,7 @@ fun PixiDoApp(
         val smsPrompt = activeSmsPrompt
         if (!showSplash && smsPrompt != null && !showProfile) {
             val remaining = (pendingSmsTransactions.size - 1).coerceAtLeast(0)
+            val accounts by viewModel.accounts.collectAsStateWithLifecycle()
             Box(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
@@ -799,6 +713,7 @@ fun PixiDoApp(
     }
 
     if (showAddTaskDialog) {
+        val goals by viewModel.goals.collectAsStateWithLifecycle()
         AddTaskDialog(
             onDismiss = {
                 sound.play(Sfx.DIALOG_CLOSE)
@@ -827,6 +742,7 @@ fun PixiDoApp(
     }
 
     if (showAddBudgetDialog) {
+        val accounts by viewModel.accounts.collectAsStateWithLifecycle()
         AddBudgetDialog(
             currencyCode = profile.currencyCode,
             accounts = accounts,
@@ -844,6 +760,7 @@ fun PixiDoApp(
     }
 
     if (showAddEventDialog) {
+        val selectedCalendarDate by viewModel.selectedCalendarDate.collectAsStateWithLifecycle()
         AddEventDialog(
             selectedDateMillis = selectedCalendarDate,
             onDismiss = {
@@ -866,38 +783,23 @@ fun PixiDoApp(
                 sound.play(Sfx.DIALOG_CLOSE)
                 showAddGoalDialog = false
             },
-            onAddGoal = { title, category, targetAmount, unit, deadlineStr, colorHex, isSimple ->
+            onAddGoal = { title, category, targetAmount, unit, deadlineStr, colorHex, isSimple, isHabit ->
                 sound.play(Sfx.ADD_GOAL)
-                viewModel.addGoal(title, category, targetAmount, unit, deadlineStr, colorHex, isSimple)
+                viewModel.addGoal(
+                    title, category, targetAmount, unit, deadlineStr, colorHex, isSimple, isHabit
+                )
             }
         )
     }
 
     if (showFocusModal) {
-        FocusTimerModal(
-            secondsLeft = focusSecondsLeft,
-            isRunning = isFocusTimerRunning,
-            onStart = { minutes ->
-                sound.play(Sfx.FOCUS_START)
-                viewModel.startFocusTimer(minutes)
-            },
-            onPause = {
-                sound.play(Sfx.FOCUS_PAUSE)
-                viewModel.pauseFocusTimer()
-            },
-            onReset = {
-                sound.play(Sfx.FOCUS_RESET)
-                viewModel.resetFocusTimer()
-            },
-            onDismiss = {
-                sound.play(Sfx.DIALOG_CLOSE)
-                viewModel.closeFocusModal()
-            }
-        )
+        FocusTimerHost(viewModel = viewModel, sound = sound)
     }
 
     // Task ETA popup + custom calm ringtone
     activeEta?.let { eta ->
+        val tasks by viewModel.tasks.collectAsStateWithLifecycle()
+        val calendarEvents by viewModel.calendarEvents.collectAsStateWithLifecycle()
         TaskEtaDialog(
             title = eta.title.removePrefix("Task due: ").removePrefix("Event: ").trim()
                 .ifBlank { eta.title },
@@ -1027,6 +929,36 @@ fun PixiDoApp(
         )
     }
     }
+    }
+}
+
+@Composable
+private fun FocusTimerHost(
+    viewModel: AuraViewModel,
+    sound: SoundEngine
+) {
+    val secondsLeft by viewModel.focusSecondsLeft.collectAsStateWithLifecycle()
+    val running by viewModel.isFocusTimerRunning.collectAsStateWithLifecycle()
+    FocusTimerModal(
+        secondsLeft = secondsLeft,
+        isRunning = running,
+        onStart = { minutes ->
+            sound.play(Sfx.FOCUS_START)
+            viewModel.startFocusTimer(minutes)
+        },
+        onPause = {
+            sound.play(Sfx.FOCUS_PAUSE)
+            viewModel.pauseFocusTimer()
+        },
+        onReset = {
+            sound.play(Sfx.FOCUS_RESET)
+            viewModel.resetFocusTimer()
+        },
+        onDismiss = {
+            sound.play(Sfx.DIALOG_CLOSE)
+            viewModel.closeFocusModal()
+        }
+    )
 }
 
 /** Backward-compatible alias. */

@@ -33,7 +33,14 @@ data class AccountEntity(
     val colorHex: String = "#7C3AED",
     val isPrimary: Boolean = false,
     val notes: String = "",
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    /** VISA / MASTERCARD / RUPAY / OTHER. Blank = infer from [name]. */
+    val cardNetwork: String = "",
+    /** Last 4 digits printed on the card. */
+    val lastFour: String = "",
+    val expiryMonth: Int = 0,
+    val expiryYear: Int = 0,
+    val cardholderName: String = ""
 ) {
     val accountType: AccountType
         get() = runCatching { AccountType.valueOf(type) }.getOrDefault(AccountType.BANK)

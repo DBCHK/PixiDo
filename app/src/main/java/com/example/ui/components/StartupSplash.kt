@@ -6,6 +6,8 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -27,22 +29,19 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.R
 import com.example.audio.LocalSoundEngine
 import com.example.audio.Sfx
-import com.example.ui.theme.PixiLavender
-import com.example.ui.theme.PixiPink
-import com.example.ui.theme.PixiYellow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * Soft Lilac startup splash — logo pops in, brand fades up, sweet intro tone,
- * “Built by Pixipath” in a soft gradient, then the layer eases out.
+ * Startup splash — interactive brand mark draws in (arc, check, green cap),
+ * title rises, then the layer eases out. Tap anywhere except the logo to skip.
  */
 @Composable
 fun StartupSplash(
@@ -51,8 +50,6 @@ fun StartupSplash(
 ) {
     val sound = runCatching { LocalSoundEngine.current }.getOrNull()
 
-    val logoScale = remember { Animatable(0.4f) }
-    val logoAlpha = remember { Animatable(0f) }
     val titleAlpha = remember { Animatable(0f) }
     val titleOffset = remember { Animatable(24f) }
     val creditAlpha = remember { Animatable(0f) }
@@ -63,50 +60,40 @@ fun StartupSplash(
 
     var finished by remember { mutableStateOf(false) }
 
-    // Soft gradient for “Built by Pixipath”
+    fun finish() {
+        if (finished) return
+        finished = true
+        onFinished()
+    }
+
     val pixipathBrush = remember {
         Brush.linearGradient(
             colors = listOf(
-                Color(0xFFC4A8F5),
-                Color(0xFFFF6BA8),
+                Color(0xFF06B6D4),
+                Color(0xFF10B981),
                 Color(0xFF67D4E8),
-                Color(0xFFC4A8F5)
+                Color(0xFF06B6D4)
             )
         )
     }
 
     LaunchedEffect(Unit) {
-        // Sweet, slow intro tone
         sound?.play(Sfx.SPLASH_INTRO)
 
-        // Logo pop
-        launch {
-            logoAlpha.animateTo(1f, tween(320, easing = FastOutSlowInEasing))
-        }
-        launch {
-            logoScale.animateTo(
-                1f,
-                spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessLow)
-            )
-        }
         launch {
             ringScale.animateTo(
-                1.15f,
-                tween(800, easing = FastOutSlowInEasing)
+                1.18f,
+                tween(900, easing = FastOutSlowInEasing)
             )
         }
 
-        delay(240)
-        // Title rise
-        launch {
-            titleAlpha.animateTo(1f, tween(360))
-        }
+        delay(260)
+        launch { titleAlpha.animateTo(1f, tween(360)) }
         launch {
             titleOffset.animateTo(0f, spring(dampingRatio = 0.75f, stiffness = 280f))
         }
 
         delay(280)
-        // Built by Pixipath — soft delayed fade
         launch {
             creditAlpha.animateTo(1f, tween(480, easing = FastOutSlowInEasing))
         }
@@ -114,9 +101,8 @@ fun StartupSplash(
             creditOffset.animateTo(0f, spring(dampingRatio = 0.8f, stiffness = 220f))
         }
 
-        delay(1100)
+        delay(1200)
 
-        // Exit: soft scale-up + fade
         launch {
             overlayAlpha.animateTo(0f, tween(480, easing = FastOutSlowInEasing))
         }
@@ -124,10 +110,7 @@ fun StartupSplash(
             overlayScale.animateTo(1.06f, tween(480, easing = FastOutSlowInEasing))
         }
         delay(500)
-        if (!finished) {
-            finished = true
-            onFinished()
-        }
+        finish()
     }
 
     Box(
@@ -138,52 +121,49 @@ fun StartupSplash(
                 scaleX = overlayScale.value
                 scaleY = overlayScale.value
             }
-            .background(MaterialTheme.colorScheme.background),
+            .background(PixiLogoBg)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = { finish() }
+            )
+            .testTag("startup_splash"),
         contentAlignment = Alignment.Center
     ) {
-        // Soft ambient blobs
         Box(
             modifier = Modifier
                 .size(280.dp)
                 .graphicsLayer {
                     scaleX = ringScale.value
                     scaleY = ringScale.value
-                    alpha = 0.35f * logoAlpha.value
+                    alpha = 0.42f * titleAlpha.value.coerceAtLeast(0.35f)
                 }
                 .clip(CircleShape)
                 .background(
                     Brush.radialGradient(
                         colors = listOf(
-                            PixiLavender.copy(alpha = 0.55f),
-                            PixiPink.copy(alpha = 0.2f),
-                            MaterialTheme.colorScheme.background.copy(alpha = 0f)
+                            PixiLogoCyan.copy(alpha = 0.42f),
+                            PixiLogoGreen.copy(alpha = 0.16f),
+                            PixiLogoBg.copy(alpha = 0f)
                         )
                     )
                 )
         )
 
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            PixiDoodle3D(
-                resId = R.drawable.doodle_splash,
-                size = 180.dp,
-                modifier = Modifier.graphicsLayer {
-                    scaleX = logoScale.value
-                    scaleY = logoScale.value
-                    alpha = logoAlpha.value
-                },
-                yawDegrees = 18f,
-                pitchDegrees = 12f,
-                orbitSeconds = 5,
-                tiltStrength = 8f
+            PixiBrandLogo(
+                size = 168.dp,
+                animated = true,
+                onTap = { sound?.play(Sfx.TAP_SOFT) }
             )
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(18.dp))
 
             Text(
                 text = "PixiDo",
                 fontSize = 34.sp,
                 fontWeight = FontWeight.Black,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = Color.White,
                 modifier = Modifier.graphicsLayer {
                     alpha = titleAlpha.value
                     translationY = titleOffset.value
@@ -194,7 +174,7 @@ fun StartupSplash(
                 text = "Plan · focus · grow",
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = Color.White.copy(alpha = 0.62f),
                 modifier = Modifier.graphicsLayer {
                     alpha = titleAlpha.value * 0.9f
                     translationY = titleOffset.value
@@ -208,12 +188,11 @@ fun StartupSplash(
                     .size(7.dp)
                     .graphicsLayer { alpha = titleAlpha.value }
                     .clip(CircleShape)
-                    .background(PixiYellow)
+                    .background(PixiLogoGreen)
             )
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Soft gradient credit line
             Text(
                 text = "Built by Pixipath",
                 style = TextStyle(

@@ -55,6 +55,7 @@ import androidx.compose.ui.unit.sp
 import com.example.audio.LocalSoundEngine
 import com.example.audio.Sfx
 import com.example.data.BudgetItemEntity
+import com.example.data.ChartMoneyKind
 import com.example.data.Currencies
 import com.example.data.SpendBucket
 import com.example.data.SpendChartModel
@@ -67,6 +68,7 @@ import kotlin.math.pow
 import kotlin.math.roundToInt
 
 private val SpendLine = Color(0xFFFF7A8A)
+private val IncomeLine = Color(0xFF16A34A)
 private val ChartShape = RoundedCornerShape(24.dp)
 
 @Composable
@@ -79,39 +81,69 @@ fun SpendTrendCard(
     val sound = LocalSoundEngine.current
     val now = remember { System.currentTimeMillis() }
     var range by remember { mutableStateOf(SpendRange.WEEK) }
+    var kind by remember { mutableStateOf(ChartMoneyKind.SPEND) }
     var offset by remember { mutableIntStateOf(0) }
-    val model = remember(items, range, offset, now) {
-        SpendSeries.build(items, range, offset, now)
+    val model = remember(items, range, offset, now, kind) {
+        SpendSeries.build(items, range, offset, now, kind)
     }
-    var selected by remember(model.windowStart, range) {
-        mutableStateOf(model.buckets.indices.lastOrNull { model.buckets[it].amount > 0.0 })
+    var selected by remember(model.windowStart, range, kind) {
+        mutableStateOf(
+            model.buckets.indices.lastOrNull {
+                model.buckets[it].amount > 0.0 || model.buckets[it].income > 0.0
+            }
+        )
     }
     val daysInMonth = remember(now) {
         java.util.Calendar.getInstance().apply { timeInMillis = now }
             .getActualMaximum(java.util.Calendar.DAY_OF_MONTH)
             .coerceAtLeast(1)
     }
+    val periodBudget = when (range) {
+        SpendRange.DAY -> if (monthlyAllowance > 0) monthlyAllowance / daysInMonth else 0.0
+        SpendRange.WEEK -> if (monthlyAllowance > 0) monthlyAllowance / 4.345 else 0.0
+        SpendRange.MONTH -> monthlyAllowance.coerceAtLeast(0.0)
+    }
     val dailyBudget = if (monthlyAllowance > 0) monthlyAllowance / daysInMonth else 0.0
     val selectedBucket = selected?.let { model.buckets.getOrNull(it) }
-    val shownAmount = selectedBucket?.amount ?: model.total
+    val shownAmount = when {
+        selectedBucket == null -> model.total
+        kind == ChartMoneyKind.INCOME -> selectedBucket.income
+        kind == ChartMoneyKind.BOTH -> selectedBucket.income - selectedBucket.spend
+        else -> selectedBucket.amount
+    }
     val shownLabel = selectedBucket?.label ?: "Total"
     val symbol = Currencies.symbolOf(currencyCode)
+    val title = when (kind) {
+        ChartMoneyKind.INCOME -> "Income"
+        ChartMoneyKind.BOTH -> "Cashflow"
+        ChartMoneyKind.SPEND -> "Spending"
+    }
+    val axisMax = remember(model.buckets, periodBudget, model.average, kind) {
+        val peak = model.buckets.maxOfOrNull { maxOf(it.spend, it.income, it.amount) } ?: 0.0
+        niceMax(maxOf(peak, periodBudget, model.average * 1.35, 1.0))
+    }
 
-    Column(
+    PixiGlass(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 10.dp, vertical = 6.dp)
-            .clip(ChartShape)
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+            .testTag("spend_trend_card"),
+        shape = ChartShape,
+        role = PixiGlassRole.Content,
+        frost = false,
+        elevation = 6.dp
+    ) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
             .padding(16.dp)
-            .testTag("spend_trend_card")
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Spending",
+                text = title,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface,
@@ -126,6 +158,14 @@ fun SpendTrendCard(
                 }
             )
         }
+        Spacer(modifier = Modifier.height(8.dp))
+        MoneyKindPills(
+            selected = kind,
+            onSelect = {
+                sound.play(Sfx.FILTER_SELECT)
+                kind = it
+            }
+        )
         Spacer(modifier = Modifier.height(10.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -194,18 +234,29 @@ fun SpendTrendCard(
         SmoothSpendChart(
             buckets = model.buckets,
             range = range,
+            kind = kind,
             selectedIndex = selected,
-            dailyBudget = dailyBudget,
+            yMax = axisMax,
+            periodBudget = periodBudget,
+            average = model.average,
+            currencyCode = currencyCode,
             onSelect = { selected = it },
             modifier = Modifier
                 .fillMaxWidth()
-                .height(168.dp)
+                .height(176.dp)
                 .testTag("spend_line_chart")
         )
-        if (!model.hasSpend) {
+        if (!model.hasSpend && kind != ChartMoneyKind.INCOME) {
             Spacer(modifier = Modifier.height(6.dp))
             Text(
                 text = "No expenses in this ${range.label.lowercase()}. Log a spend to see the line fill in.",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else if (kind == ChartMoneyKind.INCOME && model.total <= 0.0) {
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = "No income in this ${range.label.lowercase()}.",
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -223,6 +274,42 @@ fun SpendTrendCard(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
+        }
+    }
+    }
+}
+
+@Composable
+private fun MoneyKindPills(
+    selected: ChartMoneyKind,
+    onSelect: (ChartMoneyKind) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(3.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        ChartMoneyKind.entries.forEach { option ->
+            val on = option == selected
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(if (on) MaterialTheme.colorScheme.onSurface else Color.Transparent)
+                    .clickable { onSelect(option) }
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                    .testTag("spend_kind_${option.name.lowercase()}"),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = option.label,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (on) MaterialTheme.colorScheme.surface
+                    else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }
@@ -292,35 +379,37 @@ private fun PeriodChevron(
 private fun SmoothSpendChart(
     buckets: List<SpendBucket>,
     range: SpendRange,
+    kind: ChartMoneyKind,
     selectedIndex: Int?,
-    dailyBudget: Double,
+    yMax: Double,
+    periodBudget: Double,
+    average: Double,
+    currencyCode: String,
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val progress = remember { Animatable(0f) }
-    LaunchedEffect(buckets, range) {
+    LaunchedEffect(buckets, range, kind) {
         progress.snapTo(0f)
         progress.animateTo(1f, tween(durationMillis = 720, easing = FastOutSlowInEasing))
     }
     val t = progress.value
-    val yMax = remember(buckets, dailyBudget) {
-        val peak = buckets.maxOfOrNull { it.amount } ?: 0.0
-        niceMax(maxOf(peak, if (dailyBudget > 0) dailyBudget else 0.0, 1.0))
-    }
     val axis = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val n = buckets.size.coerceAtLeast(1)
+    val yLabels = listOf(0.0, yMax / 2.0, yMax)
 
     BoxWithConstraints(modifier = modifier) {
         val widthPx = constraints.maxWidth.toFloat()
+        val padLeft = 40.dp
         Canvas(
             modifier = Modifier
                 .fillMaxSize()
                 .pointerInput(buckets, widthPx) {
                     fun pick(x: Float) {
                         if (buckets.isEmpty() || widthPx <= 0f) return
-                        val pad = 12.dp.toPx()
-                        val inner = (widthPx - pad * 2f).coerceAtLeast(1f)
+                        val pad = padLeft.toPx()
+                        val inner = (widthPx - pad - 12.dp.toPx()).coerceAtLeast(1f)
                         val idx = if (n == 1) 0
                         else ((x - pad) / inner * (n - 1)).roundToInt().coerceIn(0, n - 1)
                         onSelect(idx)
@@ -331,8 +420,8 @@ private fun SmoothSpendChart(
                     detectHorizontalDragGestures(
                         onDragStart = { pick ->
                             if (buckets.isEmpty() || widthPx <= 0f) return@detectHorizontalDragGestures
-                            val pad = 12.dp.toPx()
-                            val inner = (widthPx - pad * 2f).coerceAtLeast(1f)
+                            val pad = padLeft.toPx()
+                            val inner = (widthPx - pad - 12.dp.toPx()).coerceAtLeast(1f)
                             val idx = if (n == 1) 0
                             else ((pick.x - pad) / inner * (n - 1)).roundToInt().coerceIn(0, n - 1)
                             onSelect(idx)
@@ -340,8 +429,8 @@ private fun SmoothSpendChart(
                         onHorizontalDrag = { change, _ ->
                             change.consume()
                             if (buckets.isEmpty() || widthPx <= 0f) return@detectHorizontalDragGestures
-                            val pad = 12.dp.toPx()
-                            val inner = (widthPx - pad * 2f).coerceAtLeast(1f)
+                            val pad = padLeft.toPx()
+                            val inner = (widthPx - pad - 12.dp.toPx()).coerceAtLeast(1f)
                             val idx = if (n == 1) 0
                             else ((change.position.x - pad) / inner * (n - 1))
                                 .roundToInt().coerceIn(0, n - 1)
@@ -350,12 +439,13 @@ private fun SmoothSpendChart(
                     )
                 }
         ) {
-            val padX = 12.dp.toPx()
+            val padX = padLeft.toPx()
+            val padRight = 12.dp.toPx()
             val padTop = 16.dp.toPx()
             val padBottom = 28.dp.toPx()
             val w = size.width
             val h = size.height
-            val innerW = (w - padX * 2f).coerceAtLeast(1f)
+            val innerW = (w - padX - padRight).coerceAtLeast(1f)
             val innerH = (h - padTop - padBottom).coerceAtLeast(1f)
             fun xOf(i: Int): Float =
                 if (n <= 1) padX + innerW / 2f else padX + innerW * (i / (n - 1).toFloat())
@@ -367,80 +457,125 @@ private fun SmoothSpendChart(
             drawLine(
                 color = axis,
                 start = Offset(padX, padTop + innerH),
-                end = Offset(w - padX, padTop + innerH),
+                end = Offset(w - padRight, padTop + innerH),
+                strokeWidth = 1.dp.toPx()
+            )
+            drawLine(
+                color = axis,
+                start = Offset(padX, padTop),
+                end = Offset(padX, padTop + innerH),
                 strokeWidth = 1.dp.toPx()
             )
 
-            if (dailyBudget > 0 && dailyBudget <= yMax) {
-                val yBudget = yOf(dailyBudget)
+            if (periodBudget > 0 && periodBudget <= yMax) {
+                val yBudget = yOf(periodBudget)
                 drawLine(
-                    color = axis,
+                    color = Color(0xFF7B74F6).copy(alpha = 0.55f),
                     start = Offset(padX, yBudget),
-                    end = Offset(w - padX, yBudget),
+                    end = Offset(w - padRight, yBudget),
                     strokeWidth = 1.2.dp.toPx(),
                     pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 8f), 0f)
                 )
             }
-
-            val points = buckets.mapIndexed { i, b -> Offset(xOf(i), yOf(b.amount)) }
-            if (points.size >= 2) {
-                val line = smoothPath(points)
-                val fill = Path().apply {
-                    addPath(line)
-                    lineTo(points.last().x, padTop + innerH)
-                    lineTo(points.first().x, padTop + innerH)
-                    close()
-                }
-                drawPath(
-                    path = fill,
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            SpendLine.copy(alpha = 0.28f * t),
-                            SpendLine.copy(alpha = 0.02f)
-                        ),
-                        startY = padTop,
-                        endY = padTop + innerH
-                    )
-                )
-                drawPath(
-                    path = line,
-                    color = SpendLine,
-                    style = Stroke(
-                        width = 3.dp.toPx(),
-                        cap = StrokeCap.Round,
-                        join = StrokeJoin.Round
-                    )
-                )
-            } else if (points.size == 1) {
-                drawCircle(color = SpendLine, radius = 5.dp.toPx(), center = points[0])
-            }
-
-            buckets.forEachIndexed { i, bucket ->
-                if (bucket.amount > 0) {
-                    drawCircle(
-                        color = SpendLine,
-                        radius = 3.5.dp.toPx(),
-                        center = points[i]
-                    )
-                }
-            }
-            selectedIndex?.let { idx ->
-                val p = points.getOrNull(idx) ?: return@let
+            if (average > 0 && average <= yMax) {
+                val yAvg = yOf(average)
                 drawLine(
-                    color = SpendLine.copy(alpha = 0.35f),
+                    color = axis,
+                    start = Offset(padX, yAvg),
+                    end = Offset(w - padRight, yAvg),
+                    strokeWidth = 1.dp.toPx(),
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 6f), 0f)
+                )
+            }
+
+            fun drawSeries(values: List<Double>, color: Color) {
+                val points = values.mapIndexed { i, v -> Offset(xOf(i), yOf(v)) }
+                if (points.size >= 2) {
+                    val line = smoothPath(points)
+                    val fill = Path().apply {
+                        addPath(line)
+                        lineTo(points.last().x, padTop + innerH)
+                        lineTo(points.first().x, padTop + innerH)
+                        close()
+                    }
+                    drawPath(
+                        path = fill,
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                color.copy(alpha = 0.26f * t),
+                                color.copy(alpha = 0.02f)
+                            ),
+                            startY = padTop,
+                            endY = padTop + innerH
+                        )
+                    )
+                    drawPath(
+                        path = line,
+                        color = color,
+                        style = Stroke(
+                            width = 3.dp.toPx(),
+                            cap = StrokeCap.Round,
+                            join = StrokeJoin.Round
+                        )
+                    )
+                } else if (points.size == 1) {
+                    drawCircle(color = color, radius = 5.dp.toPx(), center = points[0])
+                }
+                values.forEachIndexed { i, v ->
+                    if (v > 0) {
+                        drawCircle(color = color, radius = 3.5.dp.toPx(), center = points[i])
+                    }
+                }
+            }
+
+            when (kind) {
+                ChartMoneyKind.INCOME -> drawSeries(buckets.map { it.income }, IncomeLine)
+                ChartMoneyKind.BOTH -> {
+                    drawSeries(buckets.map { it.spend }, SpendLine)
+                    drawSeries(buckets.map { it.income }, IncomeLine)
+                }
+                ChartMoneyKind.SPEND -> drawSeries(buckets.map { it.amount }, SpendLine)
+            }
+
+            val markerColor = if (kind == ChartMoneyKind.INCOME) IncomeLine else SpendLine
+            selectedIndex?.let { idx ->
+                val value = when (kind) {
+                    ChartMoneyKind.INCOME -> buckets.getOrNull(idx)?.income ?: 0.0
+                    ChartMoneyKind.BOTH -> buckets.getOrNull(idx)?.spend ?: 0.0
+                    ChartMoneyKind.SPEND -> buckets.getOrNull(idx)?.amount ?: 0.0
+                }
+                val p = Offset(xOf(idx), yOf(value))
+                drawLine(
+                    color = markerColor.copy(alpha = 0.35f),
                     start = Offset(p.x, padTop),
                     end = Offset(p.x, padTop + innerH),
                     strokeWidth = 1.5.dp.toPx()
                 )
                 drawCircle(color = Color.White, radius = 6.dp.toPx(), center = p)
-                drawCircle(color = SpendLine, radius = 4.dp.toPx(), center = p)
+                drawCircle(color = markerColor, radius = 4.dp.toPx(), center = p)
+            }
+        }
+        Column(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(top = 8.dp)
+                .height(140.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            yLabels.asReversed().forEach { v ->
+                Text(
+                    text = compactAxis(v, currencyCode),
+                    fontSize = 9.sp,
+                    color = muted,
+                    maxLines = 1
+                )
             }
         }
         Row(
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .fillMaxWidth()
-                .padding(horizontal = 4.dp),
+                .padding(start = 36.dp, end = 4.dp),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             buckets.forEachIndexed { index, bucket ->
@@ -456,6 +591,15 @@ private fun SmoothSpendChart(
                 }
             }
         }
+    }
+}
+
+private fun compactAxis(amount: Double, code: String): String {
+    val symbol = Currencies.symbolOf(code)
+    return when {
+        amount >= 1000 -> "$symbol${(amount / 1000.0).let { if (it >= 10) "%.0f".format(it) else "%.1f".format(it) }}k"
+        amount <= 0 -> "${symbol}0"
+        else -> "$symbol${amount.toInt()}"
     }
 }
 

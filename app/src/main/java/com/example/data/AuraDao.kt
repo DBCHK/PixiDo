@@ -155,6 +155,9 @@ interface AuraDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertGoalActivities(items: List<GoalActivityEntity>)
 
+    @Query("DELETE FROM goal_activity WHERE goalId = :goalId AND dateKey = :dateKey")
+    suspend fun deleteGoalActivityDay(goalId: Int, dateKey: String)
+
     @Query("DELETE FROM goal_activity WHERE goalId = :goalId")
     suspend fun clearGoalActivityForGoal(goalId: Int)
 

@@ -17,7 +17,7 @@ object EtaRingtonePlayer {
     private var player: MediaPlayer? = null
 
     fun ringtoneUri(context: Context): Uri =
-        Uri.parse("android.resource://${context.packageName}/${R.raw.ringtone_eta}")
+        Uri.parse("android.resource://${context.packageName}/${R.raw.sfx_task}")
 
     @Synchronized
     fun start(context: Context, loop: Boolean = true) {

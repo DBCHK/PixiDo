@@ -83,7 +83,7 @@ fun DailyHeaderBanner(
                     onClick = onOpenFocusMode,
                     modifier = Modifier.testTag("focus_mode_button")
                 ) {
-                    PixiGlass(shape = PixiPillShape, elevation = 0.dp, frost = false) {
+                    PixiGlass(shape = PixiPillShape, role = PixiGlassRole.Control, elevation = 0.dp, frost = true) {
                     Row(
                         modifier = Modifier
                             .padding(horizontal = 12.dp, vertical = 8.dp),

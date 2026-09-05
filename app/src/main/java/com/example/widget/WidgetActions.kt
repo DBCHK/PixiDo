@@ -14,6 +14,7 @@ object WidgetActions {
     const val ACTION_OPEN_FOCUS = "open_focus"
     const val ACTION_OPEN_TASKS = "open_tasks"
     const val ACTION_OPEN_BUDGET = "open_budget"
+    const val ACTION_OPEN_GOALS = "open_goals"
 
     fun openApp(context: Context, action: String = ACTION_OPEN_APP, requestCode: Int): PendingIntent {
         val intent = Intent(context, MainActivity::class.java).apply {
@@ -36,7 +37,9 @@ object WidgetActions {
             ContributionWidgetProvider::class.java,
             TodosWidgetProvider::class.java,
             FocusWidgetProvider::class.java,
-            TransactionsWidgetProvider::class.java
+            TransactionsWidgetProvider::class.java,
+            GoalsWidgetProvider::class.java,
+            SpendCurveWidgetProvider::class.java
         ).forEach { cls ->
             val ids = mgr.getAppWidgetIds(ComponentName(app, cls))
             if (ids.isNotEmpty()) {

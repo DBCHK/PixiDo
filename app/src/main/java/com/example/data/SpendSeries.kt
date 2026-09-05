@@ -18,11 +18,26 @@ enum class SpendRange {
         }
 }
 
+enum class ChartMoneyKind {
+    SPEND,
+    INCOME,
+    BOTH;
+
+    val label: String
+        get() = when (this) {
+            SPEND -> "Spend"
+            INCOME -> "Income"
+            BOTH -> "Both"
+        }
+}
+
 data class SpendBucket(
     val startMillis: Long,
     val endMillis: Long,
     val label: String,
-    val amount: Double
+    val amount: Double,
+    val spend: Double = amount,
+    val income: Double = 0.0
 )
 
 data class SpendChartModel(
@@ -54,18 +69,27 @@ object SpendSeries {
         items: List<BudgetItemEntity>,
         range: SpendRange,
         offset: Int = 0,
-        now: Long = System.currentTimeMillis()
+        now: Long = System.currentTimeMillis(),
+        kind: ChartMoneyKind = ChartMoneyKind.SPEND
     ): SpendChartModel {
         val clampedOffset = offset.coerceAtMost(0)
         val window = windowOf(range, clampedOffset, now)
         val previous = previousWindow(range, window.start, window.end)
-        val expenses = items.filter { it.type == TransactionType.EXPENSE }
-        val buckets = bucketsFor(range, window.start, window.end, expenses)
+        val spendItems = items.filter { it.type == TransactionType.EXPENSE }
+        val incomeItems = items.filter { it.type == TransactionType.INCOME }
+        val buckets = bucketsFor(range, window.start, window.end, spendItems, incomeItems, kind)
+        val primary = when (kind) {
+            ChartMoneyKind.INCOME -> incomeItems
+            ChartMoneyKind.BOTH -> spendItems
+            ChartMoneyKind.SPEND -> spendItems
+        }
         val total = buckets.sumOf { it.amount }
-        val previousTotal = expenses
+        val previousTotal = primary
             .filter { it.timestamp >= previous.start && it.timestamp < previous.end }
             .sumOf { it.amount }
-        val peak = buckets.maxByOrNull { it.amount }?.takeIf { it.amount > 0.0 }
+        val peak = buckets.maxByOrNull { b ->
+            maxOf(b.amount, b.spend, b.income)
+        }?.takeIf { it.amount > 0.0 || it.income > 0.0 }
         return SpendChartModel(
             range = range,
             offset = clampedOffset,
@@ -113,21 +137,33 @@ object SpendSeries {
         range: SpendRange,
         start: Long,
         end: Long,
-        expenses: List<BudgetItemEntity>
+        spendItems: List<BudgetItemEntity>,
+        incomeItems: List<BudgetItemEntity>,
+        kind: ChartMoneyKind
     ): List<SpendBucket> {
+        fun bucket(bStart: Long, bEnd: Long, label: String): SpendBucket {
+            val spend = sumIn(spendItems, bStart, bEnd)
+            val income = sumIn(incomeItems, bStart, bEnd)
+            val amount = when (kind) {
+                ChartMoneyKind.INCOME -> income
+                ChartMoneyKind.BOTH -> spend
+                ChartMoneyKind.SPEND -> spend
+            }
+            return SpendBucket(bStart, bEnd, label, amount, spend = spend, income = income)
+        }
         return when (range) {
             SpendRange.DAY -> (0 until 24).map { hour ->
                 val cal = calendar(start).apply { add(Calendar.HOUR_OF_DAY, hour) }
                 val bStart = cal.timeInMillis
                 val bEnd = calendar(bStart).apply { add(Calendar.HOUR_OF_DAY, 1) }.timeInMillis
                 val label = SimpleDateFormat("h a", Locale.getDefault()).format(Date(bStart))
-                SpendBucket(bStart, bEnd, label, sumIn(expenses, bStart, bEnd))
+                bucket(bStart, bEnd, label)
             }
             SpendRange.WEEK -> (0 until 7).map { day ->
                 val bStart = DayTime.addDays(start, day)
                 val bEnd = DayTime.addDays(bStart, 1)
                 val label = SimpleDateFormat("EEE", Locale.getDefault()).format(Date(bStart))
-                SpendBucket(bStart, bEnd, label, sumIn(expenses, bStart, bEnd))
+                bucket(bStart, bEnd, label)
             }
             SpendRange.MONTH -> {
                 val days = DayTime.daysBetween(start, end).coerceAtLeast(1)
@@ -135,7 +171,7 @@ object SpendSeries {
                     val bStart = DayTime.addDays(start, day)
                     val bEnd = DayTime.addDays(bStart, 1)
                     val label = SimpleDateFormat("d", Locale.getDefault()).format(Date(bStart))
-                    SpendBucket(bStart, bEnd, label, sumIn(expenses, bStart, bEnd))
+                    bucket(bStart, bEnd, label)
                 }
             }
         }

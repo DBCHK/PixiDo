@@ -20,7 +20,9 @@ object SmsTransactionParser {
         val accountLast4: String = "",
         val category: String = "Other",
         val channel: String = CHANNEL_OTHER,
-        val isWallet: Boolean = false
+        val isWallet: Boolean = false,
+        /** True when the SMS is a credit-card spend/payment, not a bank/UPI debit. */
+        val isCreditCard: Boolean = false
     )
 
     const val CHANNEL_UPI = "UPI"
@@ -78,9 +80,20 @@ object SmsTransactionParser {
         "MOBIKW" to "MobiKwik",
         "FREECH" to "Freecharge",
         "BHIM" to "BHIM UPI",
+        "SBICARD" to "SBI Card",
+        "HDFCCRD" to "HDFC Bank",
+        "HDFCCARD" to "HDFC Bank",
+        "AMEX" to "Amex",
+        "CITICRD" to "Citi Bank",
         "CRED" to "CRED",
         "NACH" to "NACH",
         "UPI" to "UPI"
+    )
+
+    /** Sender fragments that almost always mean a credit card, not a bank account. */
+    private val creditCardSenderKeys = listOf(
+        "SBICRD", "SBICARD", "HDFCCRD", "HDFCCARD", "ICICICRD", "AXISCD", "AXISCRD",
+        "AMEX", "CITICRD", "SCUCARD", "RBLCRD", "YESCRD", "KOTAKCRD", "INDCRD"
     )
 
     private val walletBanks = setOf(
@@ -115,10 +128,12 @@ object SmsTransactionParser {
     )
 
     private val debitPhrases = listOf(
-        "debited", "has been spent", "spent on", "spent at", "paid to", "paid rs",
-        "paid inr", "paid ₹", "you paid", "you've paid", "you have paid",
-        "purchase of", "withdrawn", "withdrawal", "sent to", "transferred to",
-        "payment of", "charged", "debit alert", "dr alert", "pos purchase"
+        "debited", "has been spent", "spent on", "spent at", "spent using",
+        "paid to", "paid rs", "paid inr", "paid ₹", "you paid", "you've paid",
+        "you have paid", "purchase of", "purchase for", "withdrawn", "withdrawal",
+        "sent to", "transferred to", "payment of", "charged", "debit alert",
+        "dr alert", "pos purchase", "used for", "using your", "has been used",
+        "txn of", "transaction of", "spent rs", "spent inr"
     )
 
     private val creditPhrases = listOf(
@@ -134,7 +149,29 @@ object SmsTransactionParser {
         "insufficient", "kyc", "click here", "download the app", "offer:",
         "win rs", "get cashback on", "is due on", "overdue", "reminder:",
         "will be debited", "requested to debit", "mini statement", "ministatement",
-        "last 5 txn", "your statement"
+        "last 5 txn", "your statement", "statement generated", "e-statement",
+        "bill generated"
+    )
+
+    private val billOnlyHints = listOf(
+        "outstanding", "total due", "min due", "minimum due", "tot due",
+        "total amount due", "minimum amount due", "statement generated",
+        "bill generated", "payment due"
+    )
+
+    /** Amounts that are balances/limits/dues — never the transaction figure. */
+    private val nonTxnAmountHint = Regex(
+        """(?:avl(?:ailable)?\s*(?:bal(?:ance)?|limit|credit)|available\s*(?:bal(?:ance)?|limit|credit)|""" +
+            """bal(?:ance)?\s*[:=]|closing\s*bal|total\s*bal|outstanding|tot(?:al)?\s*due|""" +
+            """min(?:imum)?\s*(?:amt(?:ount)?)?\s*due|credit\s*limit|unused\s*limit|remaining\s*limit|""" +
+            """due\s*(?:amt|amount)|overdue|avail(?:able)?\s*lmt)""",
+        RegexOption.IGNORE_CASE
+    )
+
+    private val txnVerbHint = Regex(
+        """debited|credited|spent|paid|withdrawn|received|deposited|purchase|sent|""" +
+            """charged|used for|using your|has been used|txn of|transaction of|dr\b|cr\b""",
+        RegexOption.IGNORE_CASE
     )
 
     private val expenseCategoryHints = listOf(
@@ -179,6 +216,8 @@ object SmsTransactionParser {
             text.contains("upi") ||
             text.contains("neft") ||
             text.contains("imps")
+        val billOnly = !hasVerb && billOnlyHints.any { text.contains(it) }
+        if (billOnly) return false
         val knownSender = resolveBankFromSender(sender) != null
         return hasVerb || knownSender
     }
@@ -195,11 +234,13 @@ object SmsTransactionParser {
         val info = extractMerchantOrInfo(body)
         val refId = extractRefId(body)
         val last4 = extractAccountLast4(body)
-        val channel = resolveChannel(body)
+        val isCard = resolveIsCreditCard(body, sender)
+        val detectedChannel = resolveChannel(body)
+        val channel = if (isCard && detectedChannel == CHANNEL_OTHER) CHANNEL_CARD else detectedChannel
         val category = resolveCategory(body, info, isExpense)
         val wallet = isWalletBank(bankName)
         val confidence = when {
-            bankName != "Bank" && (refId.isNotBlank() || info.isNotBlank()) -> 1f
+            bankName != "Bank" && (refId.isNotBlank() || info.isNotBlank() || last4.isNotBlank()) -> 1f
             bankName != "Bank" -> 0.9f
             else -> 0.7f
         }
@@ -214,7 +255,8 @@ object SmsTransactionParser {
             accountLast4 = last4,
             category = category,
             channel = channel,
-            isWallet = wallet
+            isWallet = wallet,
+            isCreditCard = isCard
         )
     }
 
@@ -226,38 +268,48 @@ object SmsTransactionParser {
             pattern.findAll(normalized).forEach { match ->
                 val raw = match.groupValues.drop(1).firstOrNull { it.isNotBlank() } ?: return@forEach
                 val value = raw.replace(",", "").toDoubleOrNull() ?: return@forEach
+                if (value <= 0.0) return@forEach
                 candidates += match.range.first to value
             }
         }
         if (candidates.isEmpty()) return null
 
-        val balanceHint = Regex(
-            """(?:avl(?:ailable)?\s*bal(?:ance)?|available\s*balance|bal(?:ance)?\s*[:=]|closing\s*bal|total\s*bal)""",
-            RegexOption.IGNORE_CASE
-        )
-        val nonBalance = candidates.filter { (index, _) ->
-            val windowStart = (index - 28).coerceAtLeast(0)
-            val prefix = normalized.substring(windowStart, index)
-            !balanceHint.containsMatchIn(prefix)
+        data class Scored(val index: Int, val value: Double, val score: Int)
+
+        val scored = candidates.map { (index, value) ->
+            val prefixStart = (index - 36).coerceAtLeast(0)
+            val prefix = normalized.substring(prefixStart, index)
+            val near = normalized.substring(
+                (index - 48).coerceAtLeast(0),
+                (index + 32).coerceAtMost(normalized.length)
+            )
+            var score = 0
+            if (nonTxnAmountHint.containsMatchIn(prefix)) score -= 140
+            if (txnVerbHint.containsMatchIn(near)) score += 80
+            val verbMatch = txnVerbHint.findAll(near).minByOrNull { match ->
+                kotlin.math.abs(match.range.first - (index - (index - 48).coerceAtLeast(0)))
+            }
+            val dist = if (verbMatch == null) 80 else {
+                val nearStart = (index - 48).coerceAtLeast(0)
+                kotlin.math.abs((nearStart + verbMatch.range.first) - index)
+            }
+            score -= (dist / 3).coerceAtMost(50)
+            // Round thousands with no nearby verb are usually limits / dues.
+            if (value >= 5_000 && value % 100.0 == 0.0 && !txnVerbHint.containsMatchIn(near)) {
+                score -= 25
+            }
+            Scored(index, value, score)
         }
 
-        val pool = nonBalance.ifEmpty { candidates }
-        val verb = Regex(
-            """debited|credited|spent|paid|withdrawn|received|deposited|purchase|sent""",
-            RegexOption.IGNORE_CASE
+        val best = scored.maxWithOrNull(
+            compareBy<Scored> { it.score }.thenBy { -it.index }
         )
-        val withVerb = pool.minByOrNull { (index, _) ->
-            val nearby = normalized.substring(
-                (index - 40).coerceAtLeast(0),
-                (index + 40).coerceAtMost(normalized.length)
-            )
-            if (verb.containsMatchIn(nearby)) 0 else 1
-        }
-        return withVerb?.second ?: pool.first().second
+        return best?.value ?: candidates.first().second
     }
 
     fun resolveIsExpense(body: String): Boolean? {
         val text = normalizeBody(body)
+        if (isCardPaymentReceived(text)) return false
         val debitScore = debitPhrases.count { text.contains(it) }
         val creditScore = creditPhrases.count { text.contains(it) }
         return when {
@@ -265,6 +317,46 @@ object SmsTransactionParser {
             creditScore > debitScore -> false
             else -> null
         }
+    }
+
+    /**
+     * Credit-card bill payment SMS ("payment received towards your card") reduces
+     * card debt — treat as income on the card, not a bank spend.
+     */
+    fun isCardPaymentReceived(text: String): Boolean {
+        val body = text.lowercase()
+        val isSpend = body.contains("spent") ||
+            body.contains("debited") ||
+            body.contains("withdrawn") ||
+            body.contains("using your") ||
+            body.contains("used for") ||
+            body.contains("purchase")
+        if (isSpend) return false
+        val isCard = body.contains("credit card") ||
+            body.contains("card xx") ||
+            body.contains("card ending")
+        if (!isCard) return false
+        return body.contains("payment") &&
+            (body.contains("received") || body.contains("thank you") || body.contains("towards"))
+    }
+
+    fun resolveIsCreditCard(body: String, sender: String = ""): Boolean {
+        val text = normalizeBody(body)
+        val send = normalizeSender(sender)
+        if (text.contains("debit card")) return false
+        if (creditCardSenderKeys.any { send.contains(it) }) return true
+        if (text.contains("credit card") || text.contains("creditcard")) return true
+        if (text.contains("avl limit") || text.contains("available limit") ||
+            text.contains("available credit") || text.contains("credit limit") ||
+            text.contains("unused limit") || text.contains("avail lmt")
+        ) return true
+        if (text.contains("sbi card") && !text.contains("sbi a/c") && !text.contains("sbi account")) {
+            return true
+        }
+        val spentOnCard = (text.contains("spent on your") || text.contains("using your") ||
+            text.contains("used for") || text.contains("spent using")) &&
+            text.contains("card")
+        return spentOnCard
     }
 
     fun resolveBankName(body: String, sender: String): String {
@@ -316,8 +408,11 @@ object SmsTransactionParser {
 
     fun extractAccountLast4(body: String): String {
         val patterns = listOf(
-            Regex("""(?:a/?c|acct|account|card)\s*(?:no\.?|ending)?\s*(?:\*{2,}|\bXX)?(\d{4})\b""", RegexOption.IGNORE_CASE),
-            Regex("""(?:ending|xx|\*{2,})(\d{4})\b""", RegexOption.IGNORE_CASE)
+            Regex(
+                """(?:a/?c|acct|account|card|cc)\s*(?:no\.?|number|ending(?:\s*with)?)?\s*(?:\*{2,}|\bXX)?(\d{4})\b""",
+                RegexOption.IGNORE_CASE
+            ),
+            Regex("""(?:ending(?:\s*with)?|xx|\*{2,}|x{2,})(\d{4})\b""", RegexOption.IGNORE_CASE)
         )
         for (p in patterns) {
             val m = p.find(body) ?: continue

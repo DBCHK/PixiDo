@@ -26,7 +26,7 @@ data class HeatmapWidgetData(
     val streak: Int,
     val todayCount: Int,
     val bestDay: Int,
-    val bitmap: Bitmap
+    val dayCounts: Map<String, Int>
 )
 
 data class TodosWidgetData(
@@ -55,6 +55,22 @@ data class TransactionsWidgetData(
     val periodLabel: String
 )
 
+data class GoalsWidgetData(
+    val habitsDone: Int,
+    val habitsTotal: Int,
+    val streak: Int,
+    val progress: Float,
+    val habitNames: List<Pair<String, Boolean>>
+)
+
+data class SpendCurveWidgetData(
+    val currencyCode: String,
+    val total: Double,
+    val periodLabel: String,
+    val normalized: List<Float>,
+    val labels: List<String>
+)
+
 object WidgetDataLoader {
 
     suspend fun loadHeatmap(context: Context): HeatmapWidgetData = withContext(Dispatchers.IO) {
@@ -75,8 +91,58 @@ object WidgetDataLoader {
         val active = activity.count { it.completedCount > 0 }
         val best = activity.maxOfOrNull { it.completedCount } ?: 0
         val streak = computeStreak(activity)
-        val bmp = renderHeatmapBitmap(byDay, weeks = 12, cell = 9, gap = 2)
-        HeatmapWidgetData(total, active, streak, todayCount, best, bmp)
+        val counts = byDay.mapValues { it.value.completedCount }
+        HeatmapWidgetData(total, active, streak, todayCount, best, counts)
+    }
+
+    suspend fun loadGoals(context: Context): GoalsWidgetData = withContext(Dispatchers.IO) {
+        val dao = AuraDatabase.getDatabase(context).auraDao()
+        val goals = dao.getGoalsOnce()
+        val activity = dao.getGoalActivityOnce()
+        val today = com.example.data.HabitStats.dayKey()
+        val habits = goals.filter { it.isDailyHabit }
+        val byGoal = activity.groupBy { it.goalId }
+        val names = habits.take(4).map { habit ->
+            val done = com.example.data.HabitStats.isDoneOn(
+                com.example.data.HabitStats.doneDays(byGoal[habit.id].orEmpty()),
+                today
+            )
+            habit.title to done
+        }
+        val doneToday = names.count { it.second }
+        val streak = habits.maxOfOrNull { habit ->
+            com.example.data.HabitStats.currentStreak(
+                com.example.data.HabitStats.doneDays(byGoal[habit.id].orEmpty()),
+                today
+            )
+        } ?: 0
+        val total = habits.size
+        val progress = when {
+            total > 0 -> doneToday / total.toFloat()
+            else -> 0f
+        }
+        GoalsWidgetData(doneToday, total, streak, progress, names)
+    }
+
+    suspend fun loadSpendCurve(context: Context): SpendCurveWidgetData = withContext(Dispatchers.IO) {
+        val dao = AuraDatabase.getDatabase(context).auraDao()
+        val prefs = UserPreferencesRepository(context)
+        val currency = prefs.currentProfile().currencyCode
+        val items = dao.getBudgetItemsOnce()
+        val model = com.example.data.SpendSeries.build(
+            items,
+            com.example.data.SpendRange.WEEK,
+            0,
+            System.currentTimeMillis()
+        )
+        val peak = model.buckets.maxOfOrNull { it.amount }?.coerceAtLeast(1.0) ?: 1.0
+        SpendCurveWidgetData(
+            currencyCode = currency,
+            total = model.total,
+            periodLabel = model.windowLabel,
+            normalized = model.buckets.map { (it.amount / peak).toFloat() },
+            labels = model.buckets.map { it.label }
+        )
     }
 
     suspend fun loadTodos(context: Context): TodosWidgetData = withContext(Dispatchers.IO) {
@@ -218,7 +284,7 @@ object WidgetDataLoader {
         val l3 = 0xFF9B7AE8.toInt()
         val l4 = 0xFF7C5CD6.toInt()
 
-        val grid = buildGrid(weeks)
+        val grid = contributionGrid(weeks)
         grid.forEachIndexed { wi, week ->
             week.forEachIndexed { di, dayKey ->
                 val count = activityMap[dayKey]?.completedCount ?: 0
@@ -242,7 +308,7 @@ object WidgetDataLoader {
         return bmp
     }
 
-    private fun buildGrid(weeks: Int): List<List<String>> {
+    fun contributionGrid(weeks: Int): List<List<String>> {
         val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
         val cal = Calendar.getInstance()
         // End of this week (today)

@@ -41,7 +41,8 @@ fun AddGoalDialog(
         unit: String,
         deadlineStr: String,
         colorHex: String,
-        isSimple: Boolean
+        isSimple: Boolean,
+        isHabit: Boolean
     ) -> Unit
 ) {
     val moneySymbol = Currencies.symbolOf(currencyCode)
@@ -51,9 +52,10 @@ fun AddGoalDialog(
     // "$" means money — ViewModel maps it to budget currency symbol
     var unit by remember { mutableStateOf("$") }
     var deadlineStr by remember { mutableStateOf("") }
-    var isSimple by remember { mutableStateOf(true) }
+    var isHabit by remember { mutableStateOf(true) }
+    val isSimple = false
 
-    val categories = listOf("Personal", "Travel", "Savings", "Fitness", "Career", "Learning")
+    val categories = listOf("Health", "Personal", "Fitness", "Learning", "Career", "Savings", "Travel")
     val units = listOf(
         "$" to "Money ($moneySymbol · $currencyCode)",
         "tasks" to "tasks",
@@ -87,7 +89,7 @@ fun AddGoalDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = if (isSimple) "Simple task" else "New Goal",
+                        text = if (isHabit) "New habit" else "New goal",
                         style = MaterialTheme.typography.headlineSmall,
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -96,7 +98,7 @@ fun AddGoalDialog(
 
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = if (isSimple) "Tap YES DONE when you’ve done it. That’s it."
+                    text = if (isHabit) "Check it off each day you do it. Streaks live on this tab."
                     else "Money goals use your budget currency ($currencyCode)",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -116,15 +118,15 @@ fun AddGoalDialog(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     PixiChip(
-                        label = "Simple task",
-                        selected = isSimple,
-                        onClick = { isSimple = true },
-                        modifier = Modifier.testTag("goal_type_simple")
+                        label = "Daily habit",
+                        selected = isHabit,
+                        onClick = { isHabit = true },
+                        modifier = Modifier.testTag("goal_type_habit")
                     )
                     PixiChip(
-                        label = "Tracked goal",
-                        selected = !isSimple,
-                        onClick = { isSimple = false },
+                        label = "Milestone",
+                        selected = !isHabit,
+                        onClick = { isHabit = false },
                         modifier = Modifier.testTag("goal_type_tracked")
                     )
                 }
@@ -134,9 +136,9 @@ fun AddGoalDialog(
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
-                    label = { Text(if (isSimple) "What do you want to get done?" else "Goal Name") },
+                    label = { Text(if (isHabit) "What do you want to do every day?" else "Goal name") },
                     placeholder = {
-                        Text(if (isSimple) "e.g. Drink 2L of water" else "e.g. Save for Summer Trip")
+                        Text(if (isHabit) "e.g. Drink 2L of water" else "e.g. Save for Summer Trip")
                     },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -148,7 +150,7 @@ fun AddGoalDialog(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                if (!isSimple) {
+                if (!isHabit) {
                     Row(modifier = Modifier.fillMaxWidth()) {
                         OutlinedTextField(
                             value = targetAmountStr,
@@ -209,8 +211,8 @@ fun AddGoalDialog(
                     OutlinedTextField(
                         value = deadlineStr,
                         onValueChange = { deadlineStr = it },
-                        label = { Text("When (optional)") },
-                        placeholder = { Text("Today · this week") },
+                        label = { Text("Cue (optional)") },
+                        placeholder = { Text("Morning · after coffee") },
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("input_goal_deadline_simple"),
@@ -245,18 +247,19 @@ fun AddGoalDialog(
                 Spacer(modifier = Modifier.height(22.dp))
 
                 PixiPrimaryButton(
-                    text = if (isSimple) "Add simple task" else "Create Goal",
+                    text = if (isHabit) "Add habit" else "Create goal",
                     onClick = {
-                        val parsedAmt = if (isSimple) 1.0 else (targetAmountStr.toDoubleOrNull() ?: 1.0)
+                        val parsedAmt = if (isHabit) 1.0 else (targetAmountStr.toDoubleOrNull() ?: 1.0)
                         if (title.isNotBlank()) {
                             onAddGoal(
                                 title,
                                 category,
                                 parsedAmt,
-                                if (isSimple) "done" else unit,
+                                if (isHabit) "habit" else unit,
                                 deadlineStr,
                                 "#C4A8F5",
-                                isSimple
+                                false,
+                                isHabit
                             )
                             onDismiss()
                         }

@@ -268,9 +268,9 @@ fun AddTaskDialog(
                 .heightIn(max = screenH * 0.92f)
                 .testTag(if (isEdit) "edit_task_dialog" else "add_task_dialog"),
             shape = PixiCardShape,
+            role = PixiGlassRole.Sheet,
             elevation = 20.dp,
             frost = true,
-            liquid = true,
             weight = PixiGlassWeight.Sheet
         ) {
             BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {

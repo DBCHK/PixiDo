@@ -15,10 +15,21 @@ data class GoalEntity(
     val colorHex: String = "#A78BFA",
     val isCompleted: Boolean = false,
     /** Checklist goal: one tap on YES DONE marks it complete. No amount tracking. */
-    val isSimple: Boolean = false
+    val isSimple: Boolean = false,
+    /** Daily habit: check off per day, streak + week dots. Not a one-shot. */
+    val isHabit: Boolean = false
 ) {
     val isSimpleTask: Boolean
         get() = isSimple ||
             unit.equals("done", ignoreCase = true) ||
             unit.equals("yes", ignoreCase = true)
+
+    /** Daily habit tracker item — includes legacy simple goals. */
+    val isDailyHabit: Boolean
+        get() = isHabit ||
+            unit.equals("habit", ignoreCase = true) ||
+            isSimpleTask
+
+    val isMilestone: Boolean
+        get() = !isDailyHabit
 }

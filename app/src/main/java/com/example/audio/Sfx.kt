@@ -2,7 +2,7 @@ package com.example.audio
 
 /**
  * Every interactive action maps to a unique soft sound fingerprint.
- * Recipes are subtle, sweet, slow, and low — pure sine, warm midrange.
+ * Recipes are short, consonant glass-mallet chimes.
  */
 enum class Sfx {
     /** Soft pillow tap — generic light press */
@@ -123,5 +123,14 @@ enum class Sfx {
     IMPORT,
 
     /** Picker / account chosen */
-    PICK
+    PICK,
+
+    /** Preview of the soft reminder chime */
+    NOTIF_SOFT,
+
+    /** Preview of the bright reminder ping */
+    NOTIF_BRIGHT,
+
+    /** Preview of the calm reminder pad */
+    NOTIF_CALM
 }

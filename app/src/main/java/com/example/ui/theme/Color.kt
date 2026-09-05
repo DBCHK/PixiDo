@@ -39,11 +39,17 @@ val PixiDarkBorder = Color(0xFF38383A)
 val PixiDarkOnBg = Color(0xFFF5F5F7)
 val PixiDarkMuted = Color(0xFF8E8E93)
 
-/** Wallet hero — always ink, even in light theme (reference). */
+/** Wallet hero — always ink, even in light theme (legacy). */
 val WalletInk = Color(0xFF0B0D12)
 val WalletOnInk = Color(0xFFF5F5F7)
 val WalletMuted = Color(0xFF8E9199)
 val WalletPill = Color(0xFF1C1F27)
+
+/** Leather pocket — 1:1 with walletReference.jpg */
+val WalletLeatherTop = Color(0xFFB57AE8)
+val WalletLeatherMid = Color(0xFF8B4FE0)
+val WalletLeatherDeep = Color(0xFF5B21B6)
+val WalletPage = Color(0xFFF7F7F8)
 
 // Legacy aliases used across the app
 val PixiViolet = PixiLavenderDeep
@@ -157,15 +163,18 @@ val PulseStripe = Color(0xFFE4E4E7)
 val PulseIconFill = Color(0xFFF1F1F3)
 val PulseMuted = Color(0xFF9B9B9F)
 
-// Contribution heatmap — soft lilac scale
-val HeatmapEmpty = Color(0xFF2A2436)
-val HeatmapL1 = Color(0xFF3D2F5C)
-val HeatmapL2 = Color(0xFF6B4FA8)
-val HeatmapL3 = Color(0xFF9B7AE8)
-val HeatmapL4 = Color(0xFFC4A8F5)
+// Contribution heatmap — mint scale (matches Goals reference)
+val HeatmapEmpty = Color(0xFF1A2420)
+val HeatmapL1 = Color(0xFF1E4A38)
+val HeatmapL2 = Color(0xFF1A8A5C)
+val HeatmapL3 = Color(0xFF17C492)
+val HeatmapL4 = Color(0xFF2ED9A5)
 
-val HeatmapEmptyLight = Color(0xFFF3F1F7)
-val HeatmapL1Light = Color(0xFFEDE4FF)
-val HeatmapL2Light = Color(0xFFD4C4F5)
-val HeatmapL3Light = Color(0xFFB8A0F0)
-val HeatmapL4Light = Color(0xFF9B7AE8)
+val HeatmapEmptyLight = Color(0xFFEEF4F0)
+val HeatmapL1Light = Color(0xFFC8F0DC)
+val HeatmapL2Light = Color(0xFF8EE8C0)
+val HeatmapL3Light = Color(0xFF4DDC9A)
+val HeatmapL4Light = Color(0xFF2ED9A5)
+
+val GoalsMintWash = Color(0xFFD4F5C4)
+val GoalsMintWashDark = Color(0xFF1C3A2C)

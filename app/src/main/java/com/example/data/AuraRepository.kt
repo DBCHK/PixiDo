@@ -92,6 +92,31 @@ class AuraRepository(private val dao: AuraDao) {
     }
 
     /**
+     * Toggle a daily habit check-in. Returns true if the day is now marked done.
+     */
+    suspend fun toggleHabitDay(
+        goalId: Int,
+        dateKey: String = dayKey()
+    ): Boolean {
+        val existing = dao.getGoalActivityForDay(goalId, dateKey)
+        val alreadyDone = existing != null && existing.completedCount > 0
+        return if (alreadyDone) {
+            dao.deleteGoalActivityDay(goalId, dateKey)
+            false
+        } else {
+            dao.upsertGoalActivity(
+                GoalActivityEntity(
+                    goalId = goalId,
+                    dateKey = dateKey,
+                    completedCount = 1,
+                    xpEarned = 12
+                )
+            )
+            true
+        }
+    }
+
+    /**
      * Record progress on an individual goal for its contribution heatmap.
      */
     suspend fun recordGoalProgress(

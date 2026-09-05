@@ -1,6 +1,7 @@
 package com.example
 
 import com.example.data.BudgetItemEntity
+import com.example.data.ChartMoneyKind
 import com.example.data.SpendRange
 import com.example.data.SpendSeries
 import com.example.data.TransactionType
@@ -95,6 +96,27 @@ class SpendSeriesTest {
         assertEquals(100.0, model.buckets.first().amount, 0.001)
         assertEquals(50.0, model.buckets[19].amount, 0.001)
         assertFalse(model.buckets.any { it.amount == 9.0 || it.amount == 7.0 })
+    }
+
+    @Test
+    fun incomeKindIgnoresExpenses() {
+        val now = at(2026, Calendar.AUGUST, 15, 12, 0)
+        val items = listOf(
+            expense(1, 40.0, at(2026, Calendar.AUGUST, 15, 9, 0)),
+            BudgetItemEntity(
+                id = 2,
+                title = "Pay",
+                amount = 200.0,
+                isExpense = false,
+                category = "Salary",
+                timestamp = at(2026, Calendar.AUGUST, 15, 10, 0),
+                transactionType = TransactionType.INCOME.name
+            )
+        )
+        val model = SpendSeries.build(items, SpendRange.DAY, now = now, kind = ChartMoneyKind.INCOME)
+        assertEquals(200.0, model.total, 0.001)
+        assertTrue(model.buckets.any { it.income == 200.0 })
+        assertTrue(model.buckets.any { it.spend == 40.0 })
     }
 
     @Test

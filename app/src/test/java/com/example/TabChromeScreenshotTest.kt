@@ -6,7 +6,9 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import com.example.audio.ProvideSoundEngine
 import com.example.data.CalendarEventEntity
+import com.example.data.GoalActivityEntity
 import com.example.data.GoalEntity
+import com.example.data.HabitStats
 import com.example.data.TaskEntity
 import com.example.data.UserProfile
 import com.example.ui.screens.CalendarScreen
@@ -188,14 +190,29 @@ class TabChromeScreenshotTest {
 
     @Test
     fun goals_screenshot() {
+        val today = HabitStats.dayKey()
+        val yesterday = HabitStats.shiftDay(today, -1)
         composeTestRule.setContent {
             PixiDoTheme {
                 ProvideSoundEngine(enabled = false, hapticsEnabled = false) {
                     GoalsScreen(
                         goals = goals,
                         currencyCode = "USD",
+                        goalActivity = listOf(
+                            GoalActivityEntity(
+                                goalId = 1,
+                                dateKey = today,
+                                completedCount = 1
+                            ),
+                            GoalActivityEntity(
+                                goalId = 1,
+                                dateKey = yesterday,
+                                completedCount = 1
+                            )
+                        ),
                         profile = profile,
                         onUpdateGoalProgress = { _, _ -> },
+                        onToggleHabit = { _, _ -> },
                         onDeleteGoal = {},
                         onOpenAddGoal = {}
                     )

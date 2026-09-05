@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -36,22 +37,34 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.example.data.AccountEntity
 import com.example.data.AccountType
+import com.example.data.CardNetwork
 import com.example.data.Currencies
+
+data class AccountFormData(
+    val name: String,
+    val type: AccountType,
+    val balance: Double,
+    val creditLimit: Double,
+    val colorHex: String,
+    val cardNetwork: String = "",
+    val lastFour: String = "",
+    val expiryMonth: Int = 0,
+    val expiryYear: Int = 0,
+    val cardholderName: String = ""
+)
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AddAccountDialog(
     currencyCode: String,
     onDismiss: () -> Unit,
-    onAdd: (name: String, type: AccountType, balance: Double, creditLimit: Double, colorHex: String) -> Unit
+    onAdd: (AccountFormData) -> Unit
 ) {
     AccountFormDialog(
         currencyCode = currencyCode,
         existing = null,
         onDismiss = onDismiss,
-        onSave = { name, type, balance, limit, color ->
-            onAdd(name, type, balance, limit, color)
-        }
+        onSave = onAdd
     )
 }
 
@@ -65,7 +78,7 @@ fun AccountFormDialog(
     currencyCode: String,
     existing: AccountEntity?,
     onDismiss: () -> Unit,
-    onSave: (name: String, type: AccountType, balance: Double, creditLimit: Double, colorHex: String) -> Unit
+    onSave: (AccountFormData) -> Unit
 ) {
     val isEdit = existing != null
     var name by remember(existing?.id) { mutableStateOf(existing?.name.orEmpty()) }
@@ -82,6 +95,29 @@ fun AccountFormDialog(
     var limitStr by remember(existing?.id) {
         mutableStateOf(
             existing?.creditLimit?.takeIf { it > 0 }?.let { trimNum(it) }.orEmpty()
+        )
+    }
+    var network by remember(existing?.id) {
+        mutableStateOf(
+            CardNetwork.fromStorage(existing?.cardNetwork).takeIf { it != CardNetwork.OTHER }
+                ?: CardNetwork.infer(existing?.name.orEmpty(), existing?.notes.orEmpty()).takeIf {
+                    it != CardNetwork.OTHER
+                }
+                ?: CardNetwork.VISA
+        )
+    }
+    var lastFour by remember(existing?.id) {
+        mutableStateOf(existing?.lastFour?.filter { it.isDigit() }?.takeLast(4).orEmpty())
+    }
+    var holder by remember(existing?.id) {
+        mutableStateOf(existing?.cardholderName.orEmpty())
+    }
+    var expiryStr by remember(existing?.id) {
+        mutableStateOf(
+            CardNetwork.formatExpiry(
+                existing?.expiryMonth ?: 0,
+                existing?.expiryYear ?: 0
+            )
         )
     }
 
@@ -236,6 +272,114 @@ fun AccountFormDialog(
                     Spacer(modifier = Modifier.height(12.dp))
                 }
 
+                if (type == AccountType.CREDIT_CARD) {
+                    Text(
+                        text = "Card network",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf(
+                            CardNetwork.VISA,
+                            CardNetwork.MASTERCARD,
+                            CardNetwork.RUPAY
+                        ).forEach { net ->
+                            val selected = network == net
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(PixiCardShapeSm)
+                                    .background(
+                                        if (selected) MaterialTheme.colorScheme.primaryContainer
+                                        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                                    )
+                                    .border(
+                                        width = if (selected) 1.5.dp else 1.dp,
+                                        color = if (selected) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
+                                        shape = PixiCardShapeSm
+                                    )
+                                    .clickable { network = net }
+                                    .padding(vertical = 10.dp, horizontal = 6.dp)
+                                    .testTag("card_network_${net.name.lowercase()}"),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    CardNetworkLogo(
+                                        network = net,
+                                        modifier = Modifier
+                                            .width(52.dp)
+                                            .height(20.dp),
+                                        onDark = false
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = net.displayName,
+                                        fontSize = 10.sp,
+                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = holder,
+                        onValueChange = { holder = it },
+                        label = { Text("Name on card") },
+                        placeholder = { Text("As printed on the card") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("input_cardholder"),
+                        singleLine = true,
+                        shape = PixiFieldShape,
+                        colors = fieldColors
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = lastFour,
+                            onValueChange = { lastFour = it.filter { ch -> ch.isDigit() }.take(4) },
+                            label = { Text("Last 4 digits") },
+                            placeholder = { Text("5678") },
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("input_card_last4"),
+                            singleLine = true,
+                            shape = PixiFieldShape,
+                            colors = fieldColors
+                        )
+                        OutlinedTextField(
+                            value = expiryStr,
+                            onValueChange = { raw ->
+                                val digits = raw.filter { it.isDigit() }.take(4)
+                                expiryStr = when {
+                                    digits.length <= 2 -> digits
+                                    else -> digits.take(2) + "/" + digits.drop(2)
+                                }
+                            },
+                            label = { Text("Valid thru") },
+                            placeholder = { Text("MM/YY") },
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("input_card_expiry"),
+                            singleLine = true,
+                            shape = PixiFieldShape,
+                            colors = fieldColors
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+
                 Text(
                     text = "Color",
                     fontSize = 12.sp,
@@ -290,12 +434,24 @@ fun AccountFormDialog(
                 PixiPrimaryButton(
                     text = if (isEdit) "Save Changes" else "Create Account",
                     onClick = {
+                        val isCard = type == AccountType.CREDIT_CARD
+                        val (expM, expY) = CardNetwork.parseExpiry(expiryStr)
+                        val inferred = CardNetwork.infer(name)
                         onSave(
-                            name.ifBlank { type.name.replace('_', ' ') },
-                            type,
-                            balanceStr.toDoubleOrNull() ?: 0.0,
-                            limitStr.toDoubleOrNull() ?: 0.0,
-                            selectedColor
+                            AccountFormData(
+                                name = name.ifBlank { type.name.replace('_', ' ') },
+                                type = type,
+                                balance = balanceStr.toDoubleOrNull() ?: 0.0,
+                                creditLimit = limitStr.toDoubleOrNull() ?: 0.0,
+                                colorHex = selectedColor,
+                                cardNetwork = if (isCard) {
+                                    (if (inferred != CardNetwork.OTHER) inferred else network).name
+                                } else "",
+                                lastFour = if (isCard) lastFour.filter { it.isDigit() }.take(4) else "",
+                                expiryMonth = if (isCard) expM else 0,
+                                expiryYear = if (isCard) expY else 0,
+                                cardholderName = if (isCard) holder.trim() else ""
+                            )
                         )
                     },
                     modifier = Modifier.testTag(

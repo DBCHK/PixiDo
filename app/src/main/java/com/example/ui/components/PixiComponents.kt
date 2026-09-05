@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.animation.animateColorAsState
@@ -75,24 +76,36 @@ fun PixiCard(
     content: @Composable () -> Unit
 ) {
     val shape = PixiCardShape
-    Card(
-        modifier = if (onClick != null) {
-            modifier
-                .clip(shape)
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = onClick
-                )
-        } else {
-            modifier
-        },
-        shape = shape,
-        colors = CardDefaults.cardColors(containerColor = containerColor),
-        border = if (borderColor.alpha < 0.02f) null else BorderStroke(0.33.dp, borderColor),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-    ) {
-        content()
+    val glassOn = LocalGlassEnabled.current
+    val clickMod = if (onClick != null) {
+        Modifier.clickable(
+            interactionSource = remember { MutableInteractionSource() },
+            indication = null,
+            onClick = onClick
+        )
+    } else {
+        Modifier
+    }
+    if (glassOn) {
+        PixiGlass(
+            modifier = modifier.then(clickMod),
+            shape = shape,
+            role = PixiGlassRole.Content,
+            frost = false,
+            elevation = 8.dp
+        ) {
+            content()
+        }
+    } else {
+        Card(
+            modifier = modifier.then(clickMod),
+            shape = shape,
+            colors = CardDefaults.cardColors(containerColor = containerColor),
+            border = if (borderColor.alpha < 0.02f) null else BorderStroke(0.33.dp, borderColor),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        ) {
+            content()
+        }
     }
 }
 
@@ -293,9 +306,9 @@ fun PixiSearchField(
     PixiGlass(
         modifier = modifier.fillMaxWidth(),
         shape = PixiPillShape,
-        liquid = false,
+        role = PixiGlassRole.Control,
         elevation = 0.dp,
-        frost = false
+        frost = true
     ) {
     Row(
         modifier = Modifier
@@ -444,24 +457,48 @@ fun PixiYellowFab(
     modifier: Modifier = Modifier,
     size: Dp = 44.dp
 ) {
+    val glassOn = LocalGlassEnabled.current
     PixiPopClickable(
         onClick = onClick,
         modifier = modifier.size(size),
         pressedScale = 0.90f
     ) {
-        Box(
-            modifier = Modifier
-                .size(size)
-                .clip(CircleShape)
-                .background(com.example.ui.theme.PulseCoral),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Add,
-                contentDescription = "Add",
-                tint = Color.White,
-                modifier = Modifier.size(size * 0.52f)
-            )
+        if (glassOn) {
+            PixiGlass(
+                modifier = Modifier.size(size),
+                shape = CircleShape,
+                role = PixiGlassRole.Control,
+                tint = com.example.ui.theme.PulseCoral,
+                elevation = 10.dp,
+                frost = true
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Add,
+                        contentDescription = "Add",
+                        tint = Color.White,
+                        modifier = Modifier.size(size * 0.52f)
+                    )
+                }
+            }
+        } else {
+            Box(
+                modifier = Modifier
+                    .size(size)
+                    .clip(CircleShape)
+                    .background(com.example.ui.theme.PulseCoral),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Add,
+                    contentDescription = "Add",
+                    tint = Color.White,
+                    modifier = Modifier.size(size * 0.52f)
+                )
+            }
         }
     }
 }

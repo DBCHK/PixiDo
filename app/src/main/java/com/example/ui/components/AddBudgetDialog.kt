@@ -257,7 +257,7 @@ fun AddBudgetDialog(
                     ) {
                         accounts.forEach { acc ->
                             PixiChip(
-                                label = acc.name,
+                                label = if (acc.isCreditCard) "${acc.name} · Card" else acc.name,
                                 selected = acc.id == selectedAccountId,
                                 onClick = { selectedAccountId = acc.id }
                             )

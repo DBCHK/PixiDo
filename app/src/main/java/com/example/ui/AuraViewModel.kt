@@ -365,7 +365,8 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
             }
             val matchedAccountId = manualAccountId ?: matchAccountForBank(
                 bankName = item.bankName,
-                accountLast4 = parsed?.accountLast4.orEmpty()
+                accountLast4 = parsed?.accountLast4.orEmpty(),
+                preferCreditCard = parsed?.isCreditCard
             )
             if (matchedAccountId != null && matchedAccountId > 0) {
                 preferences.setLastSmsAccountId(matchedAccountId)
@@ -404,13 +405,18 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
         _activeSmsPrompt.value = next
     }
 
-    /** Link SMS bank name to a PixiDo account: bank match → last used → primary → first. */
-    private fun matchAccountForBank(bankName: String, accountLast4: String = ""): Int? {
+    /** Link SMS to a PixiDo account: card vs bank first, then last-4 / name / last used. */
+    private fun matchAccountForBank(
+        bankName: String,
+        accountLast4: String = "",
+        preferCreditCard: Boolean? = null
+    ): Int? {
         return SmsAccountMatcher.defaultAccount(
             accounts = accounts.value,
             bankName = bankName,
             lastAccountId = userProfile.value.lastSmsAccountId,
-            accountLast4 = accountLast4
+            accountLast4 = accountLast4,
+            preferCreditCard = preferCreditCard
         )?.id
     }
 
@@ -634,7 +640,10 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setGlassEffectEnabled(enabled: Boolean) {
-        viewModelScope.launch { preferences.setGlassEffectEnabled(enabled) }
+        viewModelScope.launch {
+            preferences.setGlassEffectEnabled(enabled)
+            refreshWidgets()
+        }
     }
 
     fun setNotificationSound(option: NotificationSoundOption) {
@@ -716,19 +725,18 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
         task.linkedGoalId?.let { goalId ->
             goals.value.find { it.id == goalId }?.let { targetGoal ->
                 if (targetGoal.isCompleted) return
-                val updatedGoal = if (targetGoal.isSimpleTask) {
-                    targetGoal.copy(
-                        currentAmount = targetGoal.targetAmount.coerceAtLeast(1.0),
-                        isCompleted = true
-                    )
-                } else {
-                    val next = targetGoal.currentAmount + 1.0
+                if (targetGoal.isDailyHabit) {
+                    repository.recordGoalProgress(goalId, xpEarned = 10, timestamp = now)
+                    refreshWidgets()
+                    return
+                }
+                val next = targetGoal.currentAmount + 1.0
+                repository.updateGoal(
                     targetGoal.copy(
                         currentAmount = next,
                         isCompleted = next >= targetGoal.targetAmount
                     )
-                }
-                repository.updateGoal(updatedGoal)
+                )
                 repository.recordGoalProgress(goalId, xpEarned = 10, timestamp = now)
             }
         }
@@ -1231,7 +1239,12 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
         balance: Double,
         creditLimit: Double,
         colorHex: String,
-        notes: String = ""
+        notes: String = "",
+        cardNetwork: String = "",
+        lastFour: String = "",
+        expiryMonth: Int = 0,
+        expiryYear: Int = 0,
+        cardholderName: String = ""
     ) {
         viewModelScope.launch {
             val currency = userProfile.value.currencyCode
@@ -1249,7 +1262,12 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
                     currencyCode = currency,
                     colorHex = colorHex,
                     isPrimary = isFirst,
-                    notes = notes
+                    notes = notes,
+                    cardNetwork = if (isCard) cardNetwork else "",
+                    lastFour = if (isCard) lastFour.filter { it.isDigit() }.takeLast(4) else "",
+                    expiryMonth = if (isCard) expiryMonth else 0,
+                    expiryYear = if (isCard) expiryYear else 0,
+                    cardholderName = if (isCard) cardholderName else ""
                 )
             )
         }
@@ -1335,29 +1353,45 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
         unit: String,
         deadlineStr: String,
         colorHex: String,
-        isSimple: Boolean = false
+        isSimple: Boolean = false,
+        isHabit: Boolean = false
     ) {
         viewModelScope.launch {
-            val simple = isSimple ||
+            val habit = isHabit ||
+                unit.equals("habit", ignoreCase = true) ||
+                isSimple ||
                 unit.equals("done", ignoreCase = true) ||
                 unit.equals("yes", ignoreCase = true)
+            val simple = isSimple || habit
             val currencyUnit = when {
-                simple -> "done"
+                habit -> "habit"
                 unit == "$" || unit.equals("money", ignoreCase = true) ->
                     Currencies.symbolOf(userProfile.value.currencyCode)
                 else -> unit.ifBlank { Currencies.symbolOf(userProfile.value.currencyCode) }
             }
             repository.addGoal(
                 GoalEntity(
-                    title = title.ifBlank { "New Goal" },
+                    title = title.ifBlank { if (habit) "New habit" else "New Goal" },
                     category = category,
-                    targetAmount = if (simple) 1.0 else maxOf(1.0, targetAmount),
+                    targetAmount = if (habit) 1.0 else maxOf(1.0, targetAmount),
                     unit = currencyUnit,
-                    deadlineStr = deadlineStr.ifBlank { if (simple) "Whenever" else "2027" },
+                    deadlineStr = deadlineStr.ifBlank { if (habit) "Daily" else "2027" },
                     colorHex = colorHex,
-                    isSimple = simple
+                    isSimple = simple,
+                    isHabit = habit
                 )
             )
+        }
+    }
+
+    /** Check or uncheck a habit for a calendar day (yyyy-MM-dd). Future days are ignored. */
+    fun toggleHabitDay(goal: GoalEntity, dateKey: String = AuraRepository.dayKey()) {
+        viewModelScope.launch {
+            val today = AuraRepository.dayKey()
+            if (dateKey > today) return@launch
+            val marked = repository.toggleHabitDay(goal.id, dateKey)
+            if (marked) preferences.addXp(12)
+            refreshWidgets()
         }
     }
 

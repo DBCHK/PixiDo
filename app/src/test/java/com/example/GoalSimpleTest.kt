@@ -23,6 +23,8 @@ class GoalSimpleTest {
             isSimple = true
         )
         assertTrue(goal.isSimpleTask)
+        assertTrue(goal.isDailyHabit)
+        assertFalse(goal.isMilestone)
         assertFalse(goal.isCompleted)
     }
 
@@ -35,6 +37,7 @@ class GoalSimpleTest {
             unit = "done"
         )
         assertTrue(goal.isSimpleTask)
+        assertTrue(goal.isDailyHabit)
     }
 
     @Test
@@ -46,6 +49,21 @@ class GoalSimpleTest {
             unit = "$"
         )
         assertFalse(goal.isSimpleTask)
+        assertFalse(goal.isDailyHabit)
+        assertTrue(goal.isMilestone)
+    }
+
+    @Test
+    fun habitFlagIsDailyHabit() {
+        val goal = GoalEntity(
+            title = "Meditate",
+            category = "Mindset",
+            targetAmount = 1.0,
+            unit = "habit",
+            isHabit = true
+        )
+        assertTrue(goal.isDailyHabit)
+        assertTrue(goal.isMilestone.not())
     }
 }
 

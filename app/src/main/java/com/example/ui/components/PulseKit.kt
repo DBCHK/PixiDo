@@ -144,7 +144,7 @@ fun pulseIconFill(): Color =
 
 @Composable
 fun pulseStripe(): Color =
-    if (isPulseDark()) MaterialTheme.colorScheme.outline.copy(alpha = 0.45f) else PulseStripe
+    if (isPulseDark()) MaterialTheme.colorScheme.outline.copy(alpha = 0.18f) else PulseStripe.copy(alpha = 0.55f)
 
 @Composable
 fun pulseMuted(): Color =
@@ -177,24 +177,50 @@ fun PulseCircleIcon(
     containerColor: Color = pulseIconFill(),
     contentColor: Color = pulseInk()
 ) {
-    Box(
-        modifier = modifier
-            .size(size)
-            .clip(CircleShape)
-            .background(containerColor)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = contentDescription,
-            tint = contentColor,
-            modifier = Modifier.size(iconSize)
-        )
+    val glassOn = LocalGlassEnabled.current
+    val click = Modifier.clickable(
+        interactionSource = remember { MutableInteractionSource() },
+        indication = null,
+        onClick = onClick
+    )
+    if (glassOn) {
+        PixiGlass(
+            modifier = modifier
+                .size(size)
+                .then(click),
+            shape = CircleShape,
+            role = PixiGlassRole.Control,
+            elevation = 6.dp,
+            frost = true
+        ) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = contentDescription,
+                    tint = contentColor,
+                    modifier = Modifier.size(iconSize)
+                )
+            }
+        }
+    } else {
+        Box(
+            modifier = modifier
+                .size(size)
+                .clip(CircleShape)
+                .background(containerColor)
+                .then(click),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                tint = contentColor,
+                modifier = Modifier.size(iconSize)
+            )
+        }
     }
 }
 
@@ -504,28 +530,45 @@ fun PulseSurfaceCard(
     content: @Composable ColumnScope.() -> Unit
 ) {
     val shape = PulseCardShape
-    Column(
-        modifier = modifier
-            .shadow(
-                elevation = 10.dp,
-                shape = shape,
-                ambientColor = Color.Black.copy(alpha = 0.04f),
-                spotColor = Color.Black.copy(alpha = 0.08f)
+    val glassOn = LocalGlassEnabled.current
+    val clickMod = if (onClick != null) {
+        Modifier.clickable(
+            interactionSource = remember { MutableInteractionSource() },
+            indication = null,
+            onClick = onClick
+        )
+    } else {
+        Modifier
+    }
+    if (glassOn) {
+        PixiGlass(
+            modifier = modifier.then(clickMod),
+            shape = shape,
+            role = PixiGlassRole.Content,
+            frost = false,
+            elevation = 8.dp
+        ) {
+            Column(
+                modifier = Modifier.padding(18.dp),
+                content = content
             )
-            .clip(shape)
-            .background(pulseCard())
-            .then(
-                if (onClick != null) {
-                    Modifier.clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = onClick
-                    )
-                } else Modifier
-            )
-            .padding(18.dp),
-        content = content
-    )
+        }
+    } else {
+        Column(
+            modifier = modifier
+                .shadow(
+                    elevation = 3.dp,
+                    shape = shape,
+                    ambientColor = Color.Black.copy(alpha = 0.03f),
+                    spotColor = Color.Black.copy(alpha = 0.05f)
+                )
+                .clip(shape)
+                .background(pulseCard())
+                .then(clickMod)
+                .padding(18.dp),
+            content = content
+        )
+    }
 }
 
 @Composable
@@ -676,10 +719,10 @@ fun PulseProgressCard(
     Column(
         modifier = modifier
             .shadow(
-                elevation = 10.dp,
+                elevation = 3.dp,
                 shape = PulseCardShape,
-                ambientColor = Color.Black.copy(alpha = 0.04f),
-                spotColor = Color.Black.copy(alpha = 0.08f)
+                ambientColor = Color.Black.copy(alpha = 0.03f),
+                spotColor = Color.Black.copy(alpha = 0.05f)
             )
             .clip(PulseCardShape)
             .background(pulseCard())

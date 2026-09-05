@@ -88,7 +88,72 @@ class SmsTransactionParserTest {
         val parsed = SmsTransactionParser.parse(body, "VM-HDFCBK")
         assertNotNull(parsed)
         assertTrue(parsed!!.isExpense)
+        assertTrue(parsed.isCreditCard)
+        assertEquals(2199.0, parsed.amount, 0.001)
+        assertEquals("8899", parsed.accountLast4)
         assertEquals("Food & Drink", parsed.category)
+    }
+
+    @Test
+    fun prefersSpendAmountOverLimitAndDue() {
+        val body =
+            "Spent Rs.1,299 on AXIS BANK Credit Card XX4321 at FLIPKART on 05-Sep-26. Avl limit Rs.75,000.00. Tot due Rs.8,500"
+        val parsed = SmsTransactionParser.parse(body, "VM-AXISBK")
+        assertNotNull(parsed)
+        assertEquals(1299.0, parsed!!.amount, 0.001)
+        assertTrue(parsed.isExpense)
+        assertTrue(parsed.isCreditCard)
+        assertEquals("4321", parsed.accountLast4)
+    }
+
+    @Test
+    fun thankYouForUsingCardIsExpenseOnCard() {
+        val body =
+            "Thank you for using your HDFC Bank Credit Card ending 1234 for Rs.500.00 at MERCHANT on 08-AUG-24. Avl limit Rs.40,000"
+        val parsed = SmsTransactionParser.parse(body, "VM-HDFCBK")
+        assertNotNull(parsed)
+        assertEquals(500.0, parsed!!.amount, 0.001)
+        assertTrue(parsed.isExpense)
+        assertTrue(parsed.isCreditCard)
+        assertEquals("1234", parsed.accountLast4)
+    }
+
+    @Test
+    fun cardBillPaymentIsIncomeOnCard() {
+        val body =
+            "Payment of Rs.5,000.00 received towards your HDFC Bank Credit Card XX1234. Total outstanding Rs.2,000"
+        val parsed = SmsTransactionParser.parse(body, "VM-HDFCBK")
+        assertNotNull(parsed)
+        assertEquals(5000.0, parsed!!.amount, 0.001)
+        assertFalse(parsed.isExpense)
+        assertTrue(parsed.isCreditCard)
+    }
+
+    @Test
+    fun bankUpiIsNotCreditCard() {
+        val body =
+            "HDFC Bank: Rs.1,500.00 debited from a/c **1234 on 08-08-24 to VPA merchant@upi. Avl bal Rs.10,000.00"
+        val parsed = SmsTransactionParser.parse(body, "VM-HDFCBK")
+        assertNotNull(parsed)
+        assertFalse(parsed!!.isCreditCard)
+        assertEquals(1500.0, parsed.amount, 0.001)
+    }
+
+    @Test
+    fun ignoresCreditCardStatementWithoutSpend() {
+        val body =
+            "Dear Customer, your HDFC Bank Credit Card XX1234 statement is generated. Total amount due Rs.8,500. Min due Rs.500."
+        assertNull(SmsTransactionParser.parse(body, "VM-HDFCBK"))
+    }
+
+    @Test
+    fun last4MatchesUppercaseXx() {
+        val body = "INR 250.00 spent on ICICI Bank Credit Card XX7788 at STARBUCKS. Avl limit INR 12,000"
+        val parsed = SmsTransactionParser.parse(body, "VK-ICICIB")
+        assertNotNull(parsed)
+        assertEquals("7788", parsed!!.accountLast4)
+        assertTrue(parsed.isCreditCard)
+        assertEquals(250.0, parsed.amount, 0.001)
     }
 
     @Test

@@ -103,33 +103,15 @@ fun LivingCreditGradientBox(
     val palette = remember(util) { fluidPalette(util) }
 
     val infinite = rememberInfiniteTransition(label = "fluidCredit")
-
-    // Several independent phases at incommensurate speeds → organic fluid motion
     val p1 by infinite.animateFloat(
         0f, (2f * PI).toFloat(),
-        infiniteRepeatable(tween(9000, easing = LinearEasing), RepeatMode.Restart),
+        infiniteRepeatable(tween(14000, easing = LinearEasing), RepeatMode.Restart),
         label = "p1"
     )
-    val p2 by infinite.animateFloat(
-        0f, (2f * PI).toFloat(),
-        infiniteRepeatable(tween(13000, easing = LinearEasing), RepeatMode.Restart),
-        label = "p2"
-    )
-    val p3 by infinite.animateFloat(
-        0f, (2f * PI).toFloat(),
-        infiniteRepeatable(tween(17000, easing = LinearEasing), RepeatMode.Restart),
-        label = "p3"
-    )
-    val p4 by infinite.animateFloat(
-        0f, (2f * PI).toFloat(),
-        infiniteRepeatable(tween(11000, easing = LinearEasing), RepeatMode.Restart),
-        label = "p4"
-    )
-    val morph by infinite.animateFloat(
-        0.88f, 1.14f,
-        infiniteRepeatable(tween(7000, easing = LinearEasing), RepeatMode.Reverse),
-        label = "morph"
-    )
+    val morph = 1f + 0.06f * sin(p1)
+    val p2 = p1 * 0.73f
+    val p3 = p1 * 1.17f
+    val p4 = p1 * 0.91f
 
     Box(modifier = modifier) {
         Canvas(modifier = Modifier.fillMaxSize()) {
@@ -169,29 +151,12 @@ fun LivingCreditGradientBox(
                     color = palette[1],
                     alpha = 0.72f + util * 0.12f
                 ),
-                // Accent tongue
                 Blob(
                     cx = w * (0.62f + 0.18f * sin(p3 * 0.8f) + 0.1f * cos(p1)),
                     cy = h * (0.38f + 0.20f * cos(p3) + 0.08f * sin(p2)),
                     radius = maxR * (0.30f + 0.20f * fill) * (0.9f + 0.1f * sin(p4)),
                     color = palette[2],
                     alpha = 0.55f + util * 0.2f
-                ),
-                // Soft edge swirl
-                Blob(
-                    cx = w * (0.45f + 0.25f * cos(p4 * 0.7f)),
-                    cy = h * (0.70f + 0.15f * sin(p4 * 0.85f + p1 * 0.3f)),
-                    radius = maxR * (0.34f + 0.18f * fill) * morph,
-                    color = palette.getOrElse(3) { palette[2] },
-                    alpha = 0.40f + util * 0.18f
-                ),
-                // Highlight glint — faster, smaller
-                Blob(
-                    cx = w * (0.42f + 0.15f * cos(p1 * 1.3f)),
-                    cy = h * (0.35f + 0.12f * sin(p2 * 1.2f)),
-                    radius = maxR * 0.22f * (0.95f + 0.08f * sin(p3)),
-                    color = Color.White,
-                    alpha = 0.35f - util * 0.12f
                 )
             )
 
